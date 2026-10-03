@@ -124,7 +124,16 @@ function setup(value = 3) {
       execute,
     },
   };
-  const ctx: any = { effect: (fn: Function) => fn() };
+  const effects = new Set<Function>();
+  const ctx: any = {
+    effect: (fn: Function) => {
+      const dispose = fn();
+      effects.add(dispose);
+      return () => {
+        if (effects.delete(dispose)) dispose();
+      };
+    },
+  };
   const manager = new NativeTests(ctx, { outputRoot: root, cancelGraceMs: 25 });
   cleanups.push(() => {
     for (const test of manager.sessions.values()) test.dispose();
@@ -149,6 +158,9 @@ function setup(value = 3) {
   };
   return {
     manager,
+    unload: () => {
+      for (const dispose of [...effects]) dispose();
+    },
     agent,
     followups,
     toolNames,
@@ -363,4 +375,69 @@ it("追加有规则来源的必需断言会改变本实例结果且保留修订�
   expect(run.instances[0].revision_history?.[0].target_instance_ids).toEqual([
     "one--a",
   ]);
+});
+
+it("预先提交JSON计划只保留当前步骤计时器，释放后不遗留取消计时器", async () => {
+  vi.useFakeTimers();
+  try {
+    const t = setup();
+    await t.manager.start(t.agent, "测试", sample());
+    expect(vi.getTimerCount()).toBe(1);
+    t.manager.sessions.get("origin")!.dispose();
+    expect(vi.getTimerCount()).toBe(0);
+  } finally {
+    vi.clearAllTimers();
+    vi.useRealTimers();
+  }
+});
+
+it("插件作用域卸载会取消当前原生Agent并隔离未清理资源", async () => {
+  const t = setup();
+  await t.manager.start(t.agent, "测试", sample());
+  t.unload();
+  expect(t.agent.cancel).toHaveBeenCalledOnce();
+  expect(t.manager.sessions.get("origin")!.closed).toBe(true);
+  expect(existsSync(join(t.root, "quarantine.json"))).toBe(true);
+  expect(t.definitions.size).toBe(0);
+});
+
+it("自然语言计划由插件补齐固定字段，不要求模型编造版本和规则来源", async () => {
+  const t = setup();
+  await t.manager.start(t.agent, "点赞不为0");
+  const plan = sample();
+  const c = plan.cases[0];
+  c.steps[1].assertion!.rule_ref = "user_task";
+  const result = await t.call("test_submit_plan", {
+    suite_id: plan.suite_id,
+    name: plan.name,
+    cases: [
+      {
+        case_id: c.case_id,
+        name: c.name,
+        datasets: c.datasets,
+        steps: c.steps,
+      },
+    ],
+  });
+  expect(result.isError).toBe(false);
+  const frozen = t.manager.sessions.get("origin")!.run.plan;
+  expect(frozen.schema_version).toBe("1");
+  expect(frozen.cases[0].cleanup).toEqual([]);
+  expect(frozen.source_refs[0].excerpt).toBe("点赞不为0");
+});
+
+it("规划超时记录ERROR，不能冒充用户主动取消", async () => {
+  const t = setup();
+  await t.manager.start(t.agent, "测试");
+  await t.call("mcp__playwright__browser_navigate", {
+    url: "https://example.test",
+  });
+  const run = t.manager.sessions.get("origin")!;
+  run.stop("规划执行超时");
+  await t.end(true);
+  await t.step();
+  const final = await t.call("test_finish");
+  await t.end();
+  expect(final.value.statistics.ERROR).toBe(1);
+  expect(final.value.stop_reason).toBe("规划执行超时");
 });

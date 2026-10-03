@@ -56,10 +56,40 @@ const output = {
     { type: "text" as const, text: JSON.stringify(value, null, 2) },
   ],
 };
+// 自然语言入口由插件补齐版本、规则来源和缺省阶段，模型只描述业务计划。
+const naturalCase = planSchema.properties.cases.items;
+const naturalPlanSchema = {
+  ...planSchema,
+  required: ["suite_id", "name", "cases"],
+  properties: {
+    suite_id: planSchema.properties.suite_id,
+    name: planSchema.properties.name,
+    cases: {
+      ...planSchema.properties.cases,
+      items: {
+        ...naturalCase,
+        required: ["case_id", "name", "steps"],
+        properties: {
+          ...naturalCase.properties,
+          preconditions: {
+            ...naturalCase.properties.preconditions,
+            description: "可省略；只有用户明确要求额外前置条件时填写。",
+          },
+          cleanup: {
+            ...naturalCase.properties.cleanup,
+            description:
+              "默认省略；插件自动关闭浏览器。仅用户额外授权的业务清理才填写。",
+          },
+        },
+      },
+    },
+  },
+};
 const guide = `当前对话已启用测试增强。使用本会话正常的推理、文字回复、浏览器工具及原生审批完成用户任务，不创建其他会话或后台任务。执行前用中文简要告知步骤，执行中说明关键发现。
 先理解任务；用户已给出目标网址、搜索词和预期时直接工作，不追问实现细节。真正缺少网址、输入或预期时正常向用户提问，等待同一对话回复。网页测试先用原生Playwright工具只读探索元素与选择器，然后调用test_submit_plan冻结计划，再重新按冻结步骤执行。不能猜测选择器或接口地址。预期只来自用户/已授权规则，绝不把本次采集值写成预期。浏览器自动初始化/释放步骤由插件加入，preconditions和cleanup可为空数组。
-schema_version为字符串"1"；source_refs固定使用user_task。action.outputs是“输出名→JSON Schema”的对象，例如{"url":{"type":"string"},"likes":{"type":"number"}}，不是单一Schema或字符串。completion_requirements只写输出名，例如["url"]，不是步骤ID。网页URL采集使用{"kind":"dom","mode":"url"}，不能用http采集HTML网页。http仅用于确定返回JSON的接口。action.outputs是JSON Schema；action.capture单独定义可信采集：dom的mode可为text/number/count/visible/url/attribute/value，CSS selector必须真实且唯一（集合用index）；数值mode=number，网址mode=url、field=pathname可提取路径；http使用url和field；browser_close采集释放结果。completion_requirements列出必要输出。action.allowed_targets为完整URL。断言observation_ref格式step_id.output_name，operator支持eq/neq/contains/range/exists/text/visible，literal、expected_ref、expected_observation_ref恰选一种；规则rule_ref=user_task。
-必须为用户要求的动作身份建立断言，例如搜索词是否正确、打开的链接是否等于第一条结果的href，不能仅核对最后数值而遗漏路径身份。数值断言必须使用mode=number、outputs类型number或integer，预期在datasets.expected中声明JSON数字并用expected_ref引用，不能将类型降为string来通过校验。对于第一条结果，必须在搜索步骤采集first_href，在打开步骤采集pathname，用expected_observation_ref比较二者；禁止把探索时看到的帖子URL硬编码为预期。approval默认省略，宿主原有审批策略保持有效；只有用户规则明确要求额外审批才设置true。提交后按test_current返回的当前步骤执行。完成动作后调用test_capture采集真实观察，再调用test_finish_step；断言由程序比较，你不能提交实际值或自行宣布通过。工具失败可按真实页面修正操作，不能改冻结预期。采集失败最多修正操作重试一次；仍失败调用test_fail_step，不重复空转或继续执行尚未激活的业务步骤。所有步骤完成后调用test_finish生成报告，并在本轮正常最终回复中列出结果、关键断言实际/预期、保存位置和工具返回的Markdown报告链接。不使用其他Agent，不用脚本绕过浏览器工具执行测试。`;
+test_submit_plan只提交suite_id、name、cases；schema_version和source_refs由插件补齐，不提交。case.preconditions、cleanup默认省略。action.outputs是“输出名→JSON Schema”的对象，例如{"url":{"type":"string"},"likes":{"type":"number"}}，不是单一Schema或字符串。completion_requirements只写输出名，例如["url"]，不是步骤ID。网页URL采集使用{"kind":"dom","mode":"url"}，不能用http采集HTML网页。http仅用于确定返回JSON的接口。action.outputs是JSON Schema；action.capture单独定义可信采集：dom的mode可为text/number/count/visible/url/attribute/value，CSS selector必须真实且唯一（集合用index）；数值mode=number，网址mode=url、field=pathname可提取路径；http使用url和field；browser_close采集释放结果。completion_requirements列出必要输出。action.allowed_targets为完整URL。断言observation_ref格式step_id.output_name，operator支持eq/neq/contains/range/exists/text/visible，literal、expected_ref、expected_observation_ref恰选一种；规则rule_ref=user_task。
+必须为用户要求的动作身份建立断言，例如搜索词是否正确、打开的链接是否等于第一条结果的href，不能仅核对最后数值而遗漏路径身份。数值断言必须使用mode=number、outputs类型number或integer，预期在datasets.expected中声明JSON数字并用expected_ref引用，不能将类型降为string来通过校验。对于第一条结果，必须在搜索步骤采集first_href，在打开步骤采集pathname，用expected_observation_ref比较二者；禁止把探索时看到的帖子URL硬编码为预期。approval默认省略，宿主原有审批策略保持有效；只有用户规则明确要求额外审批才设置true。提交后按test_current返回的当前步骤执行。完成动作后调用test_capture采集真实观察，再调用test_finish_step；断言由程序比较，你不能提交实际值或自行宣布通过。工具失败可按真实页面修正操作，不能改冻结预期。采集失败最多修正操作重试一次；仍失败调用test_fail_step，不重复空转或继续执行尚未激活的业务步骤。所有步骤完成后调用test_finish生成报告，并在本轮正常最终回复中列出结果、关键断言实际/预期、保存位置和工具返回的Markdown报告链接。不使用其他Agent，不用脚本绕过浏览器工具执行测试。
+非零数值断言格式示例（这里只演示结构，目标、选择器、规则必须按本次用户任务和真实页面填写）：{"suite_id":"check_count","name":"验证数量","cases":[{"case_id":"one","name":"读取并比较","datasets":[{"data_id":"main","inputs":{},"expected":{"zero":0}}],"steps":[{"step_id":"read","kind":"action","description":"读取计数","required":true,"depends_on":[],"action":{"goal":"打开目标并采集计数","capability":"browser","allowed_targets":["https://example.com"],"inputs":{},"outputs":{"count":{"type":"number"}},"completion_requirements":["count"],"capture":{"count":{"kind":"dom","mode":"number","selector":"#count"}}}},{"step_id":"nonzero","kind":"assertion","description":"计数不为零","required":true,"depends_on":["read"],"assertion":{"observation_ref":"read.count","operator":"neq","expected_ref":"data.expected.zero","rule_ref":"user_task"}}]}]}。对于“不为0”严格使用neq 0，不能改成有上界的range。`;
 function notice(text: string) {
   return createUserMessage({
     source: { kind: "plugin:test", form: "notice", summary: "测试增强上下文" },
@@ -327,7 +357,7 @@ export class NativeTest {
     tool(
       "test_submit_plan",
       "冻结本对话测试计划；从用户原文提取预期，不能提交实际结果。",
-      planSchema,
+      naturalPlanSchema,
       (args) => this.submit(args),
     );
     tool(
@@ -616,11 +646,19 @@ export class NativeTest {
           );
       }),
     );
-    own(this.owner.ctx.effect(() => () => this.dispose()));
+    own(
+      this.owner.ctx.effect(() => () => {
+        if (!this.closed) void this.shutdown();
+      }),
+    );
   }
   async start(task: string): Promise<string> {
     this.save();
-    this.timer = setTimeout(() => this.stop(), this.owner.config.stepTimeoutMs);
+    if (!this.planned)
+      this.timer = setTimeout(
+        () => this.stop("规划执行超时"),
+        this.owner.config.stepTimeoutMs,
+      );
     this.agent.followup(
       createUserMessage({
         source: { kind: "user" },
@@ -632,7 +670,13 @@ export class NativeTest {
   submit(input: unknown, trustedFile = false): unknown {
     if (this.planned) throw new Error("计划已冻结；不能替换预期");
     const value = structuredClone(input) as any;
-    if (!trustedFile)
+    if (!trustedFile) {
+      value.schema_version = "1";
+      for (const c of value.cases ?? []) {
+        c.preconditions ??= [];
+        c.cleanup ??= [];
+        c.datasets ??= [{ data_id: "default", inputs: {}, expected: {} }];
+      }
       value.source_refs = [
         {
           id: "user_task",
@@ -643,6 +687,7 @@ export class NativeTest {
           excerpt: this.task,
         },
       ];
+    }
     const plan = parsePlan(value);
     if (this.timer) clearTimeout(this.timer);
     this.planned = true;
@@ -779,7 +824,7 @@ export class NativeTest {
           this.recorder.event("step_timeout", {}, binding);
           e.instance.incomplete = true;
           e.instance.issues.push("步骤执行超时");
-          this.stop();
+          this.stop("步骤执行超时");
         },
         e.phase === "cleanup"
           ? this.owner.config.cleanupTimeoutMs
@@ -904,11 +949,13 @@ export class NativeTest {
     if (this.closed) throw new Error("测试已封存，迟到结果不改变最终事实");
     return { callId: id, result };
   }
-  stop(): void {
+  stop(reason = "用户停止"): void {
     if (this.closed || this.reportReady) return;
     this.cancelled = true;
     this.run.lifecycle = "CANCELLING";
-    this.recorder.event("stop_requested", { session_id: this.id });
+    this.run.manifest.stop_reason = reason;
+    if (reason !== "用户停止") this.run.incomplete = true;
+    this.recorder.event("stop_requested", { session_id: this.id, reason });
     this.agent.cancel({ kind: "user" });
     this.armStopDeadline();
     if (this.agent.status === "idle")
@@ -1005,6 +1052,12 @@ export class NativeTest {
   private finish(): unknown {
     if (!this.reportReady) {
       for (const i of this.run.instances) {
+        if (this.run.incomplete) {
+          i.incomplete = true;
+          i.issues.push(
+            String(this.run.manifest.stop_reason ?? "运行未完整结算"),
+          );
+        }
         if (i.resources.browser_context?.state === "exists") {
           i.resource_quarantined = true;
           this.owner.quarantine(this.run, "浏览器释放未获确认");
@@ -1024,6 +1077,7 @@ export class NativeTest {
     }
     return {
       statistics: statistics(this.run),
+      stop_reason: this.run.manifest.stop_reason,
       assertions: this.state().assertions,
       steps: this.run.instances.map((i) => ({
         instance: i.case_run_id,

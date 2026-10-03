@@ -90,6 +90,17 @@ for (const instance of run.instances)
       }
     }
   }
+if (process.argv.includes("--data-only")) {
+  console.log(
+    JSON.stringify({
+      run_id: run.suite_run_id,
+      data_integrity: "PASS",
+      evidence_count: run.evidence.length,
+      statuses: run.instances.map((i) => i.status),
+    }),
+  );
+  process.exit(0);
+}
 const copied = resolve("artifacts/validation/offline", run.suite_run_id);
 await mkdir(copied, { recursive: true });
 await cp(dir, copied, { recursive: true });
