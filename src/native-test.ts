@@ -318,7 +318,10 @@ export class NativeTest {
           description,
           parameters,
           output,
-          execute: async (args, exec) => execute(args, exec),
+          execute: async (args, exec) => {
+            // 可选TypeScript字段不得以undefined进入宿主的无损JSON工具边界。
+            return JSON.parse(JSON.stringify(await execute(args, exec)));
+          },
         }),
       );
     tool(

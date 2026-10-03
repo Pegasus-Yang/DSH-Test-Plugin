@@ -92,6 +92,8 @@ function setup(value = 3) {
           };
         return {};
       });
+      // 宿主要求工具值为无损JSON；替身也验证这一公开边界。
+      expect(response).toStrictEqual(JSON.parse(JSON.stringify(response)));
       result = { value: response, isError: false, content: [] };
     } catch (error) {
       result = {
