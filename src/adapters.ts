@@ -42,7 +42,8 @@ export function domFunction(
       if(!el)continue;
       if(c.index===undefined&&nodes.length!==1)throw new Error('采集必须唯一匹配: '+name+' 实际 '+nodes.length);
       if(c.mode==='value'){values[name]=el.value;continue;}
-      const text=(c.attribute?el.getAttribute(c.attribute):el.textContent)?.trim();
+      let text=(c.attribute?el.getAttribute(c.attribute):el.textContent)?.trim();
+      if(c.field==='pathname'&&c.attribute==='href'&&text)text=new URL(text,location.href).pathname;
       if(c.mode==='number'){
         if(text===undefined||text===null||!/^\\d+(?:\\.\\d+)?$/.test(text.replaceAll(',','')))throw new Error('不是明确数值: '+name+'='+text);
         values[name]=Number(text.replaceAll(',',''));
@@ -149,6 +150,13 @@ export async function captureStep(
   for (const [name, cap] of Object.entries(captures).filter(
     ([, c]) => c.kind === "browser_close",
   )) {
+    // 先结束站点页面活动，再释放上下文；两步都经过原生管线且须结算。
+    const leave = await host.call(
+      "mcp__playwright__browser_navigate",
+      { url: "about:blank" },
+      exec,
+    );
+    if (leave.result.isError) throw new Error("清理时无法离开测试页面");
     const response = await host.call(
       "mcp__playwright__browser_close",
       {},
@@ -173,7 +181,7 @@ export async function captureStep(
   if (step.action!.capability === "browser" && Object.keys(dom).length) {
     const shot = await host.call(
       "mcp__playwright__browser_take_screenshot",
-      { type: "png", fullPage: false },
+      { type: "png", fullPage: true },
       exec,
     );
     if (!shot.result.isError) {

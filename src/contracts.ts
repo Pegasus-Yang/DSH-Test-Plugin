@@ -178,6 +178,7 @@ export interface CaseRun {
   steps: StepResult[];
   issues: string[];
   applied_revisions: number[];
+  revision_history?: PlanRevision[];
   effective_required_assertion_ids: string[];
   effective_steps: Step[];
   resources: Record<
@@ -294,9 +295,16 @@ const stepSchema = {
         operator: {
           enum: ["eq", "neq", "contains", "range", "exists", "text", "visible"],
         },
-        expected_ref: { type: "string" },
+        expected_ref: {
+          type: "string",
+          pattern: "^data\\.expected\\.",
+          description: "如data.expected.amount；固定预期优先用literal",
+        },
         expected_observation_ref: { type: "string" },
-        literal: {},
+        literal: {
+          description:
+            "用户给出的原始JSON预期值，例如100；不能包装成schema或value对象",
+        },
         rule_ref: id,
         unit: { type: "string" },
         tolerance: { type: "number", minimum: 0 },
@@ -321,7 +329,11 @@ export const planSchema = {
   required: ["schema_version", "suite_id", "name", "source_refs", "cases"],
   additionalProperties: false,
   properties: {
-    schema_version: { const: "1" },
+    schema_version: {
+      type: "string",
+      enum: ["1"],
+      description: '固定字符串1，JSON写作"1"，不是数字1',
+    },
     suite_id: id,
     name: { type: "string", minLength: 1 },
     source_refs: { type: "array", minItems: 1, items: sourceSchema },
@@ -419,6 +431,8 @@ export function parsePlan(input: unknown): TestSuite {
         for (const name of a.completion_requirements)
           if (!Object.hasOwn(a.outputs, name))
             throw new Error("必要输出未声明: " + name);
+          else if (!Object.hasOwn(a.capture ?? {}, name))
+            throw new Error("必要输出缺少可信采集定义: " + name);
         for (const [name, cap] of Object.entries(a.capture ?? {})) {
           if (!Object.hasOwn(a.outputs, name))
             throw new Error("采集输出未声明");
@@ -428,6 +442,14 @@ export function parsePlan(input: unknown): TestSuite {
             throw new Error("API采集缺少URL");
         }
         for (const value of Object.values(a.inputs)) {
+          if (
+            value &&
+            typeof value === "object" &&
+            !Array.isArray(value) &&
+            typeof value.resource_ref === "string" &&
+            value.resource_ref !== "browser_context"
+          )
+            throw new Error("输入资源未绑定: " + value.resource_ref);
           if (
             value &&
             typeof value === "object" &&

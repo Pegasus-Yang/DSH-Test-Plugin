@@ -42,6 +42,7 @@ export function writeReport(
       ) => `<article class="case" data-case="${escape(i.case_id)}" data-data="${escape(i.data_id)}" data-status="${escape(i.status)}">
     <header><div><span class="eyebrow">${escape(i.case_id)} / ${escape(i.data_id)}</span><h2>${escape(i.name)}</h2></div>${badge(i.status)}</header>
     <p class="muted">会话 ${escape(i.session_id ?? "未启动")} · 有效修订 ${i.applied_revisions.join(" → ")} · 必需断言 ${escape(i.effective_required_assertion_ids.join(", "))}</p>
+    ${i.revision_history?.length ? `<details><summary>动态检查来源与事后标记</summary><pre>${json(i.revision_history)}</pre></details>` : ""}
     ${i.issues.length ? `<aside>${i.issues.map(escape).join("<br>")}</aside>` : ""}
     ${i.unsettled_call_ids.length ? `<aside class="danger">未结算调用：${i.unsettled_call_ids.map(escape).join(", ")}。结果已封存不代表外部执行已停止。</aside>` : ""}
     <details class="data"><summary>输入数据与冻结预期</summary><pre>${json(i.data)}</pre></details>

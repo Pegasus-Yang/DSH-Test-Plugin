@@ -1,0 +1,114 @@
+{
+  "schema_version": "1",
+  "suite_id": "fixture_login",
+  "name": "本地夹具 · 登录三行数据",
+  "source_refs": [
+    {
+      "id": "fixture",
+      "kind": "fixture",
+      "uri": "http://127.0.0.1:18081",
+      "version": "1",
+      "locator": "scripts/fixture-server.mjs",
+      "excerpt": "只有tester/fixture-only登录成功；UI金额100，API返回101，独立预期金额100。"
+    }
+  ],
+  "cases": [
+    {
+      "case_id": "login",
+      "name": "有效、错误及空凭据",
+      "datasets": [
+        {
+          "data_id": "valid",
+          "inputs": {
+            "username": "tester",
+            "password": "fixture-only"
+          },
+          "expected": {
+            "authenticated": "true"
+          }
+        },
+        {
+          "data_id": "wrong",
+          "inputs": {
+            "username": "tester",
+            "password": "wrong-fixture"
+          },
+          "expected": {
+            "authenticated": "false"
+          }
+        },
+        {
+          "data_id": "empty",
+          "inputs": {
+            "username": "",
+            "password": ""
+          },
+          "expected": {
+            "authenticated": "false"
+          }
+        }
+      ],
+      "preconditions": [],
+      "cleanup": [],
+      "steps": [
+        {
+          "step_id": "login",
+          "kind": "action",
+          "description": "访问http://127.0.0.1:18081，按绑定输入填写账号和密码，点击登录，等待显示登录成功或登录失败后test_capture，再test_finish_step。",
+          "required": true,
+          "depends_on": [],
+          "action": {
+            "goal": "访问http://127.0.0.1:18081，按绑定输入填写账号和密码，点击登录，等待显示登录成功或登录失败后test_capture，再test_finish_step。",
+            "capability": "browser",
+            "allowed_targets": [
+              "http://127.0.0.1:18081"
+            ],
+            "inputs": {
+              "username": {
+                "input_ref": "data.inputs.username"
+              },
+              "password": {
+                "input_ref": "data.inputs.password"
+              }
+            },
+            "capture": {
+              "authenticated": {
+                "kind": "dom",
+                "selector": "#auth-result",
+                "mode": "attribute",
+                "attribute": "data-auth"
+              }
+            },
+            "outputs": {
+              "authenticated": {
+                "type": "string",
+                "enum": [
+                  "true",
+                  "false"
+                ]
+              }
+            },
+            "completion_requirements": [
+              "authenticated"
+            ]
+          }
+        },
+        {
+          "step_id": "check",
+          "kind": "assertion",
+          "description": "登录结果符合本行预期",
+          "required": true,
+          "depends_on": [
+            "login"
+          ],
+          "assertion": {
+            "observation_ref": "login.authenticated",
+            "operator": "eq",
+            "expected_ref": "data.expected.authenticated",
+            "rule_ref": "fixture"
+          }
+        }
+      ]
+    }
+  ]
+}

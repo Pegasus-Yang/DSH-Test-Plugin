@@ -159,6 +159,8 @@ export class HarnessSession {
             )
               return;
             const args = exec.arguments as Record<string, unknown>;
+            if (typeof args.filename === "string")
+              return "附件文件名由证据归档器管理，请省略filename参数";
             if (
               typeof args.url === "string" &&
               args.url !== "about:blank" &&

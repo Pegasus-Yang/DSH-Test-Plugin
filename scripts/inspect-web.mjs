@@ -1,10 +1,14 @@
-import { chromium } from 'playwright';
-import { readFile, mkdir } from 'node:fs/promises';
-const state=JSON.parse(await readFile('.local/host-state.json','utf8'));
-const browser=await chromium.launch({channel:'chrome',headless:true});
-const page=await browser.newPage({viewport:{width:1440,height:1000}});
-await page.goto(state.url);await page.waitForTimeout(2000);
-console.log((await page.locator('body').innerText()).slice(0,14000));
-await mkdir('artifacts/validation/m0',{recursive:true});
-await page.screenshot({path:'artifacts/validation/m0/web.png',fullPage:true});
+import { chromium } from "playwright";
+import { readFile, mkdir } from "node:fs/promises";
+const state = JSON.parse(await readFile(".local/host-state.json", "utf8"));
+const browser = await chromium.launch({ channel: "chrome", headless: true });
+const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+await page.goto(state.url);
+await page.waitForTimeout(2000);
+console.log((await page.locator("body").innerText()).slice(0, 14000));
+await mkdir("artifacts/validation/m0", { recursive: true });
+await page.screenshot({
+  path: "artifacts/validation/m0/web.png",
+  fullPage: true,
+});
 await browser.close();

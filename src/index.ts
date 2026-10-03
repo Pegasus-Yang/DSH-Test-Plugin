@@ -29,6 +29,7 @@ export function apply(ctx: Context, config: Partial<RunnerConfig> = {}): void {
   const runner = new TestRunner(ctx, config);
   ctx.provide("testRunner", runner);
   let planning = false;
+  let planningAbort: AbortController | undefined;
   const inputPath = (path: string) => {
     const full = realpathSync(resolve(runner.config.workspace, path.trim())),
       rel = relative(realpathSync(runner.config.workspace), full);
@@ -69,6 +70,7 @@ export function apply(ctx: Context, config: Partial<RunnerConfig> = {}): void {
       if (planning || runner.active || runner.quarantined)
         throw new Error("已有规划/运行或环境隔离");
       planning = true;
+      planningAbort = new AbortController();
       try {
         return start(
           await planTask(
@@ -76,10 +78,12 @@ export function apply(ctx: Context, config: Partial<RunnerConfig> = {}): void {
             input,
             runner.config.workspace,
             runner.config.stepTimeoutMs,
+            planningAbort.signal,
           ),
         );
       } finally {
         planning = false;
+        planningAbort = undefined;
       }
     },
   );
@@ -108,6 +112,7 @@ export function apply(ctx: Context, config: Partial<RunnerConfig> = {}): void {
     ),
   );
   register("test-stop", "停止业务动作；结算后执行预授权清理", () => {
+    planningAbort?.abort();
     runner.stop();
     return "停止请求已提交；最终状态以 /test-status 和报告为准。";
   });
@@ -130,5 +135,8 @@ export function apply(ctx: Context, config: Partial<RunnerConfig> = {}): void {
     runner.release(inputPath(input));
     return "隔离已解除，处置记录已保留。";
   });
-  ctx.effect(() => () => runner.shutdown());
+  ctx.effect(() => () => {
+    planningAbort?.abort();
+    return runner.shutdown();
+  });
 }

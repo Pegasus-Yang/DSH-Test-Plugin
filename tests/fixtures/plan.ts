@@ -33,6 +33,9 @@ export function sample() {
               allowed_targets: ["https://example.test"],
               inputs: {},
               outputs: { likes: { type: "number" } },
+              capture: {
+                likes: { kind: "dom", mode: "number", selector: "#likes" },
+              },
               completion_requirements: ["likes"],
             },
           },

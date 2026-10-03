@@ -1,0 +1,79 @@
+{
+  "schema_version": "1",
+  "suite_id": "fixture_api",
+  "name": "本地夹具 · API金额负向断言",
+  "source_refs": [
+    {
+      "id": "fixture",
+      "kind": "fixture",
+      "uri": "http://127.0.0.1:18081",
+      "version": "1",
+      "locator": "scripts/fixture-server.mjs",
+      "excerpt": "只有tester/fixture-only登录成功；UI金额100，API返回101，独立预期金额100。"
+    }
+  ],
+  "cases": [
+    {
+      "case_id": "api",
+      "name": "API金额与独立预期不符",
+      "datasets": [
+        {
+          "data_id": "expected_100",
+          "inputs": {},
+          "expected": {
+            "amount": 100
+          }
+        }
+      ],
+      "preconditions": [],
+      "cleanup": [],
+      "steps": [
+        {
+          "step_id": "read_api",
+          "kind": "action",
+          "description": "调用test_capture读取冻结API，不自行填写实际值，然后test_finish_step。",
+          "required": true,
+          "depends_on": [],
+          "action": {
+            "goal": "调用test_capture读取冻结API，不自行填写实际值，然后test_finish_step。",
+            "capability": "api",
+            "allowed_targets": [
+              "http://127.0.0.1:18081"
+            ],
+            "inputs": {},
+            "capture": {
+              "amount": {
+                "kind": "http",
+                "url": "http://127.0.0.1:18081/api/amount",
+                "field": "body.amount"
+              }
+            },
+            "outputs": {
+              "amount": {
+                "type": "number"
+              }
+            },
+            "completion_requirements": [
+              "amount"
+            ]
+          }
+        },
+        {
+          "step_id": "check",
+          "kind": "assertion",
+          "description": "断言API金额等于100（夹具实际101，应FAIL）",
+          "required": true,
+          "depends_on": [
+            "read_api"
+          ],
+          "assertion": {
+            "observation_ref": "read_api.amount",
+            "operator": "eq",
+            "expected_ref": "data.expected.amount",
+            "rule_ref": "fixture"
+          }
+        }
+      ]
+    }
+  ]
+}

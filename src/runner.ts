@@ -159,6 +159,11 @@ export class TestRunner {
     result?: StepResult,
   ): Promise<boolean> {
     for (const fn of this.hooks[name] ?? []) {
+      this.recorder!.event("hook_started", {
+        name,
+        case_run_id: instance.case_run_id,
+        step_id: step?.step_id,
+      });
       try {
         const allowed = await bounded(
           Promise.resolve().then(() =>
@@ -166,8 +171,15 @@ export class TestRunner {
           ),
           this.config.hookTimeoutMs,
         );
+        this.recorder!.event("hook_finished", {
+          name,
+          case_run_id: instance.case_run_id,
+          step_id: step?.step_id,
+          allowed: allowed !== false,
+        });
         if (allowed === false && name === "before_step") return false;
       } catch (error) {
+        this.recorder!.event("hook_failed", { name, error: String(error) });
         if (name === "before_step") throw error;
         instance.issues.push(name + "警示: " + String(error));
         this.recorder!.event("hook_warning", { name, error: String(error) });
@@ -222,6 +234,7 @@ export class TestRunner {
       "-" +
       randomUUID().slice(0, 8);
     this.recorder = new Recorder(this.config.outputRoot, id);
+    this.recorder.protect(plan);
     this.run = {
       schema_version: "1",
       suite_run_id: id,
@@ -502,7 +515,10 @@ export class TestRunner {
       suite.finished_at = new Date().toISOString();
       try {
         this.recorder!.snapshot(suite);
-        writeReport(this.recorder!.directory, suite);
+        writeReport(
+          this.recorder!.directory,
+          this.recorder!.sanitize(suite) as unknown as SuiteRun,
+        );
         for (const instance of suite.instances)
           await this.invoke("report_ready", instance);
         this.recorder!.snapshot(suite);
@@ -510,7 +526,7 @@ export class TestRunner {
         suite.incomplete = true;
         atomicJson(join(this.recorder!.directory, "emergency.json"), {
           error: String(error),
-          run: suite,
+          run: this.recorder!.sanitize(suite),
         });
       }
     }

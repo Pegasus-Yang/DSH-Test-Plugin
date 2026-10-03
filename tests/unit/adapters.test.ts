@@ -49,3 +49,24 @@ it("图片二进制不重复进入事件，口令和令牌脱敏", () => {
     url: "https://example.test/?token=[已脱敏]",
   });
 });
+
+it("计划密码在工具text和JSON证据中也脱敏", async () => {
+  const { Recorder } = await import("../../src/recorder.js");
+  const { mkdtempSync, readFileSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const r = new Recorder(mkdtempSync(join(tmpdir(), "secret-")), "run");
+  r.protect({ password: "s3cr3t-value" });
+  r.event("tool", { text: "输入s3cr3t-value" });
+  const e = r.evidence(
+    "response.json",
+    JSON.stringify({ text: "s3cr3t-value" }),
+    "application/json",
+  );
+  expect(readFileSync(join(r.directory, "events.jsonl"), "utf8")).not.toContain(
+    "s3cr3t-value",
+  );
+  expect(
+    readFileSync(join(r.directory, e.relative_path), "utf8"),
+  ).not.toContain("s3cr3t-value");
+});

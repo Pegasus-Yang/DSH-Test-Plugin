@@ -83,6 +83,37 @@ export function atomicWrite(path: string, contents: string | Buffer): void {
   renameSync(tmp, path);
 }
 export class Recorder {
+  private secrets = new Set<string>();
+  protect(input: unknown): void {
+    if (!input || typeof input !== "object") return;
+    for (const [key, value] of Object.entries(input)) {
+      if (
+        /^(?:password|passwd|authorization|cookie|token|api[_-]?key|secret)$/i.test(
+          key,
+        ) &&
+        typeof value === "string" &&
+        value
+      )
+        this.secrets.add(value);
+      else this.protect(value);
+    }
+  }
+  sanitize(value: unknown): Json {
+    const visit = (v: Json): Json =>
+      typeof v === "string"
+        ? [...this.secrets].reduce(
+            (text, secret) => text.replaceAll(secret, "[已脱敏]"),
+            v,
+          )
+        : Array.isArray(v)
+          ? v.map(visit)
+          : v && typeof v === "object"
+            ? Object.fromEntries(
+                Object.entries(v).map(([k, x]) => [k, visit(x)]),
+              )
+            : v;
+    return visit(redact(value));
+  }
   readonly directory: string;
   private seq = 0;
   failed?: Error;
@@ -107,7 +138,7 @@ export class Recorder {
         timestamp: new Date().toISOString(),
         type,
         binding: binding ?? { suite_run_id: this.runId },
-        payload: redact(payload),
+        payload: this.sanitize(payload),
       };
       const fd = openSync(join(this.directory, "events.jsonl"), "a", 0o600);
       try {
@@ -125,11 +156,11 @@ export class Recorder {
   }
   snapshot(run: SuiteRun): void {
     this.event("state_saved", run);
-    atomicJson(join(this.directory, "results.json"), run);
+    atomicJson(join(this.directory, "results.json"), this.sanitize(run));
   }
   json(name: string, value: unknown): void {
     try {
-      atomicJson(safePath(this.directory, name), value);
+      atomicJson(safePath(this.directory, name), this.sanitize(value));
     } catch (e) {
       this.failed = e instanceof Error ? e : new Error(String(e));
       throw this.failed;
@@ -143,6 +174,11 @@ export class Recorder {
   ): Evidence {
     const relativePath = "evidence/" + name,
       path = safePath(this.directory, relativePath);
+    if (typeof content === "string") {
+      if (mediaType === "application/json")
+        content = JSON.stringify(this.sanitize(JSON.parse(content)), null, 2);
+      else content = String(this.sanitize(content));
+    }
     atomicWrite(path, content);
     return {
       evidence_id: randomUUID(),

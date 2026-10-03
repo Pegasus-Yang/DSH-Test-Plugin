@@ -9,11 +9,13 @@
   "types": "dist/index.d.ts",
   "files": [
     "dist",
-    "skills",
-    "templates",
     "README.md",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md",
+    "examples",
     "doc/user-guide",
-    "doc/deployment"
+    "doc/deployment",
+    "cordis.patch.yml"
   ],
   "scripts": {
     "build": "tsc",
@@ -49,5 +51,18 @@
     "typescript": "5.9.3",
     "vitest": "3.2.4",
     "yaml": "2.8.1"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
   }
 }

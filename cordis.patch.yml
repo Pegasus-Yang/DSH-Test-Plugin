@@ -1,0 +1,4 @@
+# 原生插件安装层；模型和MCP由宿主profile配置。
+- insert:
+    - id: harness-test
+      name: dsh-test-plugin

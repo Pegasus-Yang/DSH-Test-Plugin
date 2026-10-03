@@ -118,6 +118,7 @@ export function applyRevision(
       ...steps,
     );
     instance.applied_revisions.push(revision.revision);
+    (instance.revision_history ??= []).push(structuredClone(revision));
     instance.effective_required_assertion_ids = ids;
   }
   recorder.snapshot(run);
