@@ -40,7 +40,7 @@ function setup() {
 
 it("向网页声明参数输入，菜单选择后等待参数，带参数提交仍属于命令", () => {
   const { commands } = setup();
-  for (const name of ["test", "test-run", "test-report"])
+  for (const name of ["test", "test-plan", "test-run", "test-report"])
     expect(commands.get(name)?.input?.hint).toBeTruthy();
   for (const name of ["test-status", "test-stop"])
     expect(commands.get(name)?.input).toBeUndefined();

@@ -8,6 +8,7 @@ import type {
   ToolRunContext,
 } from "@deepseek-ai/dsh-tools";
 import type {} from "@deepseek-ai/dsh-system-prompt";
+import type {} from "@deepseek-ai/dsh-plan-mode";
 import { randomUUID } from "node:crypto";
 import {
   existsSync,
@@ -185,7 +186,12 @@ export class NativeTests {
     }
     this.reports = new ReportAccess(this.config.outputRoot);
   }
-  async start(agent: Agent, task: string, plan?: unknown): Promise<string> {
+  async start(
+    agent: Agent,
+    task: string,
+    plan?: unknown,
+    review = false,
+  ): Promise<string> {
     if (!task.trim()) throw new Error("请提供动作、输入和可验证预期");
     if (agent.status !== "idle")
       throw new Error("请等待当前对话轮次结束后再启动测试");
@@ -195,7 +201,11 @@ export class NativeTests {
       );
     if ([...this.sessions.values()].some((s) => !s.closed))
       throw new Error("已有测试使用共享浏览器，请先结束或停止该测试");
-    const test = new NativeTest(this, agent, task);
+    if (review && !this.ctx.get("planMode"))
+      throw new Error(
+        "/test-plan 需要宿主启用原生 dsh-plan-mode 和用户审核通道",
+      );
+    const test = new NativeTest(this, agent, task, review);
     this.sessions.set(agent.id, test);
     try {
       test.attach();
@@ -284,10 +294,14 @@ export class NativeTest {
   private timer?: ReturnType<typeof setTimeout>;
   private stoppingTimer?: ReturnType<typeof setTimeout>;
   private task: string;
+  private draft?: SuiteRun["plan"];
+  private reviewCall?: string;
+  private previousPlanMode?: boolean;
   constructor(
     private owner: NativeTests,
     agent: Agent,
     task: string,
+    private review = false,
   ) {
     this.agent = agent;
     this.task = task;
@@ -315,7 +329,8 @@ export class NativeTest {
       incomplete: false,
       resource_quarantined: false,
       manifest: {
-        plugin_version: "0.3.0",
+        plugin_version: "0.4.0",
+        plan_review: review,
         execution: "native-conversation",
         origin_session_id: agent.id,
         tools_mode: "native",
@@ -326,6 +341,12 @@ export class NativeTest {
     return this.agent.id;
   }
   attach(): void {
+    if (this.review) {
+      const mode = this.owner.ctx.planMode;
+      const state = mode.get(this.agent);
+      this.previousPlanMode = state.pending ?? state.active;
+      mode.set(this.agent, true);
+    }
     const scope = this.agent.ctx;
     const own = (dispose: () => void) => {
       this.disposers.push(dispose);
@@ -338,7 +359,12 @@ export class NativeTest {
         text: () =>
           this.reportReady
             ? "测试报告已生成。请在本轮回复中只总结test_finish返回的权威统计、逐步状态和断言。BLOCKED或缺少断言记录绝不能写成PASS；页面口头观察不能替代程序断言。给出报告链接。"
-            : guide + "\n当前测试状态：" + JSON.stringify(this.state()),
+            : guide +
+              (this.review && !this.planned
+                ? "\n本次为/test-plan：原生plan模式中只规划。test_submit_plan仅保存可修改草案，不会执行。提交成功后，将返回的review_markdown原样作为exit_plan_mode的plan参数展示审核。不要自行缩写或替换审核内容。用户要求修改时重新test_submit_plan再审核；同意后插件自动冻结已审草案并开始执行。关闭plan模式不代表批准。"
+                : "") +
+              "\n当前测试状态：" +
+              JSON.stringify(this.state()),
       }),
     );
     const tool = (
@@ -361,7 +387,7 @@ export class NativeTest {
       );
     tool(
       "test_submit_plan",
-      "冻结本对话测试计划；从用户原文提取预期，不能提交实际结果。",
+      "提交本对话测试计划；/test-plan只保存待审核草案，其余入口直接冻结。从用户原文提取预期，不能提交实际结果。",
       naturalPlanSchema,
       (args) => this.submit(args),
     );
@@ -637,6 +663,8 @@ export class NativeTest {
     own(
       scope.on("tools/execute", async (exec, next) => {
         if (exec.agent?.id === this.id) {
+          if (this.review && !this.planned && exec.name === "exit_plan_mode")
+            this.reviewCall = exec.callId;
           const call = this.calls.get(exec.callId);
           if (call)
             this.recorder.event(
@@ -653,6 +681,19 @@ export class NativeTest {
         if (exec.agent?.id !== this.id) return;
         this.pendingTools.delete(exec.callId);
         this.settle(exec.callId, result);
+        if (exec.callId === this.reviewCall) {
+          this.reviewCall = undefined;
+          if (
+            !result.isError &&
+            (result.value as { approved?: boolean })?.approved === true &&
+            !this.cancelled &&
+            !this.closed &&
+            this.draft
+          ) {
+            this.recorder.event("plan_approved", { call_id: exec.callId });
+            this.freeze(this.draft);
+          }
+        }
       }),
     );
     own(
@@ -677,9 +718,19 @@ export class NativeTest {
             "test_current",
             "todo_write",
             "ask_user_question",
+            ...(this.review ? ["exit_plan_mode"] : []),
           ].includes(exec.name)
         )
           return "规划阶段禁止执行：请仅根据用户描述提交业务计划，运行后再识别页面并调整操作";
+        if (this.review && !this.planned && exec.name === "exit_plan_mode") {
+          if (!this.draft) return "请先test_submit_plan保存待审核草案";
+          if (
+            (exec.arguments as { plan?: string }).plan !== this.reviewMarkdown()
+          )
+            return "审核内容必须与草案一致；请将test_current返回的review_markdown原样传给exit_plan_mode";
+          // 用户可能用/plan off离开；再次审核必须走原生模式，不能借此绕过批准。
+          this.owner.ctx.planMode.set(this.agent, true);
+        }
         if (this.planned && typeof (exec.arguments as any)?.url === "string") {
           const url = (exec.arguments as any).url;
           if (
@@ -729,7 +780,9 @@ export class NativeTest {
         content: [{ type: "text", text: task }],
       }),
     );
-    return "测试已在当前对话启动；执行步骤、工具结果和最终报告将在本对话中显示。";
+    return this.review
+      ? "已在当前对话进入plan模式；先规划并展示审核，用户同意后才执行测试。"
+      : "测试已在当前对话启动；执行步骤、工具结果和最终报告将在本对话中显示。";
   }
   submit(input: unknown, trustedFile = false): unknown {
     if (this.planned) throw new Error("计划已冻结；不能替换预期");
@@ -756,6 +809,39 @@ export class NativeTest {
       ];
     }
     const plan = parsePlan(value);
+    if (this.timer) clearTimeout(this.timer);
+    if (this.review) {
+      this.draft = plan;
+      this.recorder.event("plan_drafted", { plan });
+      this.recorder.json("plan-draft.json", plan);
+      this.save();
+      return this.state();
+    }
+    return this.freeze(plan);
+  }
+  private reviewMarkdown(): string {
+    if (!this.draft) return "";
+    const plan = this.draft;
+    return (
+      `# ${plan.name}\n\n确认后按以下步骤执行；可选择要求修改，再在本对话补充意见。当前未执行任何测试动作。\n\n` +
+      plan.cases
+        .map(
+          (c) =>
+            `## ${c.name}\n\n` +
+            [...c.preconditions, ...c.steps, ...c.cleanup]
+              .map(
+                (s, i) =>
+                  `${i + 1}. ${s.description}${s.assertion ? "（断言）" : ""}`,
+              )
+              .join("\n"),
+        )
+        .join("\n\n") +
+      "\n\n## 完整执行定义\n\n以下定义包含目标范围、输入、输出、预期、依赖和清理。含浏览器动作的用例还会自动初始化并关闭浏览器上下文。批准后冻结此版本。\n\n```json\n" +
+      JSON.stringify(plan, null, 2) +
+      "\n```"
+    );
+  }
+  private freeze(plan: SuiteRun["plan"]): unknown {
     if (this.timer) clearTimeout(this.timer);
     this.planned = true;
     this.run.name = plan.name;
@@ -933,7 +1019,12 @@ export class NativeTest {
           ? this.cleanupTurn
             ? "cleanup"
             : "executing"
-          : "planning",
+          : this.draft
+            ? "reviewing"
+            : "planning",
+      ...(this.review && !this.planned && this.draft
+        ? { review_markdown: this.reviewMarkdown() }
+        : {}),
       current: c
         ? {
             instance: c.instance.case_run_id,
@@ -958,7 +1049,9 @@ export class NativeTest {
         i.steps.filter((s) => s.assertion).map((s) => s.assertion),
       ),
       next: !this.planned
-        ? "理解任务并提交test_submit_plan；信息不足时正常追问"
+        ? this.draft
+          ? "将review_markdown原样传入exit_plan_mode的plan参数，由原生审核等待用户批准；修改时重新test_submit_plan"
+          : "理解任务并提交test_submit_plan；信息不足时正常追问"
         : c
           ? "完成当前动作、test_capture、test_finish_step"
           : "调用test_finish生成报告并在回复中给出链接",
@@ -1228,6 +1321,8 @@ export class NativeTest {
     if (this.timer) clearTimeout(this.timer);
     if (this.stoppingTimer) clearTimeout(this.stoppingTimer);
     for (const dispose of this.disposers.splice(0).reverse()) dispose();
+    if (this.previousPlanMode !== undefined && !this.planned)
+      this.owner.ctx.planMode.set(this.agent, this.previousPlanMode);
   }
   async shutdown(): Promise<void> {
     if (this.closed) return;

@@ -72,6 +72,13 @@ export function apply(ctx: Context, config: Partial<TestConfig> = {}): void {
     "任务描述，包含动作、输入和可验证的预期结果",
   );
   register(
+    "test-plan",
+    "在原生plan模式规划测试，经用户审核修改并同意后执行",
+    ({ agent, rawInput }) =>
+      tests.start(agent, rawInput.trim(), undefined, true),
+    "任务描述；规划后先审核，确认后执行",
+  );
+  register(
     "test-run",
     "在当前对话执行JSON测试集合；自然语言请使用 /test",
     ({ agent, rawInput }) => {

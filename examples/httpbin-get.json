@@ -1,0 +1,130 @@
+{
+  "schema_version": "1",
+  "suite_id": "httpbin_get",
+  "name": "HTTP 接口 · 查询参数回显验证",
+  "source_refs": [
+    {
+      "id": "user_task",
+      "kind": "user",
+      "uri": "user:httpbin-acceptance",
+      "version": "1",
+      "locator": "接口验收用例",
+      "excerpt": "GET https://httpbin.org/get?keyword=agent&client=dsh，断言HTTP状态码为200，响应body.args.keyword为agent，body.args.client为dsh。"
+    }
+  ],
+  "cases": [
+    {
+      "case_id": "get_echo",
+      "name": "GET 请求成功并准确回显查询参数",
+      "datasets": [
+        {
+          "data_id": "agent",
+          "inputs": {
+            "url": "https://httpbin.org/get?keyword=agent&client=dsh"
+          },
+          "expected": {
+            "status": 200,
+            "keyword": "agent",
+            "client": "dsh"
+          }
+        }
+      ],
+      "preconditions": [],
+      "cleanup": [],
+      "steps": [
+        {
+          "step_id": "request",
+          "kind": "action",
+          "description": "发送 GET 请求并采集完整 JSON 响应与状态码",
+          "required": true,
+          "depends_on": [],
+          "action": {
+            "goal": "直接test_capture发送GET并保存响应，再test_finish_step。无需浏览器或预先重复发送请求。",
+            "capability": "api",
+            "allowed_targets": [
+              "https://httpbin.org"
+            ],
+            "inputs": {
+              "url": {
+                "input_ref": "data.inputs.url"
+              }
+            },
+            "outputs": {
+              "response": {
+                "type": "object",
+                "description": "本次GET响应的status和JSON body",
+                "required": [
+                  "status",
+                  "body"
+                ],
+                "properties": {
+                  "status": {
+                    "type": "number"
+                  },
+                  "body": {
+                    "type": "object"
+                  }
+                }
+              }
+            },
+            "completion_requirements": [
+              "response"
+            ],
+            "capture": {
+              "response": {
+                "kind": "http",
+                "url": "https://httpbin.org/get?keyword=agent&client=dsh",
+                "field": ""
+              }
+            }
+          }
+        },
+        {
+          "step_id": "assert_status",
+          "kind": "assertion",
+          "description": "断言 HTTP 状态码为 200",
+          "required": true,
+          "depends_on": [
+            "request"
+          ],
+          "assertion": {
+            "observation_ref": "request.response.status",
+            "operator": "eq",
+            "expected_ref": "data.expected.status",
+            "rule_ref": "user_task"
+          }
+        },
+        {
+          "step_id": "assert_keyword",
+          "kind": "assertion",
+          "description": "断言回显 keyword 为 agent",
+          "required": true,
+          "depends_on": [
+            "request"
+          ],
+          "assertion": {
+            "observation_ref": "request.response.body.args.keyword",
+            "operator": "eq",
+            "expected_ref": "data.expected.keyword",
+            "rule_ref": "user_task"
+          }
+        },
+        {
+          "step_id": "assert_client",
+          "kind": "assertion",
+          "description": "断言回显 client 为 dsh",
+          "required": true,
+          "depends_on": [
+            "request"
+          ],
+          "assertion": {
+            "observation_ref": "request.response.body.args.client",
+            "operator": "eq",
+            "expected_ref": "data.expected.client",
+            "rule_ref": "user_task"
+          }
+        }
+      ]
+    }
+  ]
+}

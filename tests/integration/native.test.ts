@@ -127,7 +127,10 @@ function setup(value = 3) {
     },
   };
   const effects = new Set<Function>();
+  const planMode = { get: vi.fn(() => ({ active: false })), set: vi.fn() };
   const ctx: any = {
+    get: (name: string) => (name === "planMode" ? planMode : undefined),
+    planMode,
     effect: (fn: Function) => {
       const dispose = fn();
       effects.add(dispose);
@@ -160,6 +163,7 @@ function setup(value = 3) {
   };
   return {
     manager,
+    planMode,
     unload: () => {
       for (const dispose of [...effects]) dispose();
     },
@@ -596,3 +600,156 @@ it("采集部分成功后可只补采缺少输出，不丢失或覆盖已有证�
   ).toEqual(first);
   expect((await t.call("test_finish_step")).isError).toBe(false);
 });
+
+function reviewPlan() {
+  const plan = sample();
+  plan.cases[0].steps[1].assertion!.rule_ref = "user_task";
+  return plan;
+}
+
+it("test-plan进入原生模式，草案可修改；只有原生审核批准同一草案后才能执行", async () => {
+  const t = setup();
+  await t.manager.start(t.agent, "点赞不为0", undefined, true);
+  expect(t.planMode.set).toHaveBeenCalledWith(t.agent, true);
+  const run = t.manager.sessions.get("origin")!;
+  expect(
+    (await t.call("exit_plan_mode", { plan: "# 未提交草案" })).isError,
+  ).toBe(true);
+  const first = await t.call("test_submit_plan", reviewPlan());
+  expect(first.value.phase).toBe("reviewing");
+  expect(run.run.instances).toEqual([]);
+  expect(existsSync(join(run.recorder.directory, "plan.json"))).toBe(false);
+  expect((await t.call("test_capture")).isError).toBe(true);
+  expect(
+    (await t.call("test_api_get", { url: "https://example.test" })).isError,
+  ).toBe(true);
+  expect(
+    (await t.call("exit_plan_mode", { plan: "# 省略具体预期的计划" })).isError,
+  ).toBe(true);
+  t.definitions.set("exit_plan_mode", {
+    execute: () => {
+      throw new Error("用户要求修改");
+    },
+  });
+  expect(
+    (await t.call("exit_plan_mode", { plan: first.value.review_markdown }))
+      .isError,
+  ).toBe(true);
+  await t.end();
+  expect(run.closed).toBe(false);
+  expect(run.run.instances).toEqual([]);
+  const revised = reviewPlan();
+  revised.name = "修改后的计划";
+  const second = await t.call("test_submit_plan", revised);
+  expect(second.value.review_markdown).toContain("修改后的计划");
+  expect(
+    (await t.call("exit_plan_mode", { plan: first.value.review_markdown }))
+      .isError,
+  ).toBe(true);
+  t.definitions.set("exit_plan_mode", { execute: () => ({ approved: true }) });
+  expect(
+    (await t.call("exit_plan_mode", { plan: second.value.review_markdown }))
+      .isError,
+  ).toBe(false);
+  expect(run.state().phase).toBe("executing");
+  expect(run.run.plan.name).toBe("修改后的计划");
+  expect((await t.call("test_submit_plan", reviewPlan())).isError).toBe(true);
+  await t.step();
+  await t.step();
+  await t.step();
+  expect((await t.call("test_finish")).value.statistics.PASS).toBe(1);
+  await t.end();
+});
+
+it("等待审核没有执行计时器；取消审核不执行业务或浏览器清理并恢复原模式", async () => {
+  vi.useFakeTimers();
+  try {
+    const t = setup();
+    await t.manager.start(t.agent, "点赞不为0", undefined, true);
+    await t.call("test_submit_plan", reviewPlan());
+    expect(vi.getTimerCount()).toBe(0);
+    await vi.advanceTimersByTimeAsync(600000);
+    expect(t.agent.cancel).not.toHaveBeenCalled();
+    vi.useRealTimers();
+    t.manager.sessions.get("origin")!.stop();
+    await t.end(true);
+    expect(t.manager.sessions.get("origin")!.run.instances[0].status).toBe(
+      "CANCELLED",
+    );
+    expect(t.dispatched).toEqual(["test_submit_plan"]);
+    expect(t.planMode.set).toHaveBeenLastCalledWith(t.agent, false);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("test入口提交后直接执行，不进入原生审核", async () => {
+  const t = setup();
+  await t.manager.start(t.agent, "点赞不为0");
+  expect((await t.call("test_submit_plan", reviewPlan())).value.phase).toBe(
+    "executing",
+  );
+  expect(t.planMode.set).not.toHaveBeenCalled();
+});
+
+it.each([
+  [200, "PASS"],
+  [201, "FAIL"],
+])(
+  "纯API响应经过通用采集与报告，预期状态码%s时结果为%s",
+  async (expected, status) => {
+    const t = setup();
+    const plan = JSON.parse(readFileSync("examples/httpbin-get.json", "utf8"));
+    plan.cases[0].datasets[0].expected.status = expected;
+    const response = {
+      args: { keyword: "agent", client: "dsh" },
+      url: "https://httpbin.org/get?keyword=agent&client=dsh",
+    };
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        new Response(JSON.stringify(response), { status: 200 }),
+      );
+    try {
+      await t.manager.start(t.agent, "接口回显验证", plan);
+      await t.step();
+      expect((await t.call("test_finish")).value.statistics[status]).toBe(1);
+      const run = t.manager.sessions.get("origin")!;
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(t.dispatched).not.toContainEqual(
+        expect.stringContaining("playwright"),
+      );
+      expect(run.run.instances[0].steps.map((s) => s.step_id)).toEqual([
+        "request",
+        "assert_status",
+        "assert_keyword",
+        "assert_client",
+      ]);
+      const observation = run.run.instances[0].steps[0].observations[0];
+      expect(observation.producer.adapter).toBe("http-json-v1");
+      const evidence = JSON.parse(
+        readFileSync(
+          join(run.recorder.directory, run.run.evidence[0].relative_path),
+          "utf8",
+        ),
+      );
+      expect(evidence.value).toEqual(observation.value);
+      expect(observation.value).toEqual({ status: 200, body: response });
+      expect(run.run.instances[0].steps[1].assertion).toMatchObject({
+        actual: 200,
+        expected,
+        status,
+      });
+      expect(rebuild(run.recorder.directory)).toEqual(run.run);
+      const html = readFileSync(
+        join(run.recorder.directory, "report.html"),
+        "utf8",
+      );
+      expect(html).toContain("断言 HTTP 状态码为 200");
+      expect(html).toContain("test_api_get");
+      await t.end();
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  },
+);
