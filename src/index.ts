@@ -8,7 +8,7 @@ import { reportNotice } from "./report-notice.js";
 import type {} from "@deepseek-ai/dsh-tools";
 import type {} from "@deepseek-ai/dsh-commands";
 import type {} from "@deepseek-ai/dsh-agent-default-model";
-import { readFileSync, realpathSync, existsSync } from "node:fs";
+import { readFileSync, realpathSync, existsSync, statSync } from "node:fs";
 import { resolve, relative, sep, join } from "node:path";
 import { TestRunner, type RunnerConfig } from "./runner.js";
 import { planTask } from "./planner.js";
@@ -74,11 +74,13 @@ export function apply(ctx: Context, config: Partial<RunnerConfig> = {}): void {
     command: string,
     description: string,
     handler: (input: string) => string | Promise<string>,
+    inputHint?: string,
   ) =>
     ctx.effect(() =>
       ctx.commands.register({
         name: command,
         description,
+        ...(inputHint === undefined ? {} : { input: { hint: inputHint } }),
         handler: async ({ rawInput }) => {
           try {
             return { kind: "success" as const, text: await handler(rawInput) };
@@ -88,10 +90,31 @@ export function apply(ctx: Context, config: Partial<RunnerConfig> = {}): void {
         },
       }),
     );
-  register("test-run", "执行项目内的JSON测试集合", (input) => {
-    if (planning) throw new Error("正在规划");
-    return start(JSON.parse(readFileSync(inputPath(input), "utf8")));
-  });
+  register(
+    "test-run",
+    "执行项目内的JSON测试集合；自然语言请使用 /test",
+    (input) => {
+      if (planning) throw new Error("正在规划");
+      const usage =
+        "请提供工作区内的JSON测试集合文件路径，例如 /test-run examples/ceshiren-agent.json；自然语言任务请使用 /test <任务描述>。";
+      if (!input.trim()) throw new Error(usage);
+      let path: string;
+      try {
+        path = inputPath(input);
+      } catch (error) {
+        if (
+          ["ENOENT", "ENOTDIR"].includes(
+            (error as NodeJS.ErrnoException).code ?? "",
+          )
+        )
+          throw new Error(`输入文件不存在。${usage}`);
+        throw error;
+      }
+      if (!statSync(path).isFile()) throw new Error(usage);
+      return start(JSON.parse(readFileSync(path, "utf8")));
+    },
+    "JSON测试集合路径；自然语言请使用 /test",
+  );
   register(
     "test",
     "将自然语言任务规划并执行；缺少预期时返回问题",
@@ -115,6 +138,7 @@ export function apply(ctx: Context, config: Partial<RunnerConfig> = {}): void {
         planningAbort = undefined;
       }
     },
+    "任务描述，包含动作、输入和可验证的预期结果",
   );
   register("test-status", "查看当前批次、实例会话和隔离状态", () =>
     JSON.stringify(
@@ -163,11 +187,17 @@ export function apply(ctx: Context, config: Partial<RunnerConfig> = {}): void {
       reports.select(run, "report-rebuilt.html");
       return `报告已生成，点击网页中的“查看测试报告”。\n保存位置：${join(directory, "report-rebuilt.html")}\n浏览地址（相对当前DSH网页）：${reports.url(id, "report-rebuilt.html")}\n报告为静态HTML，可离线打开；无需填写运行ID即可查看最近报告。`;
     },
+    "运行ID（可留空，查看最近报告）",
   );
-  register("test-release", "依据项目内处置证据JSON解除持久隔离", (input) => {
-    runner.release(inputPath(input));
-    return "隔离已解除，处置记录已保留。";
-  });
+  register(
+    "test-release",
+    "依据项目内处置证据JSON解除持久隔离",
+    (input) => {
+      runner.release(inputPath(input));
+      return "隔离已解除，处置记录已保留。";
+    },
+    "处置证据JSON路径",
+  );
   ctx.effect(() => () => {
     planningAbort?.abort();
     return runner.shutdown();
