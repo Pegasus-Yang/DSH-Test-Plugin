@@ -150,13 +150,6 @@ export async function captureStep(
   for (const [name, cap] of Object.entries(captures).filter(
     ([, c]) => c.kind === "browser_close",
   )) {
-    // 先结束站点页面活动，再释放上下文；两步都经过原生管线且须结算。
-    const leave = await host.call(
-      "mcp__playwright__browser_navigate",
-      { url: "about:blank" },
-      exec,
-    );
-    if (leave.result.isError) throw new Error("清理时无法离开测试页面");
     const response = await host.call(
       "mcp__playwright__browser_close",
       {},

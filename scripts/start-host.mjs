@@ -59,7 +59,7 @@ const overlay = [
             ),
             "--headless",
             "--browser",
-            "chrome",
+            "chromium",
             "--isolated",
             "--output-dir",
             resolve(".local/playwright"),

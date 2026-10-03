@@ -22,7 +22,7 @@ const transport = new StdioClientTransport({
     resolve("node_modules/@playwright/mcp/cli.js"),
     "--headless",
     "--browser",
-    "chrome",
+    "chromium",
     "--isolated",
   ],
   stderr: "pipe",

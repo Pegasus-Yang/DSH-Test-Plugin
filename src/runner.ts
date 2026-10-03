@@ -100,6 +100,7 @@ export class TestRunner {
   done?: Promise<SuiteRun>;
   private driver?: SessionDriver;
   private stopping = false;
+  private cleanupActive = false;
   private hooks: Partial<Record<HookName, Hook[]>> = {};
   constructor(
     private ctx: Context,
@@ -271,7 +272,7 @@ export class TestRunner {
     this.stopping = true;
     this.run!.lifecycle = "CANCELLING";
     this.recorder!.event("stop_requested", {});
-    this.driver?.cancel();
+    if (!this.cleanupActive) this.driver?.cancel();
   }
   async shutdown(): Promise<void> {
     this.stop();
@@ -281,6 +282,7 @@ export class TestRunner {
     instance: CaseRun,
     cleanup = false,
   ): Promise<SessionDriver> {
+    this.cleanupActive = cleanup;
     const options: HostOptions = {
       cleanup,
       workspace: this.config.workspace,
@@ -483,6 +485,7 @@ export class TestRunner {
             this.isolate(instance, "清理无法证明结算");
           }
         }
+        if (this.stopping) instance.cancelled = true;
         instance.status = aggregate(instance);
         instance.lifecycle = "FINISHED";
         this.recorder!.snapshot(suite);
@@ -522,6 +525,10 @@ export class TestRunner {
         for (const instance of suite.instances)
           await this.invoke("report_ready", instance);
         this.recorder!.snapshot(suite);
+        writeReport(
+          this.recorder!.directory,
+          this.recorder!.sanitize(suite) as unknown as SuiteRun,
+        );
       } catch (error) {
         suite.incomplete = true;
         atomicJson(join(this.recorder!.directory, "emergency.json"), {

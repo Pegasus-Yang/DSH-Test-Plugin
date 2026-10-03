@@ -12,6 +12,7 @@
 pnpm install
 node scripts/link-host.mjs /你的/deepseek-harness
 pnpm build
+node scripts/install-browser.mjs
 node scripts/start-host.mjs
 ```
 

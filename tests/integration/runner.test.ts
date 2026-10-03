@@ -1,14 +1,9 @@
 import { it, expect, describe } from "vitest";
-import {
-  mkdtempSync,
-  readFileSync,
-  appendFileSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { TestRunner, type SessionDriver } from "../../src/runner.js";
-import { parsePlan, type Json } from "../../src/contracts.js";
+import { type Json } from "../../src/contracts.js";
 import { rebuild } from "../../src/recorder.js";
 import { applyRevision } from "../../src/revisions.js";
 import { sample } from "../fixtures/plan.js";
@@ -239,4 +234,54 @@ describe("真实runner合同（调度替身，非宿主验收）", () => {
     expect(html).toContain("&lt;script&gt;");
     expect(html).not.toMatch(/<script[^>]+src=/);
   });
+});
+
+it("清理中停止不取消预授权清理，后续实例取消", async () => {
+  const root = mkdtempSync(join(tmpdir(), "cleanup-stop-"));
+  let cleanupCancelled = 0,
+    cleanupRuns = 0;
+  let runner: TestRunner;
+  runner = new TestRunner(
+    {} as never,
+    { outputRoot: root },
+    async (_r, options) => ({
+      id: options.cleanup ? "cleanup" : "business",
+      run: async (active) => {
+        if (options.cleanup) {
+          cleanupRuns++;
+          runner.stop();
+        }
+        active.finish = true;
+      },
+      cancel: () => {
+        if (options.cleanup) cleanupCancelled++;
+      },
+      drain: async () => true,
+      dispose: async () => {},
+      seal: () => {},
+    }),
+  );
+  const p = sample();
+  p.cases[0].datasets.push({ ...p.cases[0].datasets[0], data_id: "second" });
+  runner.start(p);
+  const run = await runner.done!;
+  expect(cleanupRuns).toBe(1);
+  expect(cleanupCancelled).toBe(0);
+  expect(run.instances.map((i) => i.status)).toEqual([
+    "CANCELLED",
+    "CANCELLED",
+  ]);
+  expect(run.resource_quarantined).toBe(false);
+});
+it("报告后置hook警示同步写入HTML与结果", async () => {
+  const { runner } = setup();
+  runner.hook("report_ready", () => {
+    throw new Error("通知发送失败");
+  });
+  runner.start(sample());
+  const run = await runner.done!;
+  expect(run.instances[0].status).toBe("PASS");
+  expect(
+    readFileSync(join(runner.recorder!.directory, "report.html"), "utf8"),
+  ).toContain("通知发送失败");
 });

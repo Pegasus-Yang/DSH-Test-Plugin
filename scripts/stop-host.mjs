@@ -1,7 +1,12 @@
 /** 仅停止本任务记录的隔离宿主及其仍存活的子进程，并保存处置事实。 */
 import { readFile, writeFile } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
-const state = JSON.parse(await readFile(".local/host-state.json", "utf8"));
+const state = JSON.parse(
+  await readFile(
+    process.env.DSH_TEST_STATE ?? ".local/host-state.json",
+    "utf8",
+  ),
+);
 const rows = execFileSync("ps", ["-axo", "pid=,ppid=,comm="], {
   encoding: "utf8",
 })
@@ -49,6 +54,9 @@ const proof = {
     completed_at: new Date().toISOString(),
   },
 };
-await writeFile(".local/reset-proof.json", JSON.stringify(proof, null, 2));
+await writeFile(
+  process.env.DSH_TEST_PROOF ?? ".local/reset-proof.json",
+  JSON.stringify(proof, null, 2),
+);
 console.log({ stopped: owned.size, survivors });
 if (survivors.length) process.exitCode = 1;
