@@ -129,3 +129,36 @@ it("冻结前拒绝数字输出配字符串预期，避免非零断言类型错�
   (plan.cases[0].datasets[0].expected as any).likes = "0";
   expect(() => parsePlan(plan)).toThrow("预期类型");
 });
+
+it("拒绝用页面url模式采集元素链接，避免把首页地址当成第一条结果", () => {
+  const plan = sample();
+  (plan.cases[0].steps[0].action!.capture as any).likes = {
+    kind: "dom",
+    mode: "url",
+    selector: "a.result",
+    index: 0,
+  };
+  expect(() => parsePlan(plan)).toThrow("只读取当前页面地址");
+});
+it("读取元素属性时必须指定属性名，不能退回textContent", () => {
+  const plan = sample();
+  (plan.cases[0].steps[0].action!.capture as any).likes = {
+    kind: "dom",
+    mode: "attribute",
+    selector: "a.result",
+  };
+  expect(() => parsePlan(plan)).toThrow("必须声明attribute");
+});
+
+it("断言引用不能只有输出声明而没有采集定义", () => {
+  const plan = sample();
+  plan.cases[0].steps[0].action!.completion_requirements = [];
+  plan.cases[0].steps[0].action!.capture = {};
+  expect(() => parsePlan(plan)).toThrow("断言引用的输出缺少可信采集定义");
+});
+
+it("必需断言引用的观察必须在动作完成前采集", () => {
+  const plan = sample();
+  plan.cases[0].steps[0].action!.completion_requirements = [];
+  expect(() => parsePlan(plan)).toThrow("必须列入completion_requirements");
+});

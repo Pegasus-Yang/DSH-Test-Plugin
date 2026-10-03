@@ -439,6 +439,16 @@ export function parsePlan(input: unknown): TestSuite {
             throw new Error("采集输出未声明");
           if (cap.kind === "dom" && cap.mode !== "url" && !cap.selector)
             throw new Error("DOM采集缺少selector");
+          if (
+            cap.kind === "dom" &&
+            cap.mode === "url" &&
+            (cap.selector || cap.attribute || cap.index !== undefined)
+          )
+            throw new Error(
+              "DOM url模式只读取当前页面地址，不能指定selector、attribute或index；读取链接请用mode=attribute、attribute=href和真实selector",
+            );
+          if (cap.kind === "dom" && cap.mode === "attribute" && !cap.attribute)
+            throw new Error("DOM attribute模式必须声明attribute，例如href");
           if (cap.kind === "http" && !cap.url)
             throw new Error("API采集缺少URL");
         }
@@ -483,6 +493,10 @@ export function parsePlan(input: unknown): TestSuite {
             (s.required && !p.required)
           )
             throw new Error("观察不存在或来自可选步骤: " + ref);
+          if (!Object.hasOwn(p.action.capture ?? {}, output!))
+            throw new Error("断言引用的输出缺少可信采集定义: " + ref);
+          if (s.required && !p.action.completion_requirements.includes(output!))
+            throw new Error("必需断言引用的输出必须列入completion_requirements: " + ref);
         }
         if (a.expected_ref) {
           if (!a.expected_ref.startsWith("data.expected."))
