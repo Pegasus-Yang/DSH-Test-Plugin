@@ -24,10 +24,12 @@ node scripts/start-host.mjs
 /test-run examples/ceshiren-agent.json
 /test-status
 /test-stop
-/test-report <运行ID>
+/test-report
 ```
 
 自然语言入口为 `/test <任务及明确预期>`；规划器缺少预期时会提出问题。可从 [完整示例](examples/ceshiren-agent.json) 开始，逐项检查生成计划中的选择器和预期来源。
+
+测试结束后，DSH网页会主动提示保存位置，并提供“查看测试报告”链接。报告是静态HTML；网页链接复用DSH现有服务及登录态，也可直接打开本地文件离线查看。升级后重启DSH并刷新网页。
 
 运行产物位于 `artifacts/runs/<运行ID>/`：`plan.json`、`events.jsonl`、`results.json`、`evidence/`、`report.html`。每次重跑生成新目录；整个目录复制后仍可离线查看报告。运行结果、调试日志、凭据、构建产物均由 `.gitignore` 排除。
 

@@ -41,7 +41,9 @@
     "@deepseek-ai/dsh-llm": "0.2.1-alpha.1",
     "@deepseek-ai/dsh-session": "0.2.1-alpha.1",
     "@deepseek-ai/dsh-tools": "0.2.1-alpha.1",
-    "@deepseek-ai/schemastery": "*"
+    "@deepseek-ai/schemastery": "*",
+    "@deepseek-ai/dsh-host-webserver": "0.2.1-alpha.1",
+    "@deepseek-ai/dsh-client-connection": "0.2.1-alpha.1"
   },
   "devDependencies": {
     "@playwright/mcp": "0.0.68",
@@ -64,5 +66,13 @@
     },
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-host-webserver": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-client-connection": {
+      "optional": true
+    }
   }
 }

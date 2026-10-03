@@ -1,6 +1,10 @@
 /** 原生插件装配入口；所有注册随 Cordis 作用域释放。 */
 import type { Context } from "@deepseek-ai/cordis";
 import type {} from "@deepseek-ai/dsh-agent";
+import type {} from "@deepseek-ai/dsh-host-webserver";
+import type {} from "@deepseek-ai/dsh-client-connection";
+import { ReportAccess, reportPrefix } from "./report-access.js";
+import { reportNotice } from "./report-notice.js";
 import type {} from "@deepseek-ai/dsh-tools";
 import type {} from "@deepseek-ai/dsh-commands";
 import type {} from "@deepseek-ai/dsh-agent-default-model";
@@ -28,6 +32,25 @@ export { parsePlan } from "./contracts.js";
 export function apply(ctx: Context, config: Partial<RunnerConfig> = {}): void {
   const runner = new TestRunner(ctx, config);
   ctx.provide("testRunner", runner);
+  const reports = new ReportAccess(runner.config.outputRoot);
+  ctx.inject(["webServer", "connection"], (web) => {
+    web.effect(() =>
+      web.webServer.register({
+        kind: "prefix",
+        path: reportPrefix,
+        handler: (req, res) => {
+          if (web.connection.authorizeIndex(req, res)) reports.serve(req, res);
+        },
+      }),
+    );
+    web.on("webserver/index-inject", (table) =>
+      table.push({
+        kind: "script",
+        placement: "body",
+        text: "(" + reportNotice.toString() + ")();",
+      }),
+    );
+  });
   let planning = false;
   let planningAbort: AbortController | undefined;
   const inputPath = (path: string) => {
@@ -39,7 +62,13 @@ export function apply(ctx: Context, config: Partial<RunnerConfig> = {}): void {
   };
   const start = (plan: unknown) => {
     const run = runner.start(plan);
-    return `已启动 ${run.suite_run_id}\n${run.instances.length} 个实例；使用 /test-status 查看会话与状态、/test-stop 停止。\n报告：${runner.recorder!.directory}/report.html`;
+    reports.select(run, "report.html", false);
+    void runner.done!.then(
+      (completed) => reports.finish(completed),
+      () => reports.finish(run),
+    );
+    return `已启动 ${run.suite_run_id}\n${run.instances.length} 个实例；使用 /test-status 查看会话与状态、/test-stop 停止。\n报告：${runner.recorder!.directory}/report.html
+完成后网页将自动显示“查看测试报告”。也可直接执行 /test-report，无需填写ID。`;
   };
   const register = (
     command: string,
@@ -92,6 +121,7 @@ export function apply(ctx: Context, config: Partial<RunnerConfig> = {}): void {
       {
         planning,
         quarantined: runner.quarantined,
+        report: reports.state(),
         run: runner.run
           ? {
               id: runner.run.suite_run_id,
@@ -120,15 +150,18 @@ export function apply(ctx: Context, config: Partial<RunnerConfig> = {}): void {
     "test-report",
     "只读重建报告：传入运行ID，省略使用本批次",
     (input) => {
-      const id = input.trim() || runner.run?.suite_run_id;
+      const id = input.trim() || runner.run?.suite_run_id || reports.latestId;
       if (!id || !/^[A-Za-z0-9_-]+$/.test(id))
         throw new Error("请提供合法运行ID");
+      if (runner.active && id === runner.run?.suite_run_id)
+        throw new Error("测试仍在运行，结束后网页会自动显示报告入口。");
       const directory = join(runner.config.outputRoot, id);
       if (!existsSync(directory)) throw new Error("运行记录不存在");
       const run = rebuild(directory);
       atomicJson(join(directory, "results-rebuilt.json"), run);
       writeReport(directory, run, "report-rebuilt.html");
-      return join(directory, "report-rebuilt.html");
+      reports.select(run, "report-rebuilt.html");
+      return `报告已生成，点击网页中的“查看测试报告”。\n保存位置：${join(directory, "report-rebuilt.html")}\n浏览地址（相对当前DSH网页）：${reports.url(id, "report-rebuilt.html")}\n报告为静态HTML，可离线打开；无需填写运行ID即可查看最近报告。`;
     },
   );
   register("test-release", "依据项目内处置证据JSON解除持久隔离", (input) => {

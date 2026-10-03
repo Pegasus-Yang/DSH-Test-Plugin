@@ -25,3 +25,6 @@ playwright-report/
 .DS_Store
 .cache/
 tmp/
+
+# 本机IDE配置
+.idea/
