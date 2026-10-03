@@ -1,5 +1,10 @@
 /** 自然语言只规划业务短句；运行时再把当前步骤绑定到执行和断言契约。 */
-import { ajv, parsePlan, type TestSuite } from "./contracts.js";
+import {
+  ajv,
+  parsePlan,
+  type AssertionSpec,
+  type TestSuite,
+} from "./contracts.js";
 
 export const textPlanSchema = {
   type: "object",
@@ -97,4 +102,20 @@ export function textReview(plan: TestSuite): string {
     ).join("\n\n") +
     "\n\n规划阶段不访问目标。工具、定位、请求参数和数据提取方式在执行当前步骤时根据实际情况确定；检查预期仍以这里的文字和用户原文为准。"
   );
+}
+
+/** 只在绑定时核对明确的简单数字条件，不在规划时要求执行参数。 */
+export function validateTextExpectation(
+  text: string,
+  assertion: AssertionSpec,
+): void {
+  const match =
+    /(不为|不等于|等于|为)\s*(-?\d+(?:\.\d+)?)\s*(?:$|[，。；])/.exec(text);
+  if (!match) return;
+  const expected = Number(match[2]);
+  const operator = match[1]!.startsWith("不") ? "neq" : "eq";
+  if (assertion.operator !== operator || assertion.literal !== expected)
+    throw new Error(
+      `文字检查明确要求${operator}数字${expected}；用number采集数值，expected_json传${JSON.stringify(String(expected))}，不能换成数字字符串或按实际值修改预期`,
+    );
 }

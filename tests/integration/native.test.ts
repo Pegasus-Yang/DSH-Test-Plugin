@@ -606,7 +606,6 @@ async function finishTextStep(t: ReturnType<typeof setup>) {
       await t.call("test_define_step", {
         capability: "browser",
         allowed_targets: ["https://example.test"],
-        outputs: { likes: { type: "number" } },
         reason: "当前帖子",
       })
     ).isError,
@@ -806,7 +805,7 @@ it("计划只输出文字时提醒原生提交，审核拒绝后不催促用户�
   expect(run.run.instances).toEqual([]);
 });
 
-it("文字计划只冻结短句，运行时观察后补充输出与采集；缺少检查不能通过", async () => {
+it("文字计划只冻结短句，运行时按采集方式登记输出；缺少检查不能通过", async () => {
   const t = setup();
   await t.manager.start(t.agent, "打开帖子检查点赞不为0");
   await t.call("test_submit_plan", reviewPlan());
@@ -835,7 +834,6 @@ it("文字计划只冻结短句，运行时观察后补充输出与采集；缺�
     (
       await t.call("test_define_step", {
         ...base,
-        outputs: { likes: { type: "number" } },
       })
     ).isError,
   ).toBe(false);
@@ -892,7 +890,6 @@ it("纯接口文字步骤运行时确定响应结构，下一步只核对已采�
     await t.call("test_define_step", {
       capability: "api",
       allowed_targets: ["https://httpbin.org"],
-      outputs: { response: { type: "object" } },
       reason: "本步请求接口",
     });
     await t.call("test_capture", {

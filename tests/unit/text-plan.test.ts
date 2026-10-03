@@ -1,5 +1,9 @@
 import { expect, it } from "vitest";
-import { parseTextPlan, textReview } from "../../src/text-plan.js";
+import {
+  parseTextPlan,
+  textReview,
+  validateTextExpectation,
+} from "../../src/text-plan.js";
 import { aggregate, expand, parsePlan } from "../../src/contracts.js";
 
 const input = {
@@ -49,4 +53,30 @@ it("文字检查在运行前纳入必需集合，不能以零断言判通过", (
       "session",
     ),
   ).toThrow("文字");
+});
+
+it("明确数字条件在运行时按数值校验，不能改为数字字符串或其他预期", () => {
+  const a = {
+    observation_ref: "step_1.likes",
+    operator: "neq" as const,
+    literal: 0,
+    rule_ref: "r",
+  };
+  expect(() => validateTextExpectation("点赞数不为0", a)).not.toThrow();
+  expect(() =>
+    validateTextExpectation("点赞数不为0", { ...a, literal: "0" }),
+  ).toThrow("数字");
+  expect(() =>
+    validateTextExpectation("点赞数不为0", { ...a, literal: 1 }),
+  ).toThrow();
+  expect(() =>
+    validateTextExpectation("点赞数不为0", { ...a, operator: "eq" }),
+  ).toThrow();
+  expect(() =>
+    validateTextExpectation('文本等于"0"', {
+      ...a,
+      operator: "eq",
+      literal: "0",
+    }),
+  ).not.toThrow();
 });
