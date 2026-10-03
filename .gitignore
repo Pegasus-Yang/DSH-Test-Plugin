@@ -1,0 +1,27 @@
+# 依赖与构建产物
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+.pnpm-store/
+
+# 本机配置、凭据与宿主运行状态
+.env
+.env.*
+!.env.example
+.local/
+.dsh/
+.runtime/
+
+# 调试、测试输出与临时文件；审核结论保存在 doc 中
+artifacts/
+output/
+test-results/
+playwright-report/
+*.log
+*.trace
+*.tmp
+*.swp
+.DS_Store
+.cache/
+tmp/
