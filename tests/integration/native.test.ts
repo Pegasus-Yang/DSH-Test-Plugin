@@ -626,7 +626,7 @@ async function finishTextStep(t: ReturnType<typeof setup>) {
         assertion: {
           observation_ref: "step_1.likes",
           operator: "neq",
-          literal: 0,
+          expected_json: "0",
         },
       })
     ).isError,
@@ -847,8 +847,21 @@ it("文字计划只冻结短句，运行时观察后补充输出与采集；缺�
   expect((await t.call("test_finish_step")).isError).toBe(true);
   const check = {
     check_index: 0,
-    assertion: { observation_ref: "step_1.likes", operator: "neq", literal: 0 },
+    assertion: {
+      observation_ref: "step_1.likes",
+      operator: "neq",
+      expected_json: "0",
+    },
   };
+  for (const expected_json of ['["0"]', '"0"', "{"])
+    expect(
+      (
+        await t.call("test_bind_check", {
+          ...check,
+          assertion: { ...check.assertion, expected_json },
+        })
+      ).isError,
+    ).toBe(true);
   expect((await t.call("test_bind_check", check)).isError).toBe(false);
   expect((await t.call("test_bind_check", check)).isError).toBe(true);
   await t.call("test_finish_step");
@@ -861,13 +874,11 @@ it("文字计划只冻结短句，运行时观察后补充输出与采集；缺�
 
 it("纯接口文字步骤运行时确定响应结构，下一步只核对已采集响应，不重复请求", async () => {
   const t = setup();
-  const spy = vi
-    .spyOn(globalThis, "fetch")
-    .mockResolvedValue(
-      new Response(JSON.stringify({ args: { keyword: "agent" } }), {
-        status: 200,
-      }),
-    );
+  const spy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(JSON.stringify({ args: { keyword: "agent" } }), {
+      status: 200,
+    }),
+  );
   try {
     await t.manager.start(t.agent, "发送请求并验证状态码");
     await t.call("test_submit_plan", {
@@ -899,7 +910,7 @@ it("纯接口文字步骤运行时确定响应结构，下一步只核对已采�
           assertion: {
             observation_ref: "step_1.response.status",
             operator: "eq",
-            literal: 200,
+            expected_json: "200",
           },
         })
       ).isError,

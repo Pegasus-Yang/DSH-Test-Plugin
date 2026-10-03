@@ -67,7 +67,7 @@ const guide = `当前对话已启用测试增强，仍由本会话正常推理�
 规划阶段只根据用户描述分析目标、业务步骤、输入和预期。禁止访问网站、运行命令、调用API或提前验证用例；不能通过预跑寻找选择器。只可使用test_submit_plan、test_current、todo_write和ask_user_question。已给目标、输入和预期时直接形成计划；缺少必要信息时在本会话追问。
 test_submit_plan只提交{name,steps:[{description,checks?:string[]}]}。把用户的一段话按常规理解拆成几个业务动作短句，checks只写用户预期的自然语言。不要提供suite_id、cases、工具、选择器、能力类型、URL白名单、输出Schema、字段路径或比较器；不要为了未知页面结构追问用户。例如steps:[{description:"访问ceshiren.com"},{description:"搜索agent"},{description:"打开第一条搜索结果"},{description:"查看帖子的点赞数",checks:["点赞数不为0"]}]。用户没有提供的操作细节无需在规划期补齐。
 文字计划执行：每次只处理test_current的当前步骤。需要操作目标时先test_define_step({capability:"browser"或"api",allowed_targets:[本步目标网址],reason:"当前步骤依据"})设定操作范围，outputs可先省略。随后使用原生工具观察、操作、调整；了解实际页面后再次test_define_step补充outputs（输出名到JSON Schema），然后test_capture采集。输出采集后不再改定义，只能补采缺失输出。API通常以response:{type:"object"}收集完整响应。不是在执行开始时编译整份计划，不能配置未来步骤。
-文字检查点：获得可信观察后，对当前步骤的每个checks，调用test_bind_check({check_index:从0开始,assertion:{observation_ref:"step_编号.输出名.可选嵌套路径",operator:"eq/neq/...",literal:用户给出的预期}})。也可用expected_observation_ref比较前一步观察（例如第一条搜索结果链接）。rule_ref由插件绑定文字检查点；不用提交actual。预期来自原文和文字检查，不能按实际值改写；数字不为0用neq数字0。每个文字检查都必须绑定程序断言，不能靠口头宣布通过；纯检查步骤可以直接引用前一步的可信观察。绑定后test_finish_step结算当前步骤并计算断言。无法完成用test_fail_step说明原因。
+文字检查点：获得可信观察后，对当前步骤的每个checks，调用test_bind_check({check_index:从0开始,assertion:{observation_ref:"step_编号.输出名.可选嵌套路径",operator:"eq/neq/...",expected_json:"用户预期的JSON文本，如0或\\\"agent\\\""}})。也可用expected_observation_ref比较前一步观察（例如第一条搜索结果链接）。rule_ref由插件绑定文字检查点；不用提交actual。预期来自原文和文字检查，不能按实际值改写；数字不为0用neq和expected_json字符串"0"（按JSON解析后为数字0，不是数组或对象）。每个文字检查都必须绑定程序断言，不能靠口头宣布通过；纯检查步骤可以直接引用前一步的可信观察。绑定后test_finish_step结算当前步骤并计算断言。无法完成用test_fail_step说明原因。
 执行阶段：文字计划提交（/test-plan还需批准）后按test_current执行当前业务目标。此时才使用正常Playwright工具查看页面、点击、输入、等待和检查DOM，可根据实际状态调整定位、操作组合和重试，无需重跑整条用例；只完成当前步骤，不提前执行后续步骤。browser_evaluate可用于实际页面结构检查，断言实际值仍只接受test_capture可信采集。JSON文件计划已提交时直接按test_current继续，不能重复提交计划或预跑。
 运行时采集：完成当前动作后，按页面/接口实际情况调用test_capture({capture:{输出名:采集定义},reason:"依据当前页面选择或修正定位的原因"})。它不接受actual或任意执行代码。dom mode支持text/number/count/visible/url/attribute/value；selector为真实CSS，可用index定位集合。页面路径用{kind:"dom",mode:"url",field:"pathname"}；元素href用{kind:"dom",mode:"attribute",attribute:"href",selector:"实际选择器",index:0,field:"pathname"}；数字用mode:number；文本框用mode:value；http仅用于返回JSON的GET接口。HTTP采集本身会发送请求，直接调用test_capture，无需先用test_api_get预发一次。完整响应为{status:number,body:JSON}，不含headers；可声明单一object输出，用{kind:"http",url:"授权URL",field:""}一次采集，再通过step_id.output_name.status及step_id.output_name.body的嵌套路径断言。必要输出都要采集。采集定义可根据实际页面修正，保留每次原因和调用记录；已有成功观察不可覆盖，只补采尚缺的输出。不能改变输出含义、输出类型、目标范围或断言预期。静态JSON的capture和自动清理已有采集定义，直接test_capture({})即可。
 采集成功后调用test_finish_step；程序计算断言，模型不能填写实际值或口头改判。定位失败可修正重试；确实无法完成时test_fail_step说明原因。用户停止后不再执行业务，只按同会话收尾指导执行预授权清理。全部完成调用test_finish，并在原生最终回复写明逐步结果、断言实际/预期、保存位置和工具返回的报告链接。BLOCKED、SKIPPED或缺证据不能写成通过。`;
@@ -484,8 +484,22 @@ export class NativeTest {
         properties: {
           check_index: { type: "integer", minimum: 0 },
           assertion: {
-            ...assertionSchema,
+            type: "object",
             required: ["observation_ref", "operator"],
+            additionalProperties: false,
+            properties: {
+              observation_ref: assertionSchema.properties.observation_ref,
+              operator: assertionSchema.properties.operator,
+              expected_json: {
+                type: "string",
+                description:
+                  '用户给出的预期，按JSON文本传递：数字用"0"，字符串用"\\\"agent\\\""，布尔用"true"；不是Schema，不包value对象。与expected_observation_ref二选一',
+              },
+              expected_observation_ref:
+                assertionSchema.properties.expected_observation_ref,
+              unit: assertionSchema.properties.unit,
+              tolerance: assertionSchema.properties.tolerance,
+            },
           },
         },
       },
@@ -498,13 +512,20 @@ export class NativeTest {
         const id = `${c.step.step_id}_check_${args.check_index + 1}`;
         if (c.instance.effective_steps.some((s) => s.step_id === id))
           throw new Error("检查点已经绑定，不能改写预期");
+        const { expected_json, ...definition } = args.assertion;
         const step: Step = {
           step_id: id,
           kind: "assertion",
           description: text,
           required: true,
           depends_on: [c.step.step_id],
-          assertion: { ...args.assertion, rule_ref: id },
+          assertion: {
+            ...definition,
+            ...(expected_json === undefined
+              ? {}
+              : { literal: JSON.parse(expected_json) }),
+            rule_ref: id,
+          },
         };
         const effective = [...c.instance.effective_steps];
         const position = effective.findIndex(
