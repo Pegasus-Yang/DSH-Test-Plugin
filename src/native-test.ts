@@ -24,7 +24,8 @@ import {
   expand,
   field,
   parsePlan,
-  planSchema,
+  actionSchema,
+  assertionSchema,
   statistics,
   captureSchema,
   validateCaptures,
@@ -43,6 +44,7 @@ import { evaluate } from "./assertions.js";
 import { writeReport } from "./report.js";
 import { ReportAccess } from "./report-access.js";
 import { defaults, type TestConfig } from "./config.js";
+import { parseTextPlan, textPlanSchema, textReview } from "./text-plan.js";
 import { applyRevision } from "./revisions.js";
 
 declare module "@deepseek-ai/dsh-llm" {
@@ -61,40 +63,12 @@ const output = {
     { type: "text" as const, text: JSON.stringify(value, null, 2) },
   ],
 };
-// 自然语言入口由插件补齐版本、规则来源和缺省阶段，模型只描述业务计划。
-const naturalCase = planSchema.properties.cases.items;
-const naturalPlanSchema = {
-  ...planSchema,
-  required: ["suite_id", "name", "cases"],
-  properties: {
-    suite_id: planSchema.properties.suite_id,
-    name: planSchema.properties.name,
-    cases: {
-      ...planSchema.properties.cases,
-      items: {
-        ...naturalCase,
-        required: ["case_id", "name", "steps"],
-        properties: {
-          ...naturalCase.properties,
-          preconditions: {
-            ...naturalCase.properties.preconditions,
-            description: "可省略；只有用户明确要求额外前置条件时填写。",
-          },
-          cleanup: {
-            ...naturalCase.properties.cleanup,
-            description:
-              "默认省略；插件自动关闭浏览器。仅用户额外授权的业务清理才填写。",
-          },
-        },
-      },
-    },
-  },
-};
 const guide = `当前对话已启用测试增强，仍由本会话正常推理、工具调用、审批、追问和回复完成任务，不创建其他会话或后台任务。
 规划阶段只根据用户描述分析目标、业务步骤、输入和预期。禁止访问网站、运行命令、调用API或提前验证用例；不能通过预跑寻找选择器。只可使用test_submit_plan、test_current、todo_write和ask_user_question。已给目标、输入和预期时直接形成计划；缺少必要信息时在本会话追问。
-test_submit_plan只提交suite_id、name、cases，固定版本和user_task规则来源由插件补齐。case.preconditions、cleanup可省略，浏览器初始化和关闭自动添加。计划固定业务目标、输出语义和断言，不固定未知的DOM结构。自然语言业务action省略capture，运行时再绑定，绝不猜选择器。action包含goal、capability(browser/api)、allowed_targets(用户授权网址)、inputs、outputs和completion_requirements。outputs为“输出名→JSON Schema”对象，每个输出用description明确观察对象，例如likes:{type:"number",description:"打开的第一条搜索结果帖子的首帖点赞数"}。completion_requirements列出必要输出名。断言引用的输出必须声明且列入必要输出。
-断言observation_ref格式step_id.output_name，operator为eq/neq/contains/range/exists/text/visible；literal、expected_ref、expected_observation_ref三选一。预期只能来自用户/授权规则，rule_ref=user_task。数字预期放入datasets.expected并用expected_ref，例如data.expected.zero。用户要求“不为0”必须neq数字0，不能改成range或字符串。不把运行观察直接写为预期。身份关系应单独断言：搜索词等于用户词；打开后的pathname等于搜索步骤采集的第一条first_href，用expected_observation_ref关联，不能硬编码探索得到的帖子URL。
-执行阶段：计划提交成功后按test_current执行当前业务目标。此时才使用正常Playwright工具查看页面、点击、输入、等待和检查DOM，可根据实际状态调整定位、操作组合和重试，无需重跑整条用例；只完成当前步骤，不提前执行后续步骤。browser_evaluate可用于实际页面结构检查，断言实际值仍只接受test_capture可信采集。JSON文件计划已提交时直接按test_current继续，不能重复提交计划或预跑。
+test_submit_plan只提交{name,steps:[{description,checks?:string[]}]}。把用户的一段话按常规理解拆成几个业务动作短句，checks只写用户预期的自然语言。不要提供suite_id、cases、工具、选择器、能力类型、URL白名单、输出Schema、字段路径或比较器；不要为了未知页面结构追问用户。例如steps:[{description:"访问ceshiren.com"},{description:"搜索agent"},{description:"打开第一条搜索结果"},{description:"查看帖子的点赞数",checks:["点赞数不为0"]}]。用户没有提供的操作细节无需在规划期补齐。
+文字计划执行：每次只处理test_current的当前步骤。需要操作目标时先test_define_step({capability:"browser"或"api",allowed_targets:[本步目标网址],reason:"当前步骤依据"})设定操作范围，outputs可先省略。随后使用原生工具观察、操作、调整；了解实际页面后再次test_define_step补充outputs（输出名到JSON Schema），然后test_capture采集。输出采集后不再改定义，只能补采缺失输出。API通常以response:{type:"object"}收集完整响应。不是在执行开始时编译整份计划，不能配置未来步骤。
+文字检查点：获得可信观察后，对当前步骤的每个checks，调用test_bind_check({check_index:从0开始,assertion:{observation_ref:"step_编号.输出名.可选嵌套路径",operator:"eq/neq/...",literal:用户给出的预期}})。也可用expected_observation_ref比较前一步观察（例如第一条搜索结果链接）。rule_ref由插件绑定文字检查点；不用提交actual。预期来自原文和文字检查，不能按实际值改写；数字不为0用neq数字0。每个文字检查都必须绑定程序断言，不能靠口头宣布通过；纯检查步骤可以直接引用前一步的可信观察。绑定后test_finish_step结算当前步骤并计算断言。无法完成用test_fail_step说明原因。
+执行阶段：文字计划提交（/test-plan还需批准）后按test_current执行当前业务目标。此时才使用正常Playwright工具查看页面、点击、输入、等待和检查DOM，可根据实际状态调整定位、操作组合和重试，无需重跑整条用例；只完成当前步骤，不提前执行后续步骤。browser_evaluate可用于实际页面结构检查，断言实际值仍只接受test_capture可信采集。JSON文件计划已提交时直接按test_current继续，不能重复提交计划或预跑。
 运行时采集：完成当前动作后，按页面/接口实际情况调用test_capture({capture:{输出名:采集定义},reason:"依据当前页面选择或修正定位的原因"})。它不接受actual或任意执行代码。dom mode支持text/number/count/visible/url/attribute/value；selector为真实CSS，可用index定位集合。页面路径用{kind:"dom",mode:"url",field:"pathname"}；元素href用{kind:"dom",mode:"attribute",attribute:"href",selector:"实际选择器",index:0,field:"pathname"}；数字用mode:number；文本框用mode:value；http仅用于返回JSON的GET接口。HTTP采集本身会发送请求，直接调用test_capture，无需先用test_api_get预发一次。完整响应为{status:number,body:JSON}，不含headers；可声明单一object输出，用{kind:"http",url:"授权URL",field:""}一次采集，再通过step_id.output_name.status及step_id.output_name.body的嵌套路径断言。必要输出都要采集。采集定义可根据实际页面修正，保留每次原因和调用记录；已有成功观察不可覆盖，只补采尚缺的输出。不能改变输出含义、输出类型、目标范围或断言预期。静态JSON的capture和自动清理已有采集定义，直接test_capture({})即可。
 采集成功后调用test_finish_step；程序计算断言，模型不能填写实际值或口头改判。定位失败可修正重试；确实无法完成时test_fail_step说明原因。用户停止后不再执行业务，只按同会话收尾指导执行预授权清理。全部完成调用test_finish，并在原生最终回复写明逐步结果、断言实际/预期、保存位置和工具返回的报告链接。BLOCKED、SKIPPED或缺证据不能写成通过。`;
 
@@ -332,7 +306,7 @@ export class NativeTest {
       incomplete: false,
       resource_quarantined: false,
       manifest: {
-        plugin_version: "0.4.0",
+        plugin_version: "0.5.0",
         plan_review: review,
         execution: "native-conversation",
         origin_session_id: agent.id,
@@ -405,7 +379,7 @@ export class NativeTest {
     tool(
       "test_submit_plan",
       "提交本对话测试计划；/test-plan只保存待审核草案，其余入口直接冻结。从用户原文提取预期，不能提交实际结果。",
-      naturalPlanSchema,
+      textPlanSchema,
       (args) => this.submit(args),
     );
     tool(
@@ -413,6 +387,145 @@ export class NativeTest {
       "读取当前步骤、冻结目标、输入及已计算断言。",
       empty,
       () => this.state(),
+    );
+    tool(
+      "test_define_step",
+      "仅在执行当前文字步骤时确定能力、目标和输出；可先观察页面再补充outputs，采集后定义固定。",
+      {
+        type: "object",
+        required: ["capability", "allowed_targets", "reason"],
+        additionalProperties: false,
+        properties: {
+          capability: actionSchema.properties.capability,
+          allowed_targets: actionSchema.properties.allowed_targets,
+          outputs: actionSchema.properties.outputs,
+          reason: { type: "string", minLength: 1 },
+        },
+      },
+      async (args, exec) => {
+        this.requireSettled(exec);
+        const c = this.current;
+        if (!c || c.phase !== "test" || c.step.checks === undefined)
+          throw new Error(
+            "仅当前文字步骤可以在运行时定义，不能修改JSON计划或未来步骤",
+          );
+        if (
+          c.result.observations.length ||
+          c.instance.effective_steps.some(
+            (s) =>
+              s.step_id.startsWith(c.step.step_id + "_check_") && s.assertion,
+          )
+        )
+          throw new Error("本步已有观察或断言，不能重写定义");
+        const step: Step = {
+          ...c.step,
+          kind: "action",
+          action: {
+            goal: c.step.description,
+            capability: args.capability,
+            allowed_targets: args.allowed_targets,
+            inputs: {},
+            outputs: args.outputs ?? {},
+            completion_requirements: Object.keys(args.outputs ?? {}),
+            capture_mode: "runtime",
+          },
+        };
+        const effective = c.instance.effective_steps.map((s) =>
+          s.step_id === step.step_id ? step : s,
+        );
+        this.validateEffective(c.instance, effective);
+        c.step = step;
+        c.instance.effective_steps = effective;
+        this.recorder.event(
+          "step_defined",
+          { step, reason: args.reason },
+          c.binding,
+        );
+        if (
+          args.capability === "browser" &&
+          !c.instance.resources.browser_context
+        ) {
+          // 直到实际遇到浏览器步骤才初始化；接口步骤不触碰浏览器。
+          c.instance.resources.browser_context = {
+            id: this.id,
+            state: "exists",
+          };
+          const after = this.entries.findIndex(
+            (e, n) => n >= this.cursor && e.instance !== c.instance,
+          );
+          this.entries.splice(after < 0 ? this.entries.length : after, 0, {
+            instance: c.instance,
+            phase: "cleanup",
+            step: closeStep("__close", "关闭并确认浏览器上下文释放"),
+          });
+          this.save();
+          const reset = await this.call(
+            "mcp__playwright__browser_close",
+            {},
+            exec,
+          );
+          if (reset.result.isError) {
+            this.finishStep("ERROR", "初始化浏览器上下文失败");
+            this.advance();
+            throw new Error("浏览器初始化失败，已进入收尾");
+          }
+        }
+        this.save();
+        return this.state();
+      },
+    );
+    tool(
+      "test_bind_check",
+      "把当前步骤的一个文字检查点绑定为程序断言；预期来自已批准文字，实际值只能引用可信观察，绑定后不能改判。",
+      {
+        type: "object",
+        required: ["check_index", "assertion"],
+        additionalProperties: false,
+        properties: {
+          check_index: { type: "integer", minimum: 0 },
+          assertion: {
+            ...assertionSchema,
+            required: ["observation_ref", "operator"],
+          },
+        },
+      },
+      (args, exec) => {
+        this.requireSettled(exec);
+        const c = this.current;
+        const text = c?.step.checks?.[args.check_index];
+        if (!c || c.phase !== "test" || !text)
+          throw new Error("当前步骤没有此文字检查点");
+        const id = `${c.step.step_id}_check_${args.check_index + 1}`;
+        if (c.instance.effective_steps.some((s) => s.step_id === id))
+          throw new Error("检查点已经绑定，不能改写预期");
+        const step: Step = {
+          step_id: id,
+          kind: "assertion",
+          description: text,
+          required: true,
+          depends_on: [c.step.step_id],
+          assertion: { ...args.assertion, rule_ref: id },
+        };
+        const effective = [...c.instance.effective_steps];
+        const position = effective.findIndex(
+          (s) => s.step_id === c.step.step_id,
+        );
+        effective.splice(position + 1, 0, step);
+        this.validateEffective(c.instance, effective);
+        c.instance.effective_steps = effective;
+        this.entries.splice(this.cursor, 0, {
+          instance: c.instance,
+          phase: "test",
+          step,
+        });
+        this.recorder.event(
+          "check_bound",
+          { step, check_index: args.check_index },
+          c.binding,
+        );
+        this.save();
+        return this.state();
+      },
     );
     tool(
       "test_capture",
@@ -507,12 +620,36 @@ export class NativeTest {
         const c = this.current;
         if (!c) throw new Error("没有当前步骤");
         this.requireSettled(exec);
+        const pending = (c.step.checks ?? []).filter(
+          (_, n) =>
+            !c.instance.effective_steps.some(
+              (s) =>
+                s.step_id === `${c.step.step_id}_check_${n + 1}` && s.assertion,
+            ),
+        );
+        if (pending.length)
+          throw new Error("尚未绑定文字检查点: " + pending.join("；"));
+        if (!c.step.action && !c.step.checks?.length)
+          throw new Error("请先根据当前情况配置并完成本步骤");
         if (
-          !c.step.action!.completion_requirements.every((n) =>
+          !(c.step.action?.completion_requirements ?? []).every((n) =>
             c.result.observations.some((o) => o.output_name === n),
           )
         )
           throw new Error("缺少必要观察；先完成动作并调用test_capture");
+        if (
+          c.step.action &&
+          !c.step.action.completion_requirements.length &&
+          !c.step.checks?.length &&
+          !c.result.calls.some(
+            (call) =>
+              !call.name.startsWith("test_") &&
+              call.finished_at &&
+              !call.isError &&
+              !call.name.endsWith("browser_close"),
+          )
+        )
+          throw new Error("尚无本步骤实际动作或可信观察，不能只配置后宣布完成");
         this.finishStep("SUCCEEDED");
         this.advance();
         return this.state();
@@ -747,6 +884,19 @@ export class NativeTest {
           )
             return "审核内容必须与草案一致；请将test_current返回的review_markdown原样传给exit_plan_mode";
         }
+        if (
+          this.current?.step.kind === "intent" &&
+          ![
+            "test_define_step",
+            "test_bind_check",
+            "test_current",
+            "test_finish_step",
+            "test_fail_step",
+            "ask_user_question",
+            "todo_write",
+          ].includes(exec.name)
+        )
+          return "请在当前步骤调用test_define_step确定操作目标；不需要提前定义未来步骤";
         if (this.planned && exec.name === "test_api_get" && !exec.parent)
           return "HTTP请求由test_capture发送并记录，请勿预先直接请求；用一个response对象观察供多个断言引用";
         if (this.planned && typeof (exec.arguments as any)?.url === "string") {
@@ -812,29 +962,9 @@ export class NativeTest {
   }
   submit(input: unknown, trustedFile = false): unknown {
     if (this.planned) throw new Error("计划已冻结；不能替换预期");
-    const value = structuredClone(input) as any;
-    if (!trustedFile) {
-      value.schema_version = "1";
-      for (const c of value.cases ?? []) {
-        c.preconditions ??= [];
-        c.cleanup ??= [];
-        c.datasets ??= [{ data_id: "default", inputs: {}, expected: {} }];
-        for (const step of [...c.preconditions, ...c.steps])
-          if (step.action && !step.action.capture)
-            step.action.capture_mode = "runtime";
-      }
-      value.source_refs = [
-        {
-          id: "user_task",
-          kind: "user",
-          uri: "session:" + this.id,
-          version: "1",
-          locator: "本次测试用户输入",
-          excerpt: this.task,
-        },
-      ];
-    }
-    const plan = parsePlan(value);
+    const plan = trustedFile
+      ? parsePlan(input)
+      : parseTextPlan(input, this.task, this.id);
     if (this.timer) clearTimeout(this.timer);
     if (this.review) {
       this.draft = plan;
@@ -846,31 +976,20 @@ export class NativeTest {
     }
     return this.freeze(plan);
   }
+  private validateEffective(instance: CaseRun, steps: Step[]): void {
+    const original = this.run.plan.cases.find(
+      (c) => c.case_id === instance.case_id,
+    )!;
+    parsePlan({ ...this.run.plan, cases: [{ ...original, steps }] }, true);
+  }
   private reviewMarkdown(): string {
     if (!this.draft) return "";
-    const plan = this.draft;
-    return (
-      `# ${plan.name}\n\n确认后按以下步骤执行；可选择要求修改，再在本对话补充意见。当前未执行任何测试动作。\n\n` +
-      plan.cases
-        .map(
-          (c) =>
-            `## ${c.name}\n\n` +
-            [...c.preconditions, ...c.steps, ...c.cleanup]
-              .map(
-                (s, i) =>
-                  `${i + 1}. ${s.description}${s.assertion ? "（断言）" : ""}`,
-              )
-              .join("\n"),
-        )
-        .join("\n\n") +
-      "\n\n## 完整执行定义\n\n以下定义包含目标范围、输入、输出、预期、依赖和清理。含浏览器动作的用例还会自动初始化并关闭浏览器上下文。批准后冻结此版本。\n\n```json\n" +
-      JSON.stringify(plan, null, 2) +
-      "\n```"
-    );
+    return textReview(this.draft);
   }
   private freeze(plan: SuiteRun["plan"]): unknown {
     if (this.timer) clearTimeout(this.timer);
     this.planned = true;
+    this.nudges = 0;
     this.run.name = plan.name;
     this.run.plan = plan;
     this.run.instances = expand(plan);
@@ -1056,6 +1175,21 @@ export class NativeTest {
         ? {
             instance: c.instance.case_run_id,
             step: c.step,
+            checks: (c.step.checks ?? []).map((text, n) => ({
+              check_index: n,
+              text,
+              bound: c.instance.effective_steps.some(
+                (s) =>
+                  s.step_id === `${c.step.step_id}_check_${n + 1}` &&
+                  s.assertion,
+              ),
+            })),
+            observations: c.instance.steps.flatMap((s) =>
+              s.observations.map((o) => ({
+                ref: `${s.step_id}.${o.output_name}`,
+                value: o.value,
+              })),
+            ),
             inputs: Object.fromEntries(
               Object.entries(c.step.action?.inputs ?? {}).map(
                 ([key, value]) => [
@@ -1080,7 +1214,9 @@ export class NativeTest {
           ? "将review_markdown原样传入exit_plan_mode的plan参数，由原生审核等待用户批准；修改时重新test_submit_plan"
           : "理解任务并提交test_submit_plan；信息不足时正常追问"
         : c
-          ? "完成当前动作、test_capture、test_finish_step"
+          ? c.step.checks !== undefined
+            ? "只执行当前文字步骤：test_define_step确定本步目标和输出，观察操作后test_capture；逐项test_bind_check，最后test_finish_step"
+            : "完成当前动作、test_capture、test_finish_step"
           : "调用test_finish生成报告并在回复中给出链接",
     };
   }

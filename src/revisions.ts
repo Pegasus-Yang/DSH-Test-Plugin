@@ -92,7 +92,10 @@ export function applyRevision(
     const testCase = run.plan.cases.find(
       (c) => c.case_id === instance.case_id,
     )!;
-    parsePlan({ ...run.plan, cases: [{ ...testCase, steps }] });
+    parsePlan(
+      { ...run.plan, cases: [{ ...testCase, steps }] },
+      testCase.steps.some((s) => s.kind === "intent"),
+    );
     changes.push({ instance, steps });
   }
   const revision: PlanRevision = {
@@ -102,9 +105,14 @@ export function applyRevision(
   };
   recorder.event("plan_revised", revision);
   for (const { instance, steps } of changes) {
-    const ids = steps
-      .filter((s) => s.required && s.kind === "assertion")
-      .map((s) => s.step_id);
+    const ids = [
+      ...new Set([
+        ...instance.effective_required_assertion_ids,
+        ...steps
+          .filter((s) => s.required && s.kind === "assertion")
+          .map((s) => s.step_id),
+      ]),
+    ];
     recorder.event("revision_applied", {
       revision: revision.revision,
       case_run_id: instance.case_run_id,

@@ -97,6 +97,13 @@ export function writeReport(
           ]),
         ),
       ];
+      const textSteps =
+        run.plan.cases
+          .find((c) => c.case_id === i.case_id)
+          ?.steps.filter((s) => s.kind === "intent") ?? [];
+      const textPlan = textSteps.length
+        ? `<details class="inspect"><summary>原始文字步骤与检查点</summary><ol>${textSteps.map((s) => `<li>${escape(s.description)}${s.checks?.length ? `<p>检查：${s.checks.map(escape).join("；")}</p>` : ""}</li>`).join("")}</ol><p>具体工具、采集方式和比较器在执行当前步骤时确定，见下方执行记录。</p></details>`
+        : "";
       const focus =
         i.steps.find((s) =>
           ["FAIL", "ERROR", "INCONCLUSIVE"].includes(s.status),
@@ -111,7 +118,7 @@ export function writeReport(
         (s) =>
           s.assertion || i.effective_required_assertion_ids.includes(s.step_id),
       );
-      return `<article class="case" id="case-${index}" data-case="${escape(i.case_id)}" data-data="${escape(i.data_id)}" data-status="${escape(i.status)}" data-search="${escape([i.name, i.case_id, i.data_id, i.status].join(" ").toLocaleLowerCase())}"${index ? " hidden" : ""}><header class="case-head"><div class="case-heading">${i.status === "PASS" ? icon("circle-check", "status-icon") : ""}<h2>${escape(i.name)}</h2>${badge(i.status)}</div><div class="case-meta"><span>用例标识<b>${escape(i.case_id)}</b></span><span>数据集<b>${escape(i.data_id)}</b></span><span>步骤耗时<b>${duration(caseMs)}</b></span></div></header>${i.issues.length ? `<aside class="issue">${i.issues.map(escape).join("<br>")}</aside>` : ""}${i.unsettled_call_ids.length ? `<aside class="issue danger">尚有 ${i.unsettled_call_ids.length} 次未结算调用；外部执行可能仍未停止。</aside>` : ""}<div class="tabs" role="tablist" aria-label="用例详情">${[
+      return `<article class="case" id="case-${index}" data-case="${escape(i.case_id)}" data-data="${escape(i.data_id)}" data-status="${escape(i.status)}" data-search="${escape([i.name, i.case_id, i.data_id, i.status].join(" ").toLocaleLowerCase())}"${index ? " hidden" : ""}><header class="case-head"><div class="case-heading">${i.status === "PASS" ? icon("circle-check", "status-icon") : ""}<h2>${escape(i.name)}</h2>${badge(i.status)}</div><div class="case-meta"><span>用例标识<b>${escape(i.case_id)}</b></span><span>数据集<b>${escape(i.data_id)}</b></span><span>步骤耗时<b>${duration(caseMs)}</b></span></div></header>${i.issues.length ? `<aside class="issue">${i.issues.map(escape).join("<br>")}</aside>` : ""}${i.unsettled_call_ids.length ? `<aside class="issue danger">尚有 ${i.unsettled_call_ids.length} 次未结算调用；外部执行可能仍未停止。</aside>` : ""}${textPlan}<div class="tabs" role="tablist" aria-label="用例详情">${[
         ["steps", "步骤"],
         ["assertions", "断言"],
         ["attachments", "附件"],

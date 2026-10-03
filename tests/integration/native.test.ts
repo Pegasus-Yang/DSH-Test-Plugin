@@ -422,21 +422,7 @@ it("插件作用域卸载会取消当前原生Agent并隔离未清理资源", as
 it("自然语言计划由插件补齐固定字段，不要求模型编造版本和规则来源", async () => {
   const t = setup();
   await t.manager.start(t.agent, "点赞不为0");
-  const plan = sample();
-  const c = plan.cases[0];
-  c.steps[1].assertion!.rule_ref = "user_task";
-  const result = await t.call("test_submit_plan", {
-    suite_id: plan.suite_id,
-    name: plan.name,
-    cases: [
-      {
-        case_id: c.case_id,
-        name: c.name,
-        datasets: c.datasets,
-        steps: c.steps,
-      },
-    ],
-  });
+  const result = await t.call("test_submit_plan", reviewPlan());
   expect(result.isError).toBe(false);
   const frozen = t.manager.sessions.get("origin")!.run.plan;
   expect(frozen.schema_version).toBe("1");
@@ -479,16 +465,15 @@ it("规划阶段禁止浏览器、API、命令和其他执行工具，仍允许�
   expect(t.manager.sessions.get("origin")!.state().phase).toBe("planning");
 });
 
-it("只按描述形成计划，执行时绑定和修正采集方式且不改预期", async () => {
+it("JSON运行时采集可修正定位且不改预期", async () => {
   const t = setup();
-  await t.manager.start(t.agent, "点赞不为0");
   const plan: any = sample();
   delete plan.cases[0].steps[0].action.capture;
-  plan.cases[0].steps[1].assertion.rule_ref = "user_task";
-  expect((await t.call("test_submit_plan", plan)).isError).toBe(false);
+  plan.cases[0].steps[0].action.capture_mode = "runtime";
+  await t.manager.start(t.agent, "点赞不为0", plan);
   const run = t.manager.sessions.get("origin")!;
   const frozen = JSON.stringify(run.run.plan);
-  expect(t.dispatched).toEqual(["test_submit_plan"]);
+  expect(t.dispatched).toEqual([]);
   await t.step();
   expect(
     (
@@ -610,9 +595,43 @@ it("采集部分成功后可只补采缺少输出，不丢失或覆盖已有证�
 });
 
 function reviewPlan() {
-  const plan = sample();
-  plan.cases[0].steps[1].assertion!.rule_ref = "user_task";
-  return plan;
+  return {
+    name: "查看帖子点赞",
+    steps: [{ description: "查看帖子的点赞数", checks: ["点赞数不为0"] }],
+  };
+}
+async function finishTextStep(t: ReturnType<typeof setup>) {
+  expect(
+    (
+      await t.call("test_define_step", {
+        capability: "browser",
+        allowed_targets: ["https://example.test"],
+        outputs: { likes: { type: "number" } },
+        reason: "当前帖子",
+      })
+    ).isError,
+  ).toBe(false);
+  expect(
+    (
+      await t.call("test_capture", {
+        capture: { likes: { kind: "dom", mode: "number", selector: "#likes" } },
+        reason: "查看后确定点赞计数",
+      })
+    ).isError,
+  ).toBe(false);
+  expect(
+    (
+      await t.call("test_bind_check", {
+        check_index: 0,
+        assertion: {
+          observation_ref: "step_1.likes",
+          operator: "neq",
+          literal: 0,
+        },
+      })
+    ).isError,
+  ).toBe(false);
+  expect((await t.call("test_finish_step")).isError).toBe(false);
 }
 
 it("test-plan进入原生模式，草案可修改；只有原生审核批准同一草案后才能执行", async () => {
@@ -662,8 +681,7 @@ it("test-plan进入原生模式，草案可修改；只有原生审核批准同�
   expect(run.state().phase).toBe("executing");
   expect(run.run.plan.name).toBe("修改后的计划");
   expect((await t.call("test_submit_plan", reviewPlan())).isError).toBe(true);
-  await t.step();
-  await t.step();
+  await finishTextStep(t);
   await t.step();
   expect((await t.call("test_finish")).value.statistics.PASS).toBe(1);
   await t.end();
@@ -786,4 +804,115 @@ it("计划只输出文字时提醒原生提交，审核拒绝后不催促用户�
   await t.emit("agent/turn-stopping", { agent: t.agent });
   expect(t.agent.steer).not.toHaveBeenCalled();
   expect(run.run.instances).toEqual([]);
+});
+
+it("文字计划只冻结短句，运行时观察后补充输出与采集；缺少检查不能通过", async () => {
+  const t = setup();
+  await t.manager.start(t.agent, "打开帖子检查点赞不为0");
+  await t.call("test_submit_plan", reviewPlan());
+  const run = t.manager.sessions.get("origin")!;
+  const frozen = structuredClone(run.run.plan);
+  expect(frozen.cases[0].steps[0]).toMatchObject({
+    kind: "intent",
+    checks: ["点赞数不为0"],
+  });
+  expect(frozen.cases[0].steps[0].action).toBeUndefined();
+  expect((await t.call("test_finish_step")).isError).toBe(true);
+  const base = {
+    capability: "browser",
+    allowed_targets: ["https://example.test"],
+    reason: "执行当前步骤，先看页面",
+  };
+  expect((await t.call("test_define_step", base)).isError).toBe(false);
+  expect(
+    (
+      await t.call("mcp__playwright__browser_navigate", {
+        url: "https://example.test",
+      })
+    ).isError,
+  ).toBe(false);
+  expect(
+    (
+      await t.call("test_define_step", {
+        ...base,
+        outputs: { likes: { type: "number" } },
+      })
+    ).isError,
+  ).toBe(false);
+  await t.call("test_capture", {
+    capture: { likes: { kind: "dom", mode: "number", selector: "#likes" } },
+    reason: "实际页面定位",
+  });
+  expect((await t.call("test_define_step", base)).isError).toBe(true);
+  expect((await t.call("test_finish_step")).isError).toBe(true);
+  const check = {
+    check_index: 0,
+    assertion: { observation_ref: "step_1.likes", operator: "neq", literal: 0 },
+  };
+  expect((await t.call("test_bind_check", check)).isError).toBe(false);
+  expect((await t.call("test_bind_check", check)).isError).toBe(true);
+  await t.call("test_finish_step");
+  await t.step();
+  expect((await t.call("test_finish")).value.statistics.PASS).toBe(1);
+  expect(run.run.plan).toEqual(frozen);
+  expect(rebuild(run.recorder.directory)).toEqual(run.run);
+  await t.end();
+});
+
+it("纯接口文字步骤运行时确定响应结构，下一步只核对已采集响应，不重复请求", async () => {
+  const t = setup();
+  const spy = vi
+    .spyOn(globalThis, "fetch")
+    .mockResolvedValue(
+      new Response(JSON.stringify({ args: { keyword: "agent" } }), {
+        status: 200,
+      }),
+    );
+  try {
+    await t.manager.start(t.agent, "发送请求并验证状态码");
+    await t.call("test_submit_plan", {
+      name: "接口检查",
+      steps: [
+        { description: "请求httpbin接口" },
+        { description: "检查响应", checks: ["状态码为200"] },
+      ],
+    });
+    const run = t.manager.sessions.get("origin")!;
+    await t.call("test_define_step", {
+      capability: "api",
+      allowed_targets: ["https://httpbin.org"],
+      outputs: { response: { type: "object" } },
+      reason: "本步请求接口",
+    });
+    await t.call("test_capture", {
+      capture: {
+        response: { kind: "http", url: "https://httpbin.org/get", field: "" },
+      },
+      reason: "保存完整响应",
+    });
+    await t.call("test_finish_step");
+    expect(run.state().current?.step.step_id).toBe("step_2");
+    expect(
+      (
+        await t.call("test_bind_check", {
+          check_index: 0,
+          assertion: {
+            observation_ref: "step_1.response.status",
+            operator: "eq",
+            literal: 200,
+          },
+        })
+      ).isError,
+    ).toBe(false);
+    await t.call("test_finish_step");
+    expect((await t.call("test_finish")).value.statistics.PASS).toBe(1);
+    expect(spy).toHaveBeenCalledOnce();
+    expect(t.dispatched.some((n) => n.includes("playwright"))).toBe(false);
+    expect(run.run.instances[0].effective_required_assertion_ids).toEqual([
+      "step_2_check_1",
+    ]);
+    await t.end();
+  } finally {
+    spy.mockRestore();
+  }
 });

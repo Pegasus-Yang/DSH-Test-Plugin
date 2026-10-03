@@ -76,7 +76,8 @@ export interface AssertionSpec {
 }
 export interface Step {
   step_id: string;
-  kind: "action" | "assertion";
+  kind: "action" | "assertion" | "intent";
+  checks?: string[];
   description: string;
   depends_on: string[];
   required: boolean;
@@ -231,7 +232,8 @@ const stepSchema = {
   additionalProperties: false,
   properties: {
     step_id: id,
-    kind: { enum: ["action", "assertion"] },
+    kind: { enum: ["action", "assertion", "intent"] },
+    checks: { type: "array", items: { type: "string", minLength: 1 } },
     description: { type: "string", minLength: 1 },
     depends_on: { type: "array", items: id, uniqueItems: true },
     required: { type: "boolean" },
@@ -384,6 +386,8 @@ export const planSchema = {
     },
   },
 };
+export const actionSchema = stepSchema.properties.action;
+export const assertionSchema = stepSchema.properties.assertion;
 export const captureSchema = stepSchema.properties.action.properties.capture;
 const checkCaptures = ajv.compile(captureSchema);
 /** 运行时只绑定采集方法；输出语义、类型、目标范围和断言预期仍来自冻结计划。 */
@@ -442,7 +446,7 @@ export function field(value: unknown, path: string): unknown {
     : value;
 }
 /** 校验计划的结构、引用、数据及必需依赖。 */
-export function parsePlan(input: unknown): TestSuite {
+export function parsePlan(input: unknown, allowIntents = false): TestSuite {
   if (!validate(input))
     throw new Error(ajv.errorsText(validate.errors, { separator: "; " }));
   const plan = structuredClone(input),
@@ -456,10 +460,18 @@ export function parsePlan(input: unknown): TestSuite {
       c.datasets = [{ data_id: "default", inputs: {}, expected: {} }];
     if (new Set(c.datasets.map((d) => d.data_id)).size !== c.datasets.length)
       throw new Error("数据ID重复");
-    if (!c.steps.some((s) => s.kind === "assertion" && s.required))
+    if (
+      !c.steps.some(
+        (s) =>
+          s.required &&
+          (s.kind === "assertion" || (allowIntents && s.checks?.length)),
+      )
+    )
       throw new Error("至少需要一个必需业务断言");
     const seen = new Map<string, Step>();
     for (const s of [...c.preconditions, ...c.steps, ...c.cleanup]) {
+      if (s.kind === "intent" && (!allowIntents || !s.checks))
+        throw new Error("文字步骤仅由自然语言规划入口生成");
       if (s.step_id.startsWith("__"))
         throw new Error("步骤ID不得使用保留前缀__");
       if (seen.has(s.step_id)) throw new Error("步骤ID重复: " + s.step_id);
@@ -600,9 +612,13 @@ export function expand(plan: TestSuite): CaseRun[] {
       steps: [],
       issues: [],
       applied_revisions: [0],
-      effective_required_assertion_ids: c.steps
-        .filter((s) => s.kind === "assertion" && s.required)
-        .map((s) => s.step_id),
+      effective_required_assertion_ids: c.steps.flatMap((s) =>
+        s.kind === "intent"
+          ? (s.checks ?? []).map((_, n) => `${s.step_id}_check_${n + 1}`)
+          : s.kind === "assertion" && s.required
+            ? [s.step_id]
+            : [],
+      ),
       effective_steps: structuredClone(c.steps),
       resources: {},
       cancelled: false,

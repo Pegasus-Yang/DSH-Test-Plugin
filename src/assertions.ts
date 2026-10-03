@@ -55,7 +55,9 @@ export function evaluate(step: Step, run: CaseRun): AssertionResult {
     reason: "缺少可信观察",
     operand_snapshot: {
       actual_path: a.observation_ref,
-      expected_path: a.expected_observation_ref ?? a.expected_ref,
+      ...((a.expected_observation_ref ?? a.expected_ref)
+        ? { expected_path: a.expected_observation_ref ?? a.expected_ref }
+        : {}),
       ...(actual.observation
         ? { actual_observation_id: actual.observation.observation_id }
         : {}),
