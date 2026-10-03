@@ -1,0 +1,24 @@
+/** 确定性断言，仅消费绑定输出，不接受模型填写结果。 */
+import { isDeepStrictEqual } from 'node:util';
+import { field, type Step, type CaseRun, type AssertionResult, type Json, type Observation } from './contracts.js';
+function operand(run:CaseRun,ref:string):{value:unknown;observation?:Observation}{const [step,output,...parts]=ref.split('.');const observation=run.steps.find(s=>s.step_id===step)?.observations.find(o=>o.output_name===output);return {value:observation?field(observation.value,parts.join('.')):undefined,observation};}
+export function evaluate(step:Step,run:CaseRun):AssertionResult{
+  const a=step.assertion!;const actual=operand(run,a.observation_ref);
+  const expected=a.expected_observation_ref?operand(run,a.expected_observation_ref):{value:a.expected_ref?field({data:run.data},a.expected_ref):a.literal,observation:undefined};
+  const result:AssertionResult={assertion_id:step.step_id,status:'INCONCLUSIVE',operator:a.operator,expected:(expected.value??null) as Json,actual:(actual.value??null) as Json,reason:'缺少可信观察',operand_snapshot:{actual_path:a.observation_ref,expected_path:a.expected_observation_ref??a.expected_ref,...actual.observation?{actual_observation_id:actual.observation.observation_id}:{},...expected.observation?{expected_observation_id:expected.observation.observation_id}:{}},evidence_refs:[...(actual.observation?.evidence_refs??[]),...(expected.observation?.evidence_refs??[])],plan_revision:run.applied_revisions.at(-1)!};
+  if(!actual.observation||expected.value===undefined||a.expected_observation_ref&&!expected.observation)return result;
+  if(a.operator!=='exists'&&actual.value===undefined)return result;
+  let pass:boolean;
+  switch(a.operator){
+    case 'eq':case 'text':case 'visible':pass=isDeepStrictEqual(actual.value,expected.value);break;
+    case 'neq':pass=typeof actual.value===typeof expected.value&&!isDeepStrictEqual(actual.value,expected.value);break;
+    case 'contains':if(typeof actual.value!=='string'||typeof expected.value!=='string'){result.status='ERROR';result.reason='contains需要字符串';return result;}pass=actual.value.includes(expected.value);break;
+    case 'exists':if(typeof expected.value!=='boolean'){result.status='ERROR';result.reason='exists预期必须为布尔值';return result;}pass=(actual.value!==undefined)===expected.value;break;
+    case 'range':{
+      const bounds=expected.value;
+      if(typeof actual.value!=='number'||!Array.isArray(bounds)||bounds.length!==2||!bounds.every(n=>typeof n==='number')||!a.unit||a.tolerance===undefined){result.status='ERROR';result.reason='range需要数字、上下界、单位和容差';return result;}
+      pass=actual.value>=Number(bounds[0])-a.tolerance&&actual.value<=Number(bounds[1])+a.tolerance;break;
+    }
+  }
+  result.status=pass?'PASS':'FAIL';result.reason=pass?'实际值符合冻结预期':'实际值与冻结预期不符';return result;
+}
