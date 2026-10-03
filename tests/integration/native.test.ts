@@ -17,6 +17,8 @@ function setup(value = 3) {
   const sections = new Set<unknown>();
   const followups: any[] = [];
   const toolNames: string[] = [];
+  const dispatched: string[] = [];
+  let domResult: any = { values: { likes: value } };
   let sequence = 0;
   const on = (name: string, fn: Function) => {
     const set = events.get(name) ?? new Set();
@@ -78,6 +80,7 @@ function setup(value = 3) {
       });
       if (decision.kind !== "allow") throw new Error(decision.reason);
       const response = await waterfall("tools/execute", full, () => {
+        dispatched.push(full.name);
         if (definitions.has(full.name))
           return definitions.get(full.name).execute(full.arguments, full);
         if (full.name.endsWith("browser_evaluate"))
@@ -85,8 +88,7 @@ function setup(value = 3) {
             content: [
               {
                 type: "text",
-                text:
-                  "### Result\n" + JSON.stringify({ values: { likes: value } }),
+                text: "### Result\n" + JSON.stringify(domResult),
               },
             ],
           };
@@ -164,6 +166,10 @@ function setup(value = 3) {
     agent,
     followups,
     toolNames,
+    dispatched,
+    setDomResult: (value: unknown) => {
+      domResult = value;
+    },
     sections,
     definitions,
     guards,
@@ -426,18 +432,167 @@ it("自然语言计划由插件补齐固定字段，不要求模型编造版本�
   expect(frozen.source_refs[0].excerpt).toBe("点赞不为0");
 });
 
-it("规划超时记录ERROR，不能冒充用户主动取消", async () => {
+it("规划超时记录ERROR，且没有执行或清理浏览器", async () => {
   const t = setup();
-  await t.manager.start(t.agent, "测试");
-  await t.call("mcp__playwright__browser_navigate", {
-    url: "https://example.test",
-  });
+  await t.manager.start(t.agent, "点赞不为0");
   const run = t.manager.sessions.get("origin")!;
   run.stop("规划执行超时");
   await t.end(true);
+  expect(run.run.instances[0].status).toBe("ERROR");
+  expect(run.run.manifest.stop_reason).toBe("规划执行超时");
+  expect(t.dispatched).toEqual([]);
+  expect(t.followups).toHaveLength(1);
+});
+
+it("规划阶段禁止浏览器、API、命令和其他执行工具，仍允许正常分析与追问", async () => {
+  const t = setup();
+  await t.manager.start(t.agent, "访问站点检查点赞");
+  for (const name of [
+    "mcp__playwright__browser_navigate",
+    "mcp__playwright__browser_snapshot",
+    "test_api_get",
+    "exec_command",
+    "unknown_external_tool",
+  ])
+    expect((await t.call(name, { url: "https://example.test" })).isError).toBe(
+      true,
+    );
+  for (const name of ["test_current", "todo_write", "ask_user_question"])
+    expect((await t.call(name)).isError).toBe(false);
+  expect(t.dispatched).toEqual([
+    "test_current",
+    "todo_write",
+    "ask_user_question",
+  ]);
+  expect(t.manager.sessions.get("origin")!.state().phase).toBe("planning");
+});
+
+it("只按描述形成计划，执行时绑定和修正采集方式且不改预期", async () => {
+  const t = setup();
+  await t.manager.start(t.agent, "点赞不为0");
+  const plan: any = sample();
+  delete plan.cases[0].steps[0].action.capture;
+  plan.cases[0].steps[1].assertion.rule_ref = "user_task";
+  expect((await t.call("test_submit_plan", plan)).isError).toBe(false);
+  const run = t.manager.sessions.get("origin")!;
+  const frozen = JSON.stringify(run.run.plan);
+  expect(t.dispatched).toEqual(["test_submit_plan"]);
+  await t.step();
+  expect(
+    (
+      await t.call("mcp__playwright__browser_navigate", {
+        url: "https://example.test",
+      })
+    ).isError,
+  ).toBe(false);
+  expect(
+    (
+      await t.call("mcp__playwright__browser_evaluate", {
+        function: "() => document.title",
+      })
+    ).isError,
+  ).toBe(false);
+  t.setDomResult({ values: {} });
+  await t.call("test_capture", {
+    capture: { likes: { kind: "dom", mode: "number", selector: "#old" } },
+    reason: "按当前页面定位",
+  });
+  expect((await t.call("test_finish_step")).isError).toBe(true);
+  t.setDomResult({ values: { likes: 3 } });
+  expect(
+    (
+      await t.call("test_capture", {
+        capture: { likes: { kind: "dom", mode: "number", selector: "#new" } },
+        reason: "页面更新，修正同一点赞元素定位",
+      })
+    ).isError,
+  ).toBe(false);
+  expect((await t.call("test_finish_step")).isError).toBe(false);
   await t.step();
   const final = await t.call("test_finish");
+  expect(final.value.assertions[0]).toMatchObject({
+    actual: 3,
+    expected: 0,
+    status: "PASS",
+  });
+  expect(JSON.stringify(run.run.plan)).toBe(frozen);
+  expect(
+    run.run.instances[0].steps.find((s) => s.step_id === "read")!
+      .capture_attempts,
+  ).toHaveLength(2);
+  expect(rebuild(run.recorder.directory)).toEqual(run.run);
   await t.end();
-  expect(final.value.statistics.ERROR).toBe(1);
-  expect(final.value.stop_reason).toBe("规划执行超时");
+});
+
+it("运行时采集只允许已声明输出，不能修改预期或覆盖既有观察", async () => {
+  const t = setup();
+  const p: any = sample();
+  p.cases[0].steps[0].action.capture_mode = "runtime";
+  delete p.cases[0].steps[0].action.capture;
+  await t.manager.start(t.agent, "点赞不为0", p);
+  await t.step();
+  expect(
+    (
+      await t.call("test_capture", {
+        capture: { fake: { kind: "dom", mode: "number", selector: "#likes" } },
+        reason: "非法新增输出",
+      })
+    ).isError,
+  ).toBe(true);
+  expect(
+    (
+      await t.call("test_capture", {
+        capture: { likes: { kind: "http", url: "https://other.test" } },
+        reason: "越界采集",
+      })
+    ).isError,
+  ).toBe(true);
+  const capture = {
+    likes: { kind: "dom", mode: "number", selector: "#likes" },
+  };
+  expect(
+    (await t.call("test_capture", { capture, reason: "读取原目标点赞" }))
+      .isError,
+  ).toBe(false);
+  expect(
+    (await t.call("test_capture", { capture, reason: "覆盖实际值" })).isError,
+  ).toBe(true);
+});
+
+it("采集部分成功后可只补采缺少输出，不丢失或覆盖已有证据", async () => {
+  const t = setup();
+  const p: any = sample();
+  Object.assign(p.cases[0].steps[0].action, {
+    capture_mode: "runtime",
+    capture: undefined,
+    outputs: { likes: { type: "number" }, path: { type: "string" } },
+    completion_requirements: ["likes", "path"],
+  });
+  delete p.cases[0].steps[0].action.capture;
+  await t.manager.start(t.agent, "点赞不为0", p);
+  await t.step();
+  const cap = {
+    likes: { kind: "dom", mode: "number", selector: "#likes" },
+    path: { kind: "dom", mode: "url", field: "pathname" },
+  };
+  await t.call("test_capture", { capture: cap, reason: "读取当前帖子" });
+  const run = t.manager.sessions.get("origin")!;
+  const first = structuredClone(
+    run.run.instances[0].steps.find((s) => s.step_id === "read")!
+      .observations[0],
+  );
+  t.setDomResult({ values: { path: "/topic/1" } });
+  expect(
+    (
+      await t.call("test_capture", {
+        capture: { path: cap.path },
+        reason: "仅补采路径",
+      })
+    ).isError,
+  ).toBe(false);
+  expect(
+    run.run.instances[0].steps.find((s) => s.step_id === "read")!
+      .observations[0],
+  ).toEqual(first);
+  expect((await t.call("test_finish_step")).isError).toBe(false);
 });

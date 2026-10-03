@@ -1,6 +1,6 @@
 # DeepSeek Harness 测试插件
 
-原生 TypeScript 插件，在 DeepSeek Harness 的当前对话中增加测试规划、可信采集、确定性断言、运行记录与离线 HTML 报告。支持自然语言入口和 JSON 测试集合；复用 Harness 的模型、原生工具审批及 Playwright MCP，不修改宿主核心。
+原生 TypeScript 插件，在 DeepSeek Harness 的当前对话中增加测试规划、可信采集、确定性断言、运行记录与离线 HTML 报告。支持自然语言入口和 JSON 测试集合；规划阶段仅分析描述，执行时按实际页面调整操作与采集定位；复用 Harness 的模型、原生工具审批及 Playwright MCP，不修改宿主核心。
 
 当前为 `0.2.0` 开发版本。已实现主要执行链路，验收证据及尚未覆盖的设计检查见 [开发与验收记录](doc/project/开发进度.md)；设计清单不会因代码存在而自动标为通过。
 

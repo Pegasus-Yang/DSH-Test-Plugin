@@ -35,7 +35,7 @@ export function mcpResult(value: unknown): unknown {
   return JSON.parse(match[1]!.replace(/^```(?:json)?\s*\n?|\n?```$/g, ""));
 }
 
-/** 固定的只读DOM采集函数；选择器来自通过Schema校验的冻结计划。 */
+/** 固定的只读DOM采集函数；选择器来自通过Schema校验的计划或本次运行绑定。 */
 export function domFunction(
   captures: Record<string, unknown>,
   origins: string[],
@@ -73,7 +73,12 @@ export async function captureStep(
   binding: Binding,
   exec: ToolRunContext,
 ): Promise<Json> {
-  const captures = step.action!.capture ?? {};
+  const captures = Object.fromEntries(
+    Object.entries(step.action!.capture ?? {}).filter(
+      ([name]) => !result.observations.some((o) => o.output_name === name),
+    ),
+  );
+  const previousObservations = result.observations.length;
   const dom = Object.fromEntries(
     Object.entries(captures).filter(([, c]) => c.kind === "dom"),
   );
@@ -203,7 +208,9 @@ export async function captureStep(
           false,
         );
         suite.evidence.push(evidence);
-        for (const observation of result.observations)
+        for (const observation of result.observations.slice(
+          previousObservations,
+        ))
           observation.evidence_refs.push(evidence.evidence_id);
       }
     }

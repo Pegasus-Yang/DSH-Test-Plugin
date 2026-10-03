@@ -24,6 +24,9 @@ import {
   parsePlan,
   planSchema,
   statistics,
+  captureSchema,
+  validateCaptures,
+  type Capture,
   type Binding,
   type CallRecord,
   type CaseRun,
@@ -85,11 +88,14 @@ const naturalPlanSchema = {
     },
   },
 };
-const guide = `当前对话已启用测试增强。使用本会话正常的推理、文字回复、浏览器工具及原生审批完成用户任务，不创建其他会话或后台任务。执行前用中文简要告知步骤，执行中说明关键发现。
-先理解任务；用户已给出目标网址、搜索词和预期时直接工作，不追问实现细节。真正缺少网址、输入或预期时正常向用户提问，等待同一对话回复。网页测试先用原生Playwright工具只读探索元素与选择器，然后调用test_submit_plan冻结计划，再重新按冻结步骤执行。不能猜测选择器或接口地址。预期只来自用户/已授权规则，绝不把本次采集值写成预期。浏览器自动初始化/释放步骤由插件加入，preconditions和cleanup可为空数组。
-test_submit_plan只提交suite_id、name、cases；schema_version和source_refs由插件补齐，不提交。case.preconditions、cleanup默认省略。action.outputs是“输出名→JSON Schema”的对象，例如{"url":{"type":"string"},"likes":{"type":"number"}}，不是单一Schema或字符串。completion_requirements只写输出名，例如["url"]，不是步骤ID。网页URL采集使用{"kind":"dom","mode":"url"}，不能用http采集HTML网页。http仅用于确定返回JSON的接口。action.outputs是JSON Schema；action.capture单独定义可信采集：dom的mode可为text/number/count/visible/url/attribute/value，CSS selector必须真实且唯一（集合用index）；数值mode=number，网址mode=url、field=pathname可提取当前页面路径（不能带selector）；链接href用mode=attribute、attribute=href、selector和index=0，可用field=pathname提取链接路径；http使用url和field；browser_close采集释放结果。completion_requirements列出必要输出。action.allowed_targets为完整URL。断言observation_ref格式step_id.output_name，operator支持eq/neq/contains/range/exists/text/visible，literal、expected_ref、expected_observation_ref恰选一种；规则rule_ref=user_task。
-必须为用户要求的动作身份建立断言，例如搜索词是否正确、打开的链接是否等于第一条结果的href，不能仅核对最后数值而遗漏路径身份。数值断言必须使用mode=number、outputs类型number或integer，预期在datasets.expected中声明JSON数字并用expected_ref引用，不能将类型降为string来通过校验。对于第一条结果，必须在搜索步骤采集first_href，在打开步骤采集pathname，用expected_observation_ref比较二者；禁止把探索时看到的帖子URL硬编码为预期。approval默认省略，宿主原有审批策略保持有效；只有用户规则明确要求额外审批才设置true。提交后按test_current返回的当前步骤执行。完成动作后调用test_capture采集真实观察，再调用test_finish_step；断言由程序比较，你不能提交实际值或自行宣布通过。工具失败可按真实页面修正操作，不能改冻结预期。采集失败最多修正操作重试一次；仍失败调用test_fail_step，不重复空转或继续执行尚未激活的业务步骤。所有步骤完成后调用test_finish生成报告，并在本轮正常最终回复中列出结果、关键断言实际/预期、保存位置和工具返回的Markdown报告链接。不使用其他Agent，不用脚本绕过浏览器工具执行测试。
-非零数值断言格式示例（这里只演示结构，目标、选择器、规则必须按本次用户任务和真实页面填写）：{"suite_id":"check_count","name":"验证数量","cases":[{"case_id":"one","name":"读取并比较","datasets":[{"data_id":"main","inputs":{},"expected":{"zero":0}}],"steps":[{"step_id":"read","kind":"action","description":"读取计数","required":true,"depends_on":[],"action":{"goal":"打开目标并采集计数","capability":"browser","allowed_targets":["https://example.com"],"inputs":{},"outputs":{"count":{"type":"number"}},"completion_requirements":["count"],"capture":{"count":{"kind":"dom","mode":"number","selector":"#count"}}}},{"step_id":"nonzero","kind":"assertion","description":"计数不为零","required":true,"depends_on":["read"],"assertion":{"observation_ref":"read.count","operator":"neq","expected_ref":"data.expected.zero","rule_ref":"user_task"}}]}]}。对于“不为0”严格使用neq 0，不能改成有上界的range。`;
+const guide = `当前对话已启用测试增强，仍由本会话正常推理、工具调用、审批、追问和回复完成任务，不创建其他会话或后台任务。
+规划阶段只根据用户描述分析目标、业务步骤、输入和预期。禁止访问网站、运行命令、调用API或提前验证用例；不能通过预跑寻找选择器。只可使用test_submit_plan、test_current、todo_write和ask_user_question。已给目标、输入和预期时直接形成计划；缺少必要信息时在本会话追问。
+test_submit_plan只提交suite_id、name、cases，固定版本和user_task规则来源由插件补齐。case.preconditions、cleanup可省略，浏览器初始化和关闭自动添加。计划固定业务目标、输出语义和断言，不固定未知的DOM结构。自然语言业务action省略capture，运行时再绑定，绝不猜选择器。action包含goal、capability(browser/api)、allowed_targets(用户授权网址)、inputs、outputs和completion_requirements。outputs为“输出名→JSON Schema”对象，每个输出用description明确观察对象，例如likes:{type:"number",description:"打开的第一条搜索结果帖子的首帖点赞数"}。completion_requirements列出必要输出名。断言引用的输出必须声明且列入必要输出。
+断言observation_ref格式step_id.output_name，operator为eq/neq/contains/range/exists/text/visible；literal、expected_ref、expected_observation_ref三选一。预期只能来自用户/授权规则，rule_ref=user_task。数字预期放入datasets.expected并用expected_ref，例如data.expected.zero。用户要求“不为0”必须neq数字0，不能改成range或字符串。不把运行观察直接写为预期。身份关系应单独断言：搜索词等于用户词；打开后的pathname等于搜索步骤采集的第一条first_href，用expected_observation_ref关联，不能硬编码探索得到的帖子URL。
+执行阶段：计划提交成功后按test_current执行当前业务目标。此时才使用正常Playwright工具查看页面、点击、输入、等待和检查DOM，可根据实际状态调整定位、操作组合和重试，无需重跑整条用例；只完成当前步骤，不提前执行后续步骤。browser_evaluate可用于实际页面结构检查，断言实际值仍只接受test_capture可信采集。JSON文件计划已提交时直接按test_current继续，不能重复提交计划或预跑。
+运行时采集：完成当前动作后，按页面/接口实际情况调用test_capture({capture:{输出名:采集定义},reason:"依据当前页面选择或修正定位的原因"})。它不接受actual或任意执行代码。dom mode支持text/number/count/visible/url/attribute/value；selector为真实CSS，可用index定位集合。页面路径用{kind:"dom",mode:"url",field:"pathname"}；元素href用{kind:"dom",mode:"attribute",attribute:"href",selector:"实际选择器",index:0,field:"pathname"}；数字用mode:number；文本框用mode:value；http仅用于返回JSON的接口。必要输出都要采集。采集定义可根据实际页面修正，保留每次原因和调用记录；已有成功观察不可覆盖，只补采尚缺的输出。不能改变输出含义、输出类型、目标范围或断言预期。静态JSON的capture和自动清理已有采集定义，直接test_capture({})即可。
+采集成功后调用test_finish_step；程序计算断言，模型不能填写实际值或口头改判。定位失败可修正重试；确实无法完成时test_fail_step说明原因。用户停止后不再执行业务，只按同会话收尾指导执行预授权清理。全部完成调用test_finish，并在原生最终回复写明逐步结果、断言实际/预期、保存位置和工具返回的报告链接。BLOCKED、SKIPPED或缺证据不能写成通过。`;
+
 function notice(text: string) {
   return createUserMessage({
     source: { kind: "plugin:test", form: "notice", summary: "测试增强上下文" },
@@ -276,7 +282,6 @@ export class NativeTest {
   private pendingTools = new Set<string>();
   private disposers: (() => void)[] = [];
   private timer?: ReturnType<typeof setTimeout>;
-  private planningBrowser = false;
   private stoppingTimer?: ReturnType<typeof setTimeout>;
   private task: string;
   constructor(
@@ -368,29 +373,86 @@ export class NativeTest {
     );
     tool(
       "test_capture",
-      "执行当前步骤的可信采集器，不接受模型提供实际值。",
-      empty,
-      async (_, exec) => {
+      "执行可信采集。运行时绑定传capture与reason，只能补采尚缺输出；固定计划和清理传空对象。",
+      {
+        type: "object",
+        properties: {
+          capture: captureSchema,
+          reason: { type: "string", minLength: 1 },
+        },
+        additionalProperties: false,
+      },
+      async (args, exec) => {
         const c = this.current;
         if (!c?.step.action) throw new Error("没有当前采集步骤");
-        if (c.result.observations.length)
+        this.requireSettled(exec);
+        const action = c.step.action;
+        let captures = action.capture ?? {};
+        if (action.capture_mode === "runtime") {
+          if (
+            !args.capture ||
+            !Object.keys(args.capture).length ||
+            !args.reason?.trim()
+          )
+            throw new Error(
+              "请根据当前页面提供capture及reason；不要提交实际值",
+            );
+          validateCaptures(action, args.capture);
+          for (const name of Object.keys(args.capture))
+            if (c.result.observations.some((o) => o.output_name === name))
+              throw new Error(
+                "已有可信观察不能覆盖: " + name + "；只补采缺少的输出",
+              );
+          captures = structuredClone(args.capture);
+        } else if (args.capture) {
+          throw new Error("该步骤使用固定采集定义，请传空对象");
+        }
+        if (
+          !Object.keys(captures).some(
+            (name) =>
+              !c.result.observations.some((o) => o.output_name === name),
+          )
+        )
           throw new Error("本步骤已有观察，不能覆盖");
-        await captureStep(
-          this,
-          this.recorder,
-          this.run,
-          c.step,
-          c.result,
-          c.binding,
-          exec,
-        );
+        const attempt: NonNullable<StepResult["capture_attempts"]>[number] = {
+          capture: captures as Record<string, Capture>,
+          reason: args.reason ?? "使用计划中的固定采集定义",
+          started_at: new Date().toISOString(),
+        };
+        (c.result.capture_attempts ??= []).push(attempt);
+        this.recorder.event("capture_configured", attempt, c.binding);
         this.save();
+        try {
+          await captureStep(
+            this,
+            this.recorder,
+            this.run,
+            { ...c.step, action: { ...action, capture: captures } },
+            c.result,
+            c.binding,
+            exec,
+          );
+        } catch (error) {
+          attempt.error = String(error);
+          this.recorder.event(
+            "capture_failed",
+            { error: attempt.error },
+            c.binding,
+          );
+          throw error;
+        } finally {
+          this.save();
+        }
         return {
           observations: c.result.observations.map((o) => ({
             name: o.output_name,
             value: o.value,
           })),
-          next: "调用test_finish_step结算当前步骤",
+          missing: action.completion_requirements.filter(
+            (name) =>
+              !c.result.observations.some((o) => o.output_name === name),
+          ),
+          next: "如有缺少输出，按实际页面修正后只补采缺少输出；完整后test_finish_step",
         };
       },
     );
@@ -560,8 +622,6 @@ export class NativeTest {
     own(
       scope.on("tools/pre-execute", async (exec, next) => {
         if (exec.agent?.id !== this.id) return next();
-        if (!this.planned && exec.name.startsWith("mcp__playwright__"))
-          this.planningBrowser = true;
         this.pendingTools.add(exec.callId);
         this.bind(exec.callId, exec.name, exec.arguments);
         const decision = await next();
@@ -611,11 +671,15 @@ export class NativeTest {
         )
           return "测试增强按步骤串行；请等待在途工具结算后重试";
         if (
-          this.planned &&
-          exec.name === "mcp__playwright__browser_evaluate" &&
-          !exec.parent
+          !this.planned &&
+          ![
+            "test_submit_plan",
+            "test_current",
+            "todo_write",
+            "ask_user_question",
+          ].includes(exec.name)
         )
-          return "冻结后的DOM求值通过test_capture执行";
+          return "规划阶段禁止执行：请仅根据用户描述提交业务计划，运行后再识别页面并调整操作";
         if (this.planned && typeof (exec.arguments as any)?.url === "string") {
           const url = (exec.arguments as any).url;
           if (
@@ -676,6 +740,9 @@ export class NativeTest {
         c.preconditions ??= [];
         c.cleanup ??= [];
         c.datasets ??= [{ data_id: "default", inputs: {}, expected: {} }];
+        for (const step of [...c.preconditions, ...c.steps])
+          if (step.action && !step.action.capture)
+            step.action.capture_mode = "runtime";
       }
       value.source_refs = [
         {
@@ -1006,31 +1073,24 @@ export class NativeTest {
         );
       this.cancelled = true;
       for (const i of this.run.instances) i.cancelled = aborted;
-      if (!this.planned && this.planningBrowser) {
-        const plan = {
+      if (!this.planned) {
+        // 规划没有触碰外部环境，只记录未完成的规划实例，不派发清理工具。
+        const instance = expand({
           ...this.run.plan,
           cases: [
             {
               case_id: "planning",
-              name: "规划阶段停止",
-              datasets: [{ data_id: "default", inputs: {}, expected: {} }],
+              name: "规划未完成",
               preconditions: [],
               steps: [],
               cleanup: [],
+              datasets: [{ data_id: "default", inputs: {}, expected: {} }],
             },
           ],
-        };
-        this.run.instances = expand(plan);
-        const instance = this.run.instances[0];
-        instance.session_id = instance.cleanup_session_id = this.id;
-        instance.cancelled = true;
-        instance.resources.browser_context = { id: this.id, state: "exists" };
-        this.entries.push({
-          instance,
-          step: closeStep("__close", "释放规划阶段浏览器"),
-          phase: "cleanup",
-        });
-        this.planned = true;
+        })[0]!;
+        instance.session_id = this.id;
+        instance.cancelled = aborted;
+        this.run.instances.push(instance);
       }
       this.cleanupTurn = true;
       this.nudges = 0;

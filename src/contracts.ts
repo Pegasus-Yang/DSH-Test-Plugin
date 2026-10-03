@@ -61,6 +61,7 @@ export interface ActionSpec {
   outputs: Record<string, Record<string, unknown>>;
   completion_requirements: string[];
   capture?: Record<string, Capture>;
+  capture_mode?: "runtime";
   approval?: boolean;
 }
 export interface AssertionSpec {
@@ -164,6 +165,12 @@ export interface StepResult {
   observations: Observation[];
   assertion?: AssertionResult;
   cleanup_applicable?: boolean;
+  capture_attempts?: {
+    capture: Record<string, Capture>;
+    reason: string;
+    started_at: string;
+    error?: string;
+  }[];
 }
 export interface CaseRun {
   case_run_id: string;
@@ -256,6 +263,7 @@ const stepSchema = {
           items: id,
           uniqueItems: true,
         },
+        capture_mode: { enum: ["runtime"] },
         capture: {
           type: "object",
           additionalProperties: {
@@ -376,6 +384,48 @@ export const planSchema = {
     },
   },
 };
+export const captureSchema = stepSchema.properties.action.properties.capture;
+const checkCaptures = ajv.compile(captureSchema);
+/** 运行时只绑定采集方法；输出语义、类型、目标范围和断言预期仍来自冻结计划。 */
+export function validateCaptures(
+  action: ActionSpec,
+  captures: Record<string, Capture>,
+): void {
+  if (!checkCaptures(captures))
+    throw new Error(ajv.errorsText(checkCaptures.errors));
+  for (const [name, cap] of Object.entries(captures)) {
+    if (!Object.hasOwn(action.outputs, name))
+      throw new Error("采集输出未声明: " + name);
+    if (cap.kind === "dom" && action.capability !== "browser")
+      throw new Error("DOM采集需要浏览器步骤");
+    if (cap.kind === "http" && action.capability !== "api")
+      throw new Error("HTTP采集需要API步骤");
+    if (cap.kind === "browser_close" && action.capture_mode === "runtime")
+      throw new Error("运行时采集不能新增浏览器清理");
+    if (cap.kind === "dom" && !cap.mode) throw new Error("DOM采集必须声明mode");
+    if (cap.kind === "dom" && cap.mode !== "url" && !cap.selector)
+      throw new Error("DOM采集缺少selector");
+    if (
+      cap.kind === "dom" &&
+      cap.mode === "url" &&
+      (cap.selector || cap.attribute || cap.index !== undefined)
+    )
+      throw new Error(
+        "DOM url模式只读取当前页面地址，不能指定selector、attribute或index；读取链接请用mode=attribute、attribute=href和真实selector",
+      );
+    if (cap.kind === "dom" && cap.mode === "attribute" && !cap.attribute)
+      throw new Error("DOM attribute模式必须声明attribute，例如href");
+    if (cap.kind === "http") {
+      if (!cap.url) throw new Error("API采集缺少URL");
+      if (
+        !action.allowed_targets.some(
+          (t) => new URL(t).origin === new URL(cap.url!).origin,
+        )
+      )
+        throw new Error("采集目标不在当前步骤范围内");
+    }
+  }
+}
 const validate = ajv.compile<TestSuite>(planSchema);
 /** 读取自有JSON字段；不存在返回undefined，不作类型转换。 */
 export function field(value: unknown, path: string): unknown {
@@ -432,26 +482,12 @@ export function parsePlan(input: unknown): TestSuite {
         for (const name of a.completion_requirements)
           if (!Object.hasOwn(a.outputs, name))
             throw new Error("必要输出未声明: " + name);
-          else if (!Object.hasOwn(a.capture ?? {}, name))
-            throw new Error("必要输出缺少可信采集定义: " + name);
-        for (const [name, cap] of Object.entries(a.capture ?? {})) {
-          if (!Object.hasOwn(a.outputs, name))
-            throw new Error("采集输出未声明");
-          if (cap.kind === "dom" && cap.mode !== "url" && !cap.selector)
-            throw new Error("DOM采集缺少selector");
-          if (
-            cap.kind === "dom" &&
-            cap.mode === "url" &&
-            (cap.selector || cap.attribute || cap.index !== undefined)
+          else if (
+            a.capture_mode !== "runtime" &&
+            !Object.hasOwn(a.capture ?? {}, name)
           )
-            throw new Error(
-              "DOM url模式只读取当前页面地址，不能指定selector、attribute或index；读取链接请用mode=attribute、attribute=href和真实selector",
-            );
-          if (cap.kind === "dom" && cap.mode === "attribute" && !cap.attribute)
-            throw new Error("DOM attribute模式必须声明attribute，例如href");
-          if (cap.kind === "http" && !cap.url)
-            throw new Error("API采集缺少URL");
-        }
+            throw new Error("必要输出缺少可信采集定义: " + name);
+        validateCaptures(a, a.capture ?? {});
         for (const value of Object.values(a.inputs)) {
           if (
             value &&
@@ -493,10 +529,15 @@ export function parsePlan(input: unknown): TestSuite {
             (s.required && !p.required)
           )
             throw new Error("观察不存在或来自可选步骤: " + ref);
-          if (!Object.hasOwn(p.action.capture ?? {}, output!))
+          if (
+            p.action.capture_mode !== "runtime" &&
+            !Object.hasOwn(p.action.capture ?? {}, output!)
+          )
             throw new Error("断言引用的输出缺少可信采集定义: " + ref);
           if (s.required && !p.action.completion_requirements.includes(output!))
-            throw new Error("必需断言引用的输出必须列入completion_requirements: " + ref);
+            throw new Error(
+              "必需断言引用的输出必须列入completion_requirements: " + ref,
+            );
         }
         if (a.expected_ref) {
           if (!a.expected_ref.startsWith("data.expected."))
