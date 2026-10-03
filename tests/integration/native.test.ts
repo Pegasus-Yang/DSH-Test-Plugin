@@ -108,8 +108,9 @@ function setup(value = 3) {
   };
   const planMode = { get: vi.fn(() => ({ active: false })), set: vi.fn() };
   agent.ctx = {
-    get: (name: string) => (name === "planMode" ? planMode : undefined),
-    planMode,
+    sessionProjections: {
+      stateOf: () => ({ active: false, wanted: null, running: null }),
+    },
     on,
     systemPrompt: {
       section: (s: unknown) => {
@@ -131,6 +132,13 @@ function setup(value = 3) {
   };
   const effects = new Set<Function>();
   const ctx: any = {
+    commands: {
+      find: () => ({}),
+      execute: async (agent: any, line: string) => {
+        planMode.set(agent, line !== "/plan off");
+        return { result: { kind: "success" } };
+      },
+    },
     effect: (fn: Function) => {
       const dispose = fn();
       effects.add(dispose);
@@ -712,6 +720,13 @@ it.each([
       );
     try {
       await t.manager.start(t.agent, "接口回显验证", plan);
+      expect(
+        (
+          await t.call("test_api_get", {
+            url: "https://httpbin.org/get?keyword=agent&client=dsh",
+          })
+        ).isError,
+      ).toBe(true);
       await t.step();
       expect((await t.call("test_finish")).value.statistics[status]).toBe(1);
       const run = t.manager.sessions.get("origin")!;
@@ -753,3 +768,22 @@ it.each([
     }
   },
 );
+
+it("计划只输出文字时提醒原生提交，审核拒绝后不催促用户或自动执行", async () => {
+  const t = setup();
+  await t.manager.start(t.agent, "点赞不为0", undefined, true);
+  await t.emit("agent/turn-stopping", { agent: t.agent });
+  expect(t.agent.steer).toHaveBeenCalledOnce();
+  await t.call("test_submit_plan", reviewPlan());
+  const run = t.manager.sessions.get("origin")!;
+  t.definitions.set("exit_plan_mode", {
+    execute: () => {
+      throw new Error("要求修改");
+    },
+  });
+  await t.call("exit_plan_mode", { plan: run.state().review_markdown });
+  t.agent.steer.mockClear();
+  await t.emit("agent/turn-stopping", { agent: t.agent });
+  expect(t.agent.steer).not.toHaveBeenCalled();
+  expect(run.run.instances).toEqual([]);
+});

@@ -46,7 +46,8 @@
     "@deepseek-ai/dsh-tools": "0.2.1-alpha.1",
     "@deepseek-ai/schemastery": "*",
     "@deepseek-ai/dsh-system-prompt": "0.2.1-alpha.1",
-    "@deepseek-ai/dsh-plan-mode": "0.2.1-alpha.1"
+    "@deepseek-ai/dsh-plan-mode": "0.2.1-alpha.1",
+    "@deepseek-ai/dsh-session-projection": "0.2.1-alpha.1"
   },
   "devDependencies": {
     "@playwright/mcp": "0.0.68",
@@ -80,6 +81,9 @@
       "optional": true
     },
     "@deepseek-ai/dsh-plan-mode": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-session-projection": {
       "optional": true
     }
   }

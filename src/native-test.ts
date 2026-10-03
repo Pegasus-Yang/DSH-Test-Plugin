@@ -8,7 +8,8 @@ import type {
   ToolRunContext,
 } from "@deepseek-ai/dsh-tools";
 import type {} from "@deepseek-ai/dsh-system-prompt";
-import type {} from "@deepseek-ai/dsh-plan-mode";
+import type {} from "@deepseek-ai/dsh-plan-mode/types";
+import type {} from "@deepseek-ai/dsh-session-projection";
 import { randomUUID } from "node:crypto";
 import {
   existsSync,
@@ -94,7 +95,7 @@ const guide = `当前对话已启用测试增强，仍由本会话正常推理�
 test_submit_plan只提交suite_id、name、cases，固定版本和user_task规则来源由插件补齐。case.preconditions、cleanup可省略，浏览器初始化和关闭自动添加。计划固定业务目标、输出语义和断言，不固定未知的DOM结构。自然语言业务action省略capture，运行时再绑定，绝不猜选择器。action包含goal、capability(browser/api)、allowed_targets(用户授权网址)、inputs、outputs和completion_requirements。outputs为“输出名→JSON Schema”对象，每个输出用description明确观察对象，例如likes:{type:"number",description:"打开的第一条搜索结果帖子的首帖点赞数"}。completion_requirements列出必要输出名。断言引用的输出必须声明且列入必要输出。
 断言observation_ref格式step_id.output_name，operator为eq/neq/contains/range/exists/text/visible；literal、expected_ref、expected_observation_ref三选一。预期只能来自用户/授权规则，rule_ref=user_task。数字预期放入datasets.expected并用expected_ref，例如data.expected.zero。用户要求“不为0”必须neq数字0，不能改成range或字符串。不把运行观察直接写为预期。身份关系应单独断言：搜索词等于用户词；打开后的pathname等于搜索步骤采集的第一条first_href，用expected_observation_ref关联，不能硬编码探索得到的帖子URL。
 执行阶段：计划提交成功后按test_current执行当前业务目标。此时才使用正常Playwright工具查看页面、点击、输入、等待和检查DOM，可根据实际状态调整定位、操作组合和重试，无需重跑整条用例；只完成当前步骤，不提前执行后续步骤。browser_evaluate可用于实际页面结构检查，断言实际值仍只接受test_capture可信采集。JSON文件计划已提交时直接按test_current继续，不能重复提交计划或预跑。
-运行时采集：完成当前动作后，按页面/接口实际情况调用test_capture({capture:{输出名:采集定义},reason:"依据当前页面选择或修正定位的原因"})。它不接受actual或任意执行代码。dom mode支持text/number/count/visible/url/attribute/value；selector为真实CSS，可用index定位集合。页面路径用{kind:"dom",mode:"url",field:"pathname"}；元素href用{kind:"dom",mode:"attribute",attribute:"href",selector:"实际选择器",index:0,field:"pathname"}；数字用mode:number；文本框用mode:value；http仅用于返回JSON的接口。必要输出都要采集。采集定义可根据实际页面修正，保留每次原因和调用记录；已有成功观察不可覆盖，只补采尚缺的输出。不能改变输出含义、输出类型、目标范围或断言预期。静态JSON的capture和自动清理已有采集定义，直接test_capture({})即可。
+运行时采集：完成当前动作后，按页面/接口实际情况调用test_capture({capture:{输出名:采集定义},reason:"依据当前页面选择或修正定位的原因"})。它不接受actual或任意执行代码。dom mode支持text/number/count/visible/url/attribute/value；selector为真实CSS，可用index定位集合。页面路径用{kind:"dom",mode:"url",field:"pathname"}；元素href用{kind:"dom",mode:"attribute",attribute:"href",selector:"实际选择器",index:0,field:"pathname"}；数字用mode:number；文本框用mode:value；http仅用于返回JSON的GET接口。HTTP采集本身会发送请求，直接调用test_capture，无需先用test_api_get预发一次。完整响应为{status:number,body:JSON}，不含headers；可声明单一object输出，用{kind:"http",url:"授权URL",field:""}一次采集，再通过step_id.output_name.status及step_id.output_name.body的嵌套路径断言。必要输出都要采集。采集定义可根据实际页面修正，保留每次原因和调用记录；已有成功观察不可覆盖，只补采尚缺的输出。不能改变输出含义、输出类型、目标范围或断言预期。静态JSON的capture和自动清理已有采集定义，直接test_capture({})即可。
 采集成功后调用test_finish_step；程序计算断言，模型不能填写实际值或口头改判。定位失败可修正重试；确实无法完成时test_fail_step说明原因。用户停止后不再执行业务，只按同会话收尾指导执行预授权清理。全部完成调用test_finish，并在原生最终回复写明逐步结果、断言实际/预期、保存位置和工具返回的报告链接。BLOCKED、SKIPPED或缺证据不能写成通过。`;
 
 function notice(text: string) {
@@ -201,13 +202,14 @@ export class NativeTests {
       );
     if ([...this.sessions.values()].some((s) => !s.closed))
       throw new Error("已有测试使用共享浏览器，请先结束或停止该测试");
-    if (review && !agent.ctx.get("planMode"))
+    if (review && !this.ctx.commands.find(agent, "plan"))
       throw new Error(
         "/test-plan 需要宿主启用原生 dsh-plan-mode 和用户审核通道",
       );
     const test = new NativeTest(this, agent, task, review);
     this.sessions.set(agent.id, test);
     try {
+      if (review) await test.enterPlanMode();
       test.attach();
       if (plan !== undefined) test.submit(plan, true);
       return await test.start(task);
@@ -296,6 +298,7 @@ export class NativeTest {
   private task: string;
   private draft?: SuiteRun["plan"];
   private reviewCall?: string;
+  private reviewDismissed = false;
   private previousPlanMode?: boolean;
   constructor(
     private owner: NativeTests,
@@ -340,13 +343,27 @@ export class NativeTest {
   get id(): string {
     return this.agent.id;
   }
+  async enterPlanMode(): Promise<void> {
+    // Web预设将planMode放在隔离组中；通过官方命令解析当前Agent的有效服务。
+    const state = this.agent.ctx.sessionProjections.stateOf(
+      this.agent.session,
+      "plan",
+    );
+    this.previousPlanMode =
+      state?.running?.wanted ?? state?.wanted ?? state?.active ?? false;
+    await this.setPlanMode(true);
+  }
+  private async setPlanMode(active: boolean): Promise<void> {
+    const executed = await this.owner.ctx.commands.execute(
+      this.agent,
+      active ? "/plan" : "/plan off",
+      [],
+      new AbortController().signal,
+    );
+    if (executed?.result.kind !== "success")
+      throw new Error(executed?.result.text ?? "宿主未提供原生/plan命令");
+  }
   attach(): void {
-    if (this.review) {
-      const mode = this.agent.ctx.planMode;
-      const state = mode.get(this.agent);
-      this.previousPlanMode = state.pending ?? state.active;
-      mode.set(this.agent, true);
-    }
     const scope = this.agent.ctx;
     const own = (dispose: () => void) => {
       this.disposers.push(dispose);
@@ -531,7 +548,7 @@ export class NativeTest {
     );
     tool(
       "test_api_get",
-      "通过原生工具管线读取当前冻结计划允许的HTTP JSON接口。",
+      "内部HTTP GET采集工具，仅供test_capture子调用；模型直接使用test_capture发送请求并保存可信响应。",
       {
         type: "object",
         required: ["url"],
@@ -683,6 +700,7 @@ export class NativeTest {
         this.settle(exec.callId, result);
         if (exec.callId === this.reviewCall) {
           this.reviewCall = undefined;
+          this.reviewDismissed = result.isError;
           if (
             !result.isError &&
             (result.value as { approved?: boolean })?.approved === true &&
@@ -728,9 +746,9 @@ export class NativeTest {
             (exec.arguments as { plan?: string }).plan !== this.reviewMarkdown()
           )
             return "审核内容必须与草案一致；请将test_current返回的review_markdown原样传给exit_plan_mode";
-          // 用户可能用/plan off离开；再次审核必须走原生模式，不能借此绕过批准。
-          this.agent.ctx.planMode.set(this.agent, true);
         }
+        if (this.planned && exec.name === "test_api_get" && !exec.parent)
+          return "HTTP请求由test_capture发送并记录，请勿预先直接请求；用一个response对象观察供多个断言引用";
         if (this.planned && typeof (exec.arguments as any)?.url === "string") {
           const url = (exec.arguments as any).url;
           if (
@@ -748,11 +766,19 @@ export class NativeTest {
         if (
           agent.id !== this.id ||
           this.closed ||
-          !this.planned ||
           this.reportReady ||
           (this.cancelled && !this.cleanupTurn)
         )
           return;
+        if (!this.planned) {
+          if (this.review && !this.reviewDismissed && this.nudges++ < 2)
+            agent.steer(
+              notice(
+                "本次/test-plan必须通过原生审核卡片确认。请先test_submit_plan保存草案，再将review_markdown原样交给exit_plan_mode；不要只输出文字计划或等待口头同意。这些工具只记录计划和审核，不执行业务。缺少必要信息时正常追问。",
+              ),
+            );
+          return;
+        }
         if (this.nudges++ < 2)
           agent.steer(
             notice(
@@ -812,6 +838,7 @@ export class NativeTest {
     if (this.timer) clearTimeout(this.timer);
     if (this.review) {
       this.draft = plan;
+      this.reviewDismissed = false;
       this.recorder.event("plan_drafted", { plan });
       this.recorder.json("plan-draft.json", plan);
       this.save();
@@ -1322,7 +1349,9 @@ export class NativeTest {
     if (this.stoppingTimer) clearTimeout(this.stoppingTimer);
     for (const dispose of this.disposers.splice(0).reverse()) dispose();
     if (this.previousPlanMode !== undefined && !this.planned)
-      this.agent.ctx.planMode.set(this.agent, this.previousPlanMode);
+      void this.setPlanMode(this.previousPlanMode).catch((error) =>
+        this.owner.ctx.logger.warn("恢复计划模式失败: %s", String(error)),
+      );
   }
   async shutdown(): Promise<void> {
     if (this.closed) return;
