@@ -7,7 +7,14 @@
   "author": "Pegasus-Yang <panesas2@gmail.com>",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "files": ["dist", "skills", "templates", "README.md", "doc/user-guide", "doc/deployment"],
+  "files": [
+    "dist",
+    "skills",
+    "templates",
+    "README.md",
+    "doc/user-guide",
+    "doc/deployment"
+  ],
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
@@ -17,16 +24,30 @@
     "link:host": "node scripts/link-host.mjs",
     "start:host": "node scripts/start-host.mjs"
   },
-  "engines": {"node": ">=22.19.0"},
+  "engines": {
+    "node": ">=22.19.0"
+  },
   "packageManager": "pnpm@11.7.0",
-  "dependencies": {"ajv": "8.17.1"},
+  "dependencies": {
+    "ajv": "8.17.1"
+  },
   "peerDependencies": {
     "@deepseek-ai/cordis": "*",
-    "@deepseek-ai/schemastery": "*",
     "@deepseek-ai/dsh-agent": "0.2.1-alpha.1",
+    "@deepseek-ai/dsh-agent-default-model": "0.2.1-alpha.1",
+    "@deepseek-ai/dsh-commands": "0.2.1-alpha.1",
+    "@deepseek-ai/dsh-llm": "0.2.1-alpha.1",
     "@deepseek-ai/dsh-session": "0.2.1-alpha.1",
     "@deepseek-ai/dsh-tools": "0.2.1-alpha.1",
-    "@deepseek-ai/dsh-commands": "0.2.1-alpha.1"
+    "@deepseek-ai/schemastery": "*"
   },
-  "devDependencies": {"@types/node": "22.19.0", "typescript": "5.9.3", "vitest": "3.2.4", "@playwright/mcp": "0.0.68", "playwright": "1.58.2", "yaml": "2.8.1"}
+  "devDependencies": {
+    "@playwright/mcp": "0.0.68",
+    "@types/node": "22.19.0",
+    "playwright": "1.58.2",
+    "prettier": "3.6.2",
+    "typescript": "5.9.3",
+    "vitest": "3.2.4",
+    "yaml": "2.8.1"
+  }
 }
