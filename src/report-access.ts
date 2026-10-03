@@ -102,6 +102,21 @@ export class ReportAccess {
         );
         return;
       }
+      if (/^\/test-reports\/conversation\/[\w-]+\.json$/.test(pathname)) {
+        const target = realpathSync(
+          join(this.outputRoot, "conversation", pathname.split("/").at(-1)!),
+        );
+        const rel = relative(realpathSync(this.outputRoot), target);
+        if (
+          rel === ".." ||
+          rel.startsWith(".." + sep) ||
+          !statSync(target).isFile()
+        )
+          throw new Error("路径逃逸");
+        res.setHeader("Content-Type", "application/json; charset=utf-8");
+        res.end(req.method === "HEAD" ? undefined : readFileSync(target));
+        return;
+      }
       const suffix = pathname.slice(reportPrefix.length + 1);
       if (
         !pathname.startsWith(reportPrefix + "/") ||

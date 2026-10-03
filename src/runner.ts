@@ -24,7 +24,12 @@ import {
   type TestSuite,
 } from "./contracts.js";
 import { evaluate } from "./assertions.js";
-import { Recorder, atomicJson, rebuild } from "./recorder.js";
+import {
+  Recorder,
+  atomicJson,
+  rebuild,
+  type RecordedEvent,
+} from "./recorder.js";
 import { HarnessSession, type ActiveStep, type HostOptions } from "./host.js";
 import { captureStep } from "./adapters.js";
 import { writeReport } from "./report.js";
@@ -223,7 +228,11 @@ export class TestRunner {
     );
     unlinkSync(join(this.config.outputRoot, "quarantine.json"));
   }
-  start(input: unknown, previousRunId?: string): SuiteRun {
+  start(
+    input: unknown,
+    previousRunId?: string,
+    onEvent?: (event: RecordedEvent) => void,
+  ): SuiteRun {
     if (this.active) throw new Error("已有活动批次");
     if (this.quarantined)
       throw new Error("环境已隔离，先核实外部停止并重置环境");
@@ -234,7 +243,7 @@ export class TestRunner {
       new Date().toISOString().replace(/[:.]/g, "-") +
       "-" +
       randomUUID().slice(0, 8);
-    this.recorder = new Recorder(this.config.outputRoot, id);
+    this.recorder = new Recorder(this.config.outputRoot, id, onEvent);
     this.recorder.protect(plan);
     this.run = {
       schema_version: "1",

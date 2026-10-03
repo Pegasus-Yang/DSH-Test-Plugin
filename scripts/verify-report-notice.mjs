@@ -48,20 +48,22 @@ try {
     agentId,
   );
   await page.reload();
-  const command = await rpc("commands/execute", {
+  const pendingCommand = rpc("commands/execute", {
     agentId,
     line: "/test-run examples/ceshiren-agent.json",
     submittedAttachments: [],
   });
-  assert.equal(command.result.value.result.kind, "success");
-  const runId = command.result.value.result.text.match(/run-[\w-]+/)[0];
-  await notice.locator(".id").filter({ hasText: runId }).waitFor();
   await notice.getByRole("status").filter({ hasText: "测试运行中" }).waitFor();
+  const runId = (await notice.locator(".id").textContent()).match(
+    /run-[\w-]+/,
+  )[0];
   await notice.screenshot({ path: output + "/running.png" });
   await notice
     .getByRole("status")
     .filter({ hasText: "报告已生成" })
     .waitFor({ timeout: 240000 });
+  const command = await pendingCommand;
+  assert.equal(command.result.value.result.kind, "success");
   assert.match(await notice.locator(".path").textContent(), /report\.html/);
   await notice.screenshot({ path: output + "/completed.png" });
   await page.screenshot({ path: output + "/web-completed.png" });

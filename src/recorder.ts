@@ -20,6 +20,11 @@ import {
   type Json,
   type SuiteRun,
 } from "./contracts.js";
+export interface RecordedEvent {
+  type: string;
+  binding: Binding | { suite_run_id: string };
+  payload: Json;
+}
 export function redact(value: unknown): Json {
   if (value === undefined) return null;
   if (value === null || typeof value === "boolean" || typeof value === "number")
@@ -121,6 +126,7 @@ export class Recorder {
   constructor(
     root: string,
     readonly runId: string,
+    private readonly onEvent?: (event: RecordedEvent) => void,
   ) {
     mkdirSync(root, { recursive: true });
     this.directory = join(realpathSync(root), runId);
@@ -149,6 +155,15 @@ export class Recorder {
       }
       this.seq++;
       if (key) this.seen.add(key);
+      // 展示失败不能污染已落盘的测试事实或阻断资源清理。
+      try {
+        this.onEvent?.(event);
+      } catch (error) {
+        console.warn(
+          "测试进度展示失败：",
+          String(this.sanitize(String(error))),
+        );
+      }
     } catch (error) {
       this.failed = error instanceof Error ? error : new Error(String(error));
       throw this.failed;

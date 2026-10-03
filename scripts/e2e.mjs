@@ -15,38 +15,50 @@ await page.goto(url);
 await page.waitForTimeout(1500);
 if (await page.getByRole("button", { name: "继续", exact: true }).count())
   await page.getByRole("button", { name: "继续", exact: true }).click();
+// 命令持续到清理结束；请求独立于展示页导航，审批切换不取消运行。
 const rpc = async (method, args) =>
-  page.evaluate(
-    async ({ method, args }) => {
-      const r = await fetch("/api/" + method, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
+  (
+    await page
+      .context()
+      .request.post(new URL("/api/" + method, url).href, {
+        data: {
           type: "client-request",
           rpcId: crypto.randomUUID(),
           method,
           payload: { args },
-        }),
-      });
-      return r.json();
-    },
-    { method, args },
-  );
+        },
+        timeout: 780000,
+      })
+  ).json();
 const created = await rpc("session/create", {
     request: { cwd: process.cwd() },
   }),
   sessionId = created.result.value.sessionId;
-const command = await rpc("commands/execute", {
+const pendingCommand = rpc("commands/execute", {
   agentId: sessionId,
   line: "/test-run " + (process.argv[2] ?? "examples/ceshiren-agent.json"),
   submittedAttachments: [],
-});
-if (!command.result.ok || command.result.value.result.kind === "error")
-  throw new Error(JSON.stringify(command));
-const text = command.result.value.result.text;
-console.log(text);
-const runId = text.match(/run-[\w-]+/)[0],
-  directory = text.match(/报告：(.+)\/report.html/)[1];
+}).then(
+  (value) => ({ value }),
+  (error) => ({ error }),
+);
+let runId, directory;
+for (let n = 0; n < 30; n++) {
+  const status = await rpc("commands/execute", {
+    agentId: sessionId,
+    line: "/test-status",
+    submittedAttachments: [],
+  });
+  const state = JSON.parse(status.result.value.result.text);
+  if (state.run) {
+    runId = state.run.id;
+    directory = state.run.directory;
+    break;
+  }
+  await page.waitForTimeout(200);
+}
+if (!directory)
+  throw new Error("测试未启动：" + JSON.stringify(await pendingCommand));
 let selected, last, run;
 try {
   for (let n = 0; n < 360; n++) {
@@ -86,6 +98,13 @@ try {
     if (n === 359) throw new Error("验收等待超过12分钟");
     await page.waitForTimeout(2000);
   }
+  const settled = await pendingCommand;
+  if (
+    settled.error ||
+    !settled.value?.result.ok ||
+    settled.value.result.value.result.kind === "error"
+  )
+    throw new Error(JSON.stringify(settled));
   await mkdir("artifacts/validation/ceshiren", { recursive: true });
   await writeFile(
     "artifacts/validation/ceshiren/latest.json",

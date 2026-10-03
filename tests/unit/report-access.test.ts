@@ -89,3 +89,33 @@ it("旧批次迟到通知不能覆盖当前报告，HTML采用隔离策略", () 
     ],
   ).toContain("sandbox");
 });
+
+it("重启读取命令进度，拒绝进度路径逃逸及写请求", () => {
+  const { root } = setup();
+  mkdirSync(join(root, "conversation"));
+  writeFileSync(
+    join(root, "conversation/command-1.json"),
+    JSON.stringify({ state: "finished", runId: "run-example" }),
+  );
+  const access = new ReportAccess(root);
+  expect(
+    JSON.parse(
+      String(get(access, "/test-reports/conversation/command-1.json").body),
+    ),
+  ).toEqual({ state: "finished", runId: "run-example" });
+  expect(
+    get(access, "/test-reports/conversation/command-1.json", "POST").status,
+  ).toBe(405);
+  expect(
+    get(access, "/test-reports/conversation/%2e%2e%2fsecret.json").status,
+  ).toBe(404);
+  const outside = mkdtempSync(join(tmpdir(), "outside-progress-"));
+  writeFileSync(join(outside, "secret.json"), "secret");
+  symlinkSync(
+    join(outside, "secret.json"),
+    join(root, "conversation/escape.json"),
+  );
+  expect(get(access, "/test-reports/conversation/escape.json").status).toBe(
+    404,
+  );
+});

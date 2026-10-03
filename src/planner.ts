@@ -11,6 +11,7 @@ export async function planTask(
   workspace: string,
   timeoutMs = 120000,
   signal?: AbortSignal,
+  onSession?: (id: string) => void,
 ): Promise<TestSuite> {
   if (!task.trim()) throw new Error("请提供动作、输入和可验证预期");
   let plan: TestSuite | undefined,
@@ -157,6 +158,7 @@ export async function planTask(
   let timer: ReturnType<typeof setTimeout> | undefined;
   let aborted: () => void = () => {};
   try {
+    onSession?.(handle.agent.id);
     handle.agent.followup({
       role: "user",
       id: MessageId(randomUUID()),
