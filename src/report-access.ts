@@ -13,6 +13,7 @@ import { statistics } from "./contracts.js";
 
 export const reportPrefix = "/test-reports";
 export class ReportAccess {
+  origin?: () => string;
   private selected?: { run: SuiteRun; filename: string; settled: boolean };
   constructor(readonly outputRoot: string) {
     for (const id of readdirSync(outputRoot)
@@ -47,7 +48,8 @@ export class ReportAccess {
     return this.selected?.run.suite_run_id;
   }
   url(id: string, filename = "report.html"): string {
-    return `./test-reports/${encodeURIComponent(id)}/${filename}`;
+    const path = `/test-reports/${encodeURIComponent(id)}/${filename}`;
+    return this.origin ? new URL(path, this.origin()).href : `.${path}`;
   }
   state() {
     if (!this.selected) return null;
@@ -100,21 +102,6 @@ export class ReportAccess {
         res.end(
           req.method === "HEAD" ? undefined : JSON.stringify(this.state()),
         );
-        return;
-      }
-      if (/^\/test-reports\/conversation\/[\w-]+\.json$/.test(pathname)) {
-        const target = realpathSync(
-          join(this.outputRoot, "conversation", pathname.split("/").at(-1)!),
-        );
-        const rel = relative(realpathSync(this.outputRoot), target);
-        if (
-          rel === ".." ||
-          rel.startsWith(".." + sep) ||
-          !statSync(target).isFile()
-        )
-          throw new Error("路径逃逸");
-        res.setHeader("Content-Type", "application/json; charset=utf-8");
-        res.end(req.method === "HEAD" ? undefined : readFileSync(target));
         return;
       }
       const suffix = pathname.slice(reportPrefix.length + 1);

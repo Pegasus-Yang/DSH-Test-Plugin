@@ -7,3 +7,5 @@
 开发与实测工具包括TypeScript（Apache-2.0）、Vitest（MIT）、Prettier（MIT）、Playwright与Playwright MCP（Apache-2.0）、yaml（ISC）、@types/node（MIT）。这些工具不打包进插件dist。Chrome为用户系统已有浏览器，遵循其自身许可。
 
 精确依赖版本见pnpm-lock.yaml和package.json；发布时应一并保留依赖包自身LICENSE。这里的声明不替代上游许可证原文。
+
+插件图标 `icon.svg` 为本项目原创，与项目代码同按 MIT 许可证分发。

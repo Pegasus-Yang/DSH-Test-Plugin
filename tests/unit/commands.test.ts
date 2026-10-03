@@ -3,7 +3,8 @@ import { mkdtempSync, rmSync, writeFileSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Context } from "@deepseek-ai/cordis";
-import { apply, TestRunner } from "../../src/index.js";
+import { NativeTests } from "../../src/native-test.js";
+import { apply } from "../../src/index.js";
 
 const roots: string[] = [];
 afterEach(() => {
@@ -15,10 +16,10 @@ function setup() {
   roots.push(root);
   type Definition = Parameters<Context["commands"]["register"]>[0];
   const commands = new Map<string, Definition>();
-  let runner!: TestRunner;
+  let runner!: NativeTests;
   apply(
     {
-      provide: (_name: string, value: TestRunner) => {
+      provide: (_name: string, value: NativeTests) => {
         runner = value;
       },
       inject: () => {},
@@ -39,7 +40,7 @@ function setup() {
 
 it("向网页声明参数输入，菜单选择后等待参数，带参数提交仍属于命令", () => {
   const { commands } = setup();
-  for (const name of ["test", "test-run", "test-report", "test-release"])
+  for (const name of ["test", "test-run", "test-report"])
     expect(commands.get(name)?.input?.hint).toBeTruthy();
   for (const name of ["test-status", "test-stop"])
     expect(commands.get(name)?.input).toBeUndefined();
@@ -60,7 +61,7 @@ it.each([
       kind: "error",
       text: expect.stringContaining("/test <任务描述>"),
     });
-    expect(runner.run).toBeUndefined();
+    expect(runner.sessions.size).toBe(0);
   },
 );
 
@@ -76,5 +77,5 @@ it("保留路径边界与JSON解析错误，不把错误改为运行成功", asy
     kind: "error",
     text: expect.stringContaining("SyntaxError"),
   });
-  expect(runner.run).toBeUndefined();
+  expect(runner.sessions.size).toBe(0);
 });

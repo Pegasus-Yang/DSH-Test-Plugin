@@ -1,161 +1,108 @@
-/** 真实Harness命令驱动验收；浏览器仅操作宿主审批与报告，不代执行测试动作。 */
+/** 经普通网页输入执行验收；不写会话日志、本地存储或绕开原生对话。 */
 import { chromium } from "playwright";
-import { readFile, writeFile, mkdir } from "node:fs/promises";
-import { resolve, join } from "node:path";
-import { pathToFileURL } from "node:url";
+import { readFile, readdir, writeFile, mkdir } from "node:fs/promises";
+import { join, resolve } from "node:path";
+import assert from "node:assert/strict";
 const { url } = JSON.parse(
   await readFile(
     process.env.DSH_TEST_STATE ?? ".local/host-state.json",
     "utf8",
   ),
 );
+const root = resolve(process.env.DSH_TEST_OUTPUT ?? "artifacts/runs");
+const previous = new Set(await readdir(root));
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage({ viewport: { width: 1440, height: 1050 } });
-await page.goto(url);
-await page.waitForTimeout(1500);
-if (await page.getByRole("button", { name: "继续", exact: true }).count())
-  await page.getByRole("button", { name: "继续", exact: true }).click();
-// 命令持续到清理结束；请求独立于展示页导航，审批切换不取消运行。
-const rpc = async (method, args) =>
-  (
-    await page
-      .context()
-      .request.post(new URL("/api/" + method, url).href, {
-        data: {
-          type: "client-request",
-          rpcId: crypto.randomUUID(),
-          method,
-          payload: { args },
-        },
-        timeout: 780000,
-      })
-  ).json();
-const created = await rpc("session/create", {
-    request: { cwd: process.cwd() },
-  }),
-  sessionId = created.result.value.sessionId;
-const pendingCommand = rpc("commands/execute", {
-  agentId: sessionId,
-  line: "/test-run " + (process.argv[2] ?? "examples/ceshiren-agent.json"),
-  submittedAttachments: [],
-}).then(
-  (value) => ({ value }),
-  (error) => ({ error }),
-);
-let runId, directory;
-for (let n = 0; n < 30; n++) {
-  const status = await rpc("commands/execute", {
-    agentId: sessionId,
-    line: "/test-status",
-    submittedAttachments: [],
-  });
-  const state = JSON.parse(status.result.value.result.text);
-  if (state.run) {
-    runId = state.run.id;
-    directory = state.run.directory;
-    break;
-  }
-  await page.waitForTimeout(200);
-}
-if (!directory)
-  throw new Error("测试未启动：" + JSON.stringify(await pendingCommand));
-let selected, last, run;
 try {
+  await page.goto(url);
+  // 登录重定向后的新请求携带宿主Cookie。
+  await page.goto(new URL("/", url).href);
+  await page
+    .getByRole("button", { name: "新建会话", exact: true })
+    .first()
+    .click();
+  const composer = page.locator('[contenteditable="true"]').first();
+  await composer.fill(
+    "/test-run " + (process.argv[2] ?? "examples/ceshiren-agent.json"),
+  );
+  await composer.press("Enter");
+  let directory, run;
   for (let n = 0; n < 360; n++) {
-    run = JSON.parse(await readFile(join(directory, "results.json"), "utf8"));
-    const active = run.instances.find((i) => i.lifecycle === "RUNNING");
-    const desired = active?.cleanup_session_id ?? active?.session_id;
-    if (desired && desired !== selected) {
-      selected = desired;
-      await page.evaluate(
-        (id) =>
-          localStorage.setItem(
-            "dsh.sessions.current",
-            JSON.stringify({ sessionId: id }),
-          ),
-        selected,
-      );
-      await page.reload();
-    }
     const allow = page.getByRole("button", { name: "允许一次", exact: true });
-    if (await allow.count()) {
-      console.log("批准当前用例的原生审批");
-      await allow.click();
+    if (await allow.count()) await allow.click();
+    for (const id of (await readdir(root)).filter(
+      (id) => id.startsWith("run-") && !previous.has(id),
+    )) {
+      try {
+        const candidate = JSON.parse(
+          await readFile(join(root, id, "results.json"), "utf8"),
+        );
+        if (candidate.manifest.execution === "native-conversation") {
+          directory = join(root, id);
+          run = candidate;
+        }
+      } catch {
+        /* 等待原子快照。 */
+      }
     }
-    const progress = run.instances
-      .map(
-        (i) =>
-          i.status +
-          ":" +
-          i.steps.map((s) => s.step_id + "=" + s.status).join(","),
-      )
-      .join(";");
-    if (progress !== last) {
-      console.log(progress);
-      last = progress;
-    }
-    if (run.lifecycle === "FINISHED") break;
-    if (n === 359) throw new Error("验收等待超过12分钟");
+    if (run?.lifecycle === "FINISHED") break;
+    if (n === 359) throw new Error("原生验收超过12分钟");
     await page.waitForTimeout(2000);
   }
-  const settled = await pendingCommand;
-  if (
-    settled.error ||
-    !settled.value?.result.ok ||
-    settled.value.result.value.result.kind === "error"
-  )
-    throw new Error(JSON.stringify(settled));
-  await mkdir("artifacts/validation/ceshiren", { recursive: true });
+  assert(run && directory, "没有生成原生运行记录");
+  assert(
+    run.instances.every(
+      (i) =>
+        i.session_id === run.manifest.origin_session_id &&
+        i.cleanup_session_id === i.session_id,
+    ),
+    "出现独立执行会话",
+  );
+  assert(
+    run.instances.every((i) => i.status === "PASS"),
+    "测试未全部通过",
+  );
+  const link = page.getByRole("link", { name: /查看测试报告/ }).last();
+  await link.waitFor({ timeout: 60000 });
+  const href = await link.getAttribute("href");
+  assert(
+    href?.startsWith(new URL(url).origin + "/test-reports/"),
+    "缺少可浏览报告链接",
+  );
+  const report = await page.context().newPage();
+  const errors = [];
+  report.on("pageerror", (e) => errors.push(String(e)));
+  await report.goto(href);
+  assert((await report.textContent("body")).includes("实际值 ACTUAL"));
+  const evidence = join(directory, "acceptance");
+  await mkdir(evidence, { recursive: true });
+  await page.screenshot({
+    path: join(evidence, "conversation.png"),
+    fullPage: true,
+  });
+  await report.screenshot({
+    path: join(evidence, "report.png"),
+    fullPage: true,
+  });
   await writeFile(
-    "artifacts/validation/ceshiren/latest.json",
+    join(evidence, "verification.json"),
     JSON.stringify(
       {
-        run_id: runId,
-        directory,
-        statistics: run.instances.map((i) => ({
-          id: i.case_run_id,
-          status: i.status,
-        })),
+        session_id: run.manifest.origin_session_id,
+        report_url: href,
+        statuses: run.instances.map((i) => i.status),
+        report_errors: errors,
       },
       null,
       2,
     ),
   );
-  await page.screenshot({
-    path: join(directory, "harness-session.png"),
-    fullPage: true,
-  });
-  const report = await browser.newPage({
-    viewport: { width: 1440, height: 1050 },
-  });
-  const errors = [];
-  report.on("pageerror", (e) => errors.push(String(e)));
-  await report.goto(pathToFileURL(join(directory, "report.html")).href);
-  await report.screenshot({
-    path: join(directory, "report-desktop.png"),
-    fullPage: true,
-  });
-  await report.locator("#status").selectOption(run.instances[0].status);
-  if (
-    (await report.locator("article.case:visible").count()) !==
-    run.instances.filter((i) => i.status === run.instances[0].status).length
-  )
-    throw new Error("报告筛选不一致");
-  await report.getByRole("button", { name: "清除筛选" }).click();
-  await report.setViewportSize({ width: 390, height: 844 });
-  await report.screenshot({
-    path: join(directory, "report-mobile.png"),
-    fullPage: true,
-  });
-  if (errors.length) throw new Error("报告脚本错误: " + errors.join());
+  assert.equal(errors.length, 0);
   console.log(
     JSON.stringify(
       {
         directory,
-        status: run.instances.map((i) => i.status),
-        assertions: run.instances.flatMap((i) =>
-          i.steps.filter((s) => s.assertion).map((s) => s.assertion),
-        ),
+        statuses: run.instances.map((i) => i.status),
         report_errors: errors,
       },
       null,

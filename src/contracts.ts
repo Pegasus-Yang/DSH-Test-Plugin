@@ -302,6 +302,7 @@ const stepSchema = {
         },
         expected_observation_ref: { type: "string" },
         literal: {
+          type: ["string", "number", "boolean", "object", "array", "null"],
           description:
             "用户给出的原始JSON预期值，例如100；不能包装成schema或value对象",
         },
@@ -489,6 +490,31 @@ export function parsePlan(input: unknown): TestSuite {
           for (const row of c.datasets)
             if (field({ data: row }, a.expected_ref) === undefined)
               throw new Error("预期未绑定: " + a.expected_ref);
+        }
+        if (
+          ["eq", "neq", "text", "visible"].includes(a.operator) &&
+          !a.expected_observation_ref
+        ) {
+          const [producer, output, ...parts] = a.observation_ref.split(".");
+          const schema = seen.get(producer!)?.action?.outputs[output!];
+          const type = schema?.type;
+          if (!parts.length && typeof type === "string") {
+            for (const row of c.datasets) {
+              const expected = a.expected_ref
+                ? field({ data: row }, a.expected_ref)
+                : a.literal;
+              if (!ajv.validate({ type }, expected))
+                throw new Error(
+                  "断言预期类型与观察声明不一致: " +
+                    s.step_id +
+                    "；输出类型=" +
+                    type +
+                    "，预期类型=" +
+                    typeof expected +
+                    "。保持正确输出类型，修正literal或data.expected中的JSON值。",
+                );
+            }
+          }
         }
         if (a.operator === "range" && (!a.unit || a.tolerance === undefined))
           throw new Error("数值范围必须声明单位和容差");

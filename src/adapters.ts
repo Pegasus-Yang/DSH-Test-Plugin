@@ -1,6 +1,9 @@
 /** 从受信工具响应生成唯一绑定观察；模型不能提交实际值。 */
 import { randomUUID } from "node:crypto";
-import type { ToolRunContext } from "@deepseek-ai/dsh-tools";
+import type {
+  ToolRunContext,
+  ToolExecutionResult,
+} from "@deepseek-ai/dsh-tools";
 import {
   ajv,
   field,
@@ -11,7 +14,14 @@ import {
   type SuiteRun,
 } from "./contracts.js";
 import { Recorder, redact } from "./recorder.js";
-import type { HarnessSession } from "./host.js";
+interface CaptureHost {
+  id: string;
+  call(
+    name: string,
+    args: unknown,
+    parent: ToolRunContext,
+  ): Promise<{ callId: string; result: ToolExecutionResult }>;
+}
 
 export function mcpResult(value: unknown): unknown {
   const blocks = field(value, "content");
@@ -55,7 +65,7 @@ export function domFunction(
 }
 
 export async function captureStep(
-  host: HarnessSession,
+  host: CaptureHost,
   recorder: Recorder,
   suite: SuiteRun,
   step: Step,

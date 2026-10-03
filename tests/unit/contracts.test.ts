@@ -123,3 +123,9 @@ describe("文件账本", () => {
     expect(() => rebuild(r.directory)).toThrow("中间损坏");
   });
 });
+
+it("冻结前拒绝数字输出配字符串预期，避免非零断言类型错误", () => {
+  const plan = sample();
+  (plan.cases[0].datasets[0].expected as any).likes = "0";
+  expect(() => parsePlan(plan)).toThrow("预期类型");
+});
