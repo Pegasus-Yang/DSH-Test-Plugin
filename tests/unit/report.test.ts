@@ -1,11 +1,17 @@
 import { expect, it } from "vitest";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import {
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+  mkdirSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expand, parsePlan, type SuiteRun } from "../../src/contracts.js";
 import { writeReport } from "../../src/report.js";
 import { sample } from "../fixtures/plan.js";
-function render(change: (run: SuiteRun) => void): string {
+function render(change: (run: SuiteRun, directory: string) => void): string {
   const dir = mkdtempSync(join(tmpdir(), "report-test-"));
   const plan = parsePlan(sample());
   const run: SuiteRun = {
@@ -22,7 +28,7 @@ function render(change: (run: SuiteRun) => void): string {
     resource_quarantined: false,
     manifest: {},
   };
-  change(run);
+  change(run, dir);
   try {
     writeReport(dir, run);
     return readFileSync(join(dir, "report.html"), "utf8");
@@ -87,4 +93,60 @@ it("缺失证据显示明确提示，不产生无效预览或捏造附件", () =
   });
   expect(html).toContain("缺少附件索引：missing-id");
   expect(html).not.toContain('class="preview"');
+});
+
+it("附件预览与下载自包含，不发起会丢失宿主登录态的请求", () => {
+  const html = render((run, dir) => {
+    mkdirSync(join(dir, "evidence"));
+    const png = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6qtwAAAAASUVORK5CYII=",
+      "base64",
+    );
+    writeFileSync(join(dir, "evidence/a.png"), png);
+    writeFileSync(join(dir, "events.jsonl"), '{"type":"fixture"}\n');
+    run.evidence = [
+      {
+        evidence_id: "shot",
+        relative_path: "evidence/a.png",
+        media_type: "image/png",
+        sha256: "fixture",
+        redacted: false,
+      },
+    ];
+    run.instances[0].steps = [
+      {
+        step_id: "read",
+        phase: "test",
+        description: "截图",
+        required: true,
+        status: "SUCCEEDED",
+        started_at: run.created_at,
+        duration_ms: 1,
+        calls: [],
+        observations: [
+          {
+            observation_id: "o",
+            binding: {
+              suite_run_id: run.suite_run_id,
+              case_run_id: "one--a",
+              phase: "test",
+              step_id: "read",
+              attempt_id: "1",
+            },
+            producer: { call_id: "c", adapter: "dom", field: "likes" },
+            context_id: "origin",
+            output_name: "likes",
+            value: 1,
+            evidence_refs: ["shot"],
+            observed_at: run.created_at,
+          },
+        ],
+      },
+    ];
+  });
+  expect(html).toContain('src="data:image/png;base64,');
+  expect(html).not.toContain('href="evidence/a.png"');
+  expect(html).toContain('download="a.png"');
+  expect(html).toContain('download="events.jsonl.gz"');
+  expect(html).toContain('download="results.json"');
 });

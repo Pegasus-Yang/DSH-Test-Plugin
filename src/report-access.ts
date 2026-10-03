@@ -133,7 +133,7 @@ export class ReportAccess {
       if (extname(target) === ".html")
         res.setHeader(
           "Content-Security-Policy",
-          "sandbox allow-scripts allow-popups allow-popups-to-escape-sandbox; default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:",
+          "sandbox allow-scripts allow-downloads allow-popups allow-popups-to-escape-sandbox; default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:",
         );
       res.end(req.method === "HEAD" ? undefined : readFileSync(target));
     } catch {

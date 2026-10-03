@@ -124,6 +124,16 @@ export function reportInteractions(): void {
       buttons[next]!.click();
       buttons[next]!.focus();
     };
+  const dialog = document.getElementById("image-dialog") as HTMLDialogElement;
+  for (const button of document.querySelectorAll<HTMLButtonElement>(
+    "[data-preview]",
+  ))
+    button.onclick = () => {
+      (document.getElementById("full-image") as HTMLImageElement).src =
+        button.querySelector("img")!.src;
+      dialog.showModal();
+    };
+  document.getElementById("close-image")!.onclick = () => dialog.close();
   update();
   navigate("cases");
 }
