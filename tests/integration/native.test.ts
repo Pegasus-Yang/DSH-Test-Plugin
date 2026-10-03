@@ -106,7 +106,10 @@ function setup(value = 3) {
     await emit("tools/result", full, result);
     return result;
   };
+  const planMode = { get: vi.fn(() => ({ active: false })), set: vi.fn() };
   agent.ctx = {
+    get: (name: string) => (name === "planMode" ? planMode : undefined),
+    planMode,
     on,
     systemPrompt: {
       section: (s: unknown) => {
@@ -127,10 +130,7 @@ function setup(value = 3) {
     },
   };
   const effects = new Set<Function>();
-  const planMode = { get: vi.fn(() => ({ active: false })), set: vi.fn() };
   const ctx: any = {
-    get: (name: string) => (name === "planMode" ? planMode : undefined),
-    planMode,
     effect: (fn: Function) => {
       const dispose = fn();
       effects.add(dispose);

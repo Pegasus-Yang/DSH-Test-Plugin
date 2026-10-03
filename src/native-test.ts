@@ -201,7 +201,7 @@ export class NativeTests {
       );
     if ([...this.sessions.values()].some((s) => !s.closed))
       throw new Error("已有测试使用共享浏览器，请先结束或停止该测试");
-    if (review && !this.ctx.get("planMode"))
+    if (review && !agent.ctx.get("planMode"))
       throw new Error(
         "/test-plan 需要宿主启用原生 dsh-plan-mode 和用户审核通道",
       );
@@ -342,7 +342,7 @@ export class NativeTest {
   }
   attach(): void {
     if (this.review) {
-      const mode = this.owner.ctx.planMode;
+      const mode = this.agent.ctx.planMode;
       const state = mode.get(this.agent);
       this.previousPlanMode = state.pending ?? state.active;
       mode.set(this.agent, true);
@@ -729,7 +729,7 @@ export class NativeTest {
           )
             return "审核内容必须与草案一致；请将test_current返回的review_markdown原样传给exit_plan_mode";
           // 用户可能用/plan off离开；再次审核必须走原生模式，不能借此绕过批准。
-          this.owner.ctx.planMode.set(this.agent, true);
+          this.agent.ctx.planMode.set(this.agent, true);
         }
         if (this.planned && typeof (exec.arguments as any)?.url === "string") {
           const url = (exec.arguments as any).url;
@@ -1322,7 +1322,7 @@ export class NativeTest {
     if (this.stoppingTimer) clearTimeout(this.stoppingTimer);
     for (const dispose of this.disposers.splice(0).reverse()) dispose();
     if (this.previousPlanMode !== undefined && !this.planned)
-      this.owner.ctx.planMode.set(this.agent, this.previousPlanMode);
+      this.agent.ctx.planMode.set(this.agent, this.previousPlanMode);
   }
   async shutdown(): Promise<void> {
     if (this.closed) return;
