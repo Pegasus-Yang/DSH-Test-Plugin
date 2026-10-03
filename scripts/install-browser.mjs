@@ -10,7 +10,20 @@ const cli = join(
   dirname(mcpRequire.resolve("playwright/package.json")),
   "cli.js",
 );
-const result = spawnSync(process.execPath, [cli, "install", "chromium"], {
-  stdio: "inherit",
-});
-process.exitCode = result.status ?? 1;
+const validationCli = join(
+  dirname(require.resolve("playwright/package.json")),
+  "cli.js",
+);
+for (const executable of new Set([cli, validationCli])) {
+  const result = spawnSync(
+    process.execPath,
+    [executable, "install", "chromium"],
+    {
+      stdio: "inherit",
+    },
+  );
+  if (result.status !== 0) {
+    process.exitCode = result.status ?? 1;
+    break;
+  }
+}

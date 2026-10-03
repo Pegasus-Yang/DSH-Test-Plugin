@@ -6,7 +6,7 @@
 
 ## 本地开始
 
-要求 Node.js 22.19+、pnpm 11、Chrome 和已配置可用模型的本地 DeepSeek Harness `0.2.1-alpha.1`。
+要求 Node.js 22.19+、pnpm 11 和已配置可用模型的本地 DeepSeek Harness `0.2.1-alpha.1`。
 
 ```sh
 pnpm install

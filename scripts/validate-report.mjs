@@ -56,13 +56,44 @@ for (const instance of run.instances)
             o.observation_id ===
             step.assertion.operand_snapshot.actual_observation_id,
         );
-      assert.deepEqual(observation.value, step.assertion.actual);
+      const snap = step.assertion.operand_snapshot;
+      assert.deepEqual(
+        field(
+          observation.value,
+          snap.actual_path.split(".").slice(2).join("."),
+        ),
+        step.assertion.actual,
+      );
+      const definition = instance.effective_steps.find(
+        (s) => s.step_id === step.step_id,
+      ).assertion;
+      const expectedObservation = instance.steps
+        .flatMap((s) => s.observations)
+        .find((o) => o.observation_id === snap.expected_observation_id);
+      const expected = expectedObservation
+        ? field(
+            expectedObservation.value,
+            snap.expected_path.split(".").slice(2).join("."),
+          )
+        : definition.expected_ref
+          ? field({ data: instance.data }, definition.expected_ref)
+          : definition.literal;
+      assert.deepEqual(step.assertion.expected, expected);
+      if (["eq", "neq"].includes(definition.operator)) {
+        const same =
+          JSON.stringify(step.assertion.actual) === JSON.stringify(expected);
+        const pass =
+          definition.operator === "eq"
+            ? same
+            : typeof step.assertion.actual === typeof expected && !same;
+        assert.equal(step.assertion.status, pass ? "PASS" : "FAIL");
+      }
     }
   }
 const copied = resolve("artifacts/validation/offline", run.suite_run_id);
 await mkdir(copied, { recursive: true });
 await cp(dir, copied, { recursive: true });
-const browser = await chromium.launch({ channel: "chrome", headless: true });
+const browser = await chromium.launch({ headless: true });
 const context = await browser.newContext({
   offline: true,
   viewport: { width: 1440, height: 1050 },
@@ -80,6 +111,25 @@ try {
     await page.locator("article.case").count(),
     run.instances.length,
   );
+  for (const [i, instance] of run.instances.entries()) {
+    const article = page.locator("article.case").nth(i);
+    assert.equal(await article.getAttribute("data-status"), instance.status);
+    for (const [n, step] of instance.steps.entries()) {
+      const row = article.locator(".step").nth(n);
+      assert.equal(await row.locator("h3").textContent(), step.description);
+      if (step.assertion) {
+        const values = await row.locator(".comparison pre").allTextContents();
+        assert.deepEqual(values, [
+          JSON.stringify(step.assertion.actual, null, 2),
+          JSON.stringify(step.assertion.expected, null, 2),
+        ]);
+        assert.equal(
+          await row.locator(".step-title .badge").textContent(),
+          step.assertion.status,
+        );
+      }
+    }
+  }
   await page.locator("#case").selectOption(run.instances[0].case_id);
   await page.locator("#data").selectOption(run.instances[0].data_id);
   await page.locator("#status").selectOption(run.instances[0].status);
@@ -132,6 +182,8 @@ try {
     event_count: events.length,
     rebuild_equal: true,
     observations_match_raw: true,
+    expected_values_match_plan: true,
+    rendered_assertions_match: true,
     attachment_hashes: true,
     offline_filters: true,
     empty_filter: true,

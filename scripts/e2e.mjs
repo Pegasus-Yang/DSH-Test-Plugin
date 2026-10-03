@@ -9,7 +9,7 @@ const { url } = JSON.parse(
     "utf8",
   ),
 );
-const browser = await chromium.launch({ channel: "chrome", headless: true });
+const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage({ viewport: { width: 1440, height: 1050 } });
 await page.goto(url);
 await page.waitForTimeout(1500);
