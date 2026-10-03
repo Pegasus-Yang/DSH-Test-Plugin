@@ -1,77 +1,165 @@
-/** 自包含离线HTML，只展示已持久化事实，不调用模型或工具。 */
-import { existsSync } from "node:fs";
-import { join } from "node:path";
-import { statistics, type SuiteRun } from "./contracts.js";
+/** 自包含离线报告：总览、用例详情、断言和附件均来自已持久化事实。 */
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { statistics, type SuiteRun, type StepResult } from "./contracts.js";
 import { atomicWrite, redact, safePath } from "./recorder.js";
-const escape = (v: unknown): string =>
-  String(v ?? "").replace(
+import { reportStyle } from "./report-style.js";
+import { reportInteractions } from "./report-client.js";
+import { reportIcons } from "./report-icons.js";
+const escape = (value: unknown): string =>
+  String(value ?? "").replace(
     /[&<>"']/g,
-    (c) =>
+    (char) =>
       ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
-        c
+        char
       ]!,
   );
-const json = (v: unknown) => escape(JSON.stringify(redact(v), null, 2));
+const json = (value: unknown) => escape(JSON.stringify(redact(value), null, 2));
+const labels: Record<string, string> = {
+  PASS: "通过",
+  SUCCEEDED: "完成",
+  FAIL: "失败",
+  ERROR: "执行异常",
+  BLOCKED: "阻塞",
+  SKIPPED: "跳过",
+  CANCELLED: "已取消",
+  INCONCLUSIVE: "结论不足",
+  RUNNING: "运行中",
+  PENDING: "待执行",
+  WAITING_APPROVAL: "待审批",
+};
 const badge = (status: string) =>
-  `<span class="badge ${escape(status)}">${escape(status)}</span>`;
+  `<span class="badge ${escape(status)}" title="${escape(status)}">${escape(labels[status] ?? status)}</span>`;
+const icon = (name: keyof typeof reportIcons, className = "icon") =>
+  `<img class="${className}" src="${reportIcons[name]}" alt="" aria-hidden="true">`;
+const duration = (ms: number) =>
+  !Number.isFinite(ms) || ms < 0
+    ? "—"
+    : ms >= 60000
+      ? `${Math.floor(ms / 60000)}分${Math.round((ms % 60000) / 1000)}秒`
+      : `${(ms / 1000).toFixed(1)}秒`;
+const time = (value?: string) =>
+  value
+    ? new Date(value).toLocaleString("zh-CN", {
+        hour12: false,
+        timeZoneName: "short",
+      })
+    : "尚未结束";
 export function writeReport(
   directory: string,
   run: SuiteRun,
   filename = "report.html",
 ): void {
-  const stats = statistics(run),
-    finished = run.instances.filter(
-      (i) => i.lifecycle === "FINISHED" || i.lifecycle === "INTERRUPTED",
-    ).length;
+  const stats = statistics(run);
+  const totalMs = run.finished_at
+    ? Date.parse(run.finished_at) - Date.parse(run.created_at)
+    : NaN;
+  const assertionCount = run.instances.reduce(
+    (n, i) => n + i.steps.filter((s) => s.assertion).length,
+    0,
+  );
+  const passedAssertions = run.instances.reduce(
+    (n, i) => n + i.steps.filter((s) => s.assertion?.status === "PASS").length,
+    0,
+  );
   const evidence = new Map(run.evidence.map((e) => [e.evidence_id, e]));
-  const link = (id: string) => {
+  const attachment = (id: string, caseIndex: number) => {
     const e = evidence.get(id);
-    if (!e) return `<span class="missing">缺少附件索引 ${escape(id)}</span>`;
-    let available = false;
+    if (!e) return `<p class="missing">缺少附件索引：${escape(id)}</p>`;
+    let path: string | undefined;
     try {
-      available = existsSync(safePath(directory, e.relative_path));
+      const candidate = safePath(directory, e.relative_path);
+      if (existsSync(candidate)) path = candidate;
     } catch {}
-    return available
-      ? `<a class="evidence" href="${escape(e.relative_path)}" target="_blank" rel="noopener">${e.media_type === "image/png" ? "查看截图" : "查看原始响应"} ↗</a><small class="hash">SHA256 ${escape(e.sha256)}</small>`
-      : `<span class="missing">附件缺失：${escape(e.relative_path)}</span>`;
+    if (!path)
+      return `<p class="missing">附件缺失：${escape(e.relative_path)}</p>`;
+    const url = e.relative_path.split("/").map(encodeURIComponent).join("/");
+    const image = e.media_type.startsWith("image/");
+    let content = "";
+    if (image)
+      content = `<a href="${escape(url)}" target="_blank" rel="noopener"><img class="preview" src="${escape(url)}" alt="本次测试实际采集的页面截图" loading="lazy"></a>`;
+    else if (statSync(path).size <= 262144)
+      content = `<details class="inspect"><summary>查看原始响应</summary><pre>${escape(readFileSync(path, "utf8"))}</pre></details>`;
+    return `<section class="attachment" id="evidence-${caseIndex}-${escape(id)}"><div class="attachment-header"><h3>${image ? "页面截图" : "工具响应"}</h3><a href="${escape(url)}" target="_blank" rel="noopener">打开附件 ${icon("external-link")}</a></div>${content}<div class="hash">${escape(e.relative_path)}<br>SHA256 ${escape(e.sha256)}</div></section>`;
   };
-  const body = run.instances
-    .map(
-      (
-        i,
-      ) => `<article class="case" data-case="${escape(i.case_id)}" data-data="${escape(i.data_id)}" data-status="${escape(i.status)}">
-    <header><div><span class="eyebrow">${escape(i.case_id)} / ${escape(i.data_id)}</span><h2>${escape(i.name)}</h2></div>${badge(i.status)}</header>
-    <p class="muted">会话 ${escape(i.session_id ?? "未启动")} · 有效修订 ${i.applied_revisions.join(" → ")} · 必需断言 ${escape(i.effective_required_assertion_ids.join(", "))}</p>
-    ${i.revision_history?.length ? `<details><summary>动态检查来源与事后标记</summary><pre>${json(i.revision_history)}</pre></details>` : ""}
-    ${i.issues.length ? `<aside>${i.issues.map(escape).join("<br>")}</aside>` : ""}
-    ${i.unsettled_call_ids.length ? `<aside class="danger">未结算调用：${i.unsettled_call_ids.map(escape).join(", ")}。结果已封存不代表外部执行已停止。</aside>` : ""}
-    <details class="data"><summary>输入数据与冻结预期</summary><pre>${json(i.data)}</pre></details>
-    ${i.steps
-      .map(
-        (
-          s,
-          n,
-        ) => `<section class="step"><div class="step-title"><span class="number">${n + 1}</span><div><span class="eyebrow">${{ setup: "准备", test: "业务", cleanup: "清理" }[s.phase]} · ${s.required ? "必需" : "可选"} · ${escape(s.step_id)}</span><h3>${escape(s.description)}</h3></div><span class="duration">${(s.duration_ms / 1000).toFixed(1)}秒</span>${badge(s.status)}</div>
-    ${s.reason ? `<p class="reason">${escape(s.reason)}</p>` : ""}
-    ${s.assertion ? `<div class="comparison"><div><label>实际值 ACTUAL</label><pre>${json(s.assertion.actual)}</pre></div><div><label>预期值 EXPECTED · ${escape(s.assertion.operator)}</label><pre>${json(s.assertion.expected)}</pre></div></div><p>${escape(s.assertion.reason)} · 修订 ${s.assertion.plan_revision}</p><details><summary>断言操作数与证据</summary><pre>${json(s.assertion.operand_snapshot)}</pre>${s.assertion.evidence_refs.map(link).join("")}</details>` : ""}
-    ${s.observations.map((o) => `<details class="observation"><summary>观察 ${escape(o.output_name)} = ${escape(JSON.stringify(o.value))}</summary><pre>${json({ observation_id: o.observation_id, producer: o.producer, context_id: o.context_id, binding: o.binding, observed_at: o.observed_at })}</pre>${o.evidence_refs.map(link).join("")}</details>`).join("")}
-    ${s.calls.length ? `<details><summary>${s.calls.length} 次工具调用 · 展开执行记录</summary>${s.calls.map((c) => `<div class="call"><strong>${escape(c.name)}</strong> · ${c.finished_at ? (c.isError ? "错误" : "已结算") : "未结算"}<small>${escape(c.call_id)}</small><pre>${json(c.args_redacted)}</pre><details><summary>原始结果（脱敏）</summary><pre>${json(c.result)}</pre></details></div>`).join("")}</details>` : ""}
-    </section>`,
-      )
-      .join("")}</article>`,
-    )
+  const compare = (s: StepResult, caseIndex: number) => {
+    const a = s.assertion!;
+    return `<div class="comparison"><div><label>实际值 ACTUAL</label><pre>${json(a.actual)}</pre></div><div><label>预期值 EXPECTED · ${escape(a.operator)}</label><pre>${json(a.expected)}</pre></div><div class="comparison-footer"><span>${escape(a.reason)}</span>${a.evidence_refs[0] ? `<button class="evidence-button" data-evidence="evidence-${caseIndex}-${escape(a.evidence_refs[0])}">${icon("photo")} 查看证据</button>` : ""}</div></div><details class="inspect"><summary>断言来源与操作数 · 修订 ${a.plan_revision}</summary><pre>${json(a.operand_snapshot)}</pre></details>`;
+  };
+  const cases = run.instances
+    .map((i, index) => {
+      const caseMs = i.steps.reduce((n, s) => n + s.duration_ms, 0);
+      const ids = [
+        ...new Set(
+          i.steps.flatMap((s) => [
+            ...s.observations.flatMap((o) => o.evidence_refs),
+            ...(s.assertion?.evidence_refs ?? []),
+          ]),
+        ),
+      ];
+      const focus =
+        i.steps.find((s) =>
+          ["FAIL", "ERROR", "INCONCLUSIVE"].includes(s.status),
+        ) ?? [...i.steps].reverse().find((s) => s.assertion);
+      const steps = i.steps
+        .map(
+          (s, n) =>
+            `<details class="step"${focus === s ? " open" : ""}><summary><span class="number">${n + 1}</span><span class="step-copy"><strong>${escape(s.description)}</strong><small>${{ setup: "准备", test: "业务", cleanup: "清理" }[s.phase]} · ${s.required ? "必需" : "可选"} · ${escape(s.step_id)}</small></span><span class="duration">${duration(s.duration_ms)}</span>${badge(s.status)}${icon("chevron-down", "chevron")}</summary><div class="step-content">${s.reason ? `<p class="reason">${escape(s.reason)}</p>` : ""}${s.assertion ? compare(s, index) : ""}${s.observations.map((o) => `<div class="observation-line">${escape(o.output_name)} = <code>${escape(JSON.stringify(o.value))}</code>${o.evidence_refs[0] ? ` <button class="evidence-button" data-evidence="evidence-${index}-${escape(o.evidence_refs[0])}">查看证据</button>` : ""}</div>`).join("")}${s.capture_attempts?.length ? `<details class="inspect"><summary>采集方式与调整记录 · ${s.capture_attempts.length} 次</summary><pre>${json(s.capture_attempts)}</pre></details>` : ""}${s.calls.length ? `<details class="inspect"><summary>${s.calls.length} 次工具调用 · 展开执行记录</summary>${s.calls.map((c) => `<div class="call"><strong>${escape(c.name)}</strong><small>${c.finished_at ? (c.isError ? "错误" : "已结算") : "未结算"}</small><pre>${json(c.args_redacted)}</pre><details class="inspect"><summary>原始结果（脱敏）</summary><pre>${json(c.result)}</pre></details></div>`).join("")}</details>` : ""}</div></details>`,
+        )
+        .join("");
+      const assertions = i.steps.filter(
+        (s) =>
+          s.assertion || i.effective_required_assertion_ids.includes(s.step_id),
+      );
+      return `<article class="case" id="case-${index}" data-case="${escape(i.case_id)}" data-data="${escape(i.data_id)}" data-status="${escape(i.status)}" data-search="${escape([i.name, i.case_id, i.data_id, i.status].join(" ").toLocaleLowerCase())}"${index ? " hidden" : ""}><header class="case-head"><div class="case-heading">${i.status === "PASS" ? icon("circle-check", "status-icon") : ""}<h2>${escape(i.name)}</h2>${badge(i.status)}</div><div class="case-meta"><span>用例标识<b>${escape(i.case_id)}</b></span><span>数据集<b>${escape(i.data_id)}</b></span><span>步骤耗时<b>${duration(caseMs)}</b></span></div></header>${i.issues.length ? `<aside class="issue">${i.issues.map(escape).join("<br>")}</aside>` : ""}${i.unsettled_call_ids.length ? `<aside class="issue danger">尚有 ${i.unsettled_call_ids.length} 次未结算调用；外部执行可能仍未停止。</aside>` : ""}<div class="tabs" role="tablist" aria-label="用例详情">${[
+        ["steps", "步骤"],
+        ["assertions", "断言"],
+        ["attachments", "附件"],
+      ]
+        .map(
+          ([key, label]) =>
+            `<button role="tab" id="tab-${index}-${key}" aria-controls="panel-${index}-${key}" aria-selected="${key === "steps"}" data-tab="${key}">${label}${key === "assertions" ? ` (${assertions.length})` : key === "attachments" ? ` (${ids.length})` : ""}</button>`,
+        )
+        .join(
+          "",
+        )}</div><div class="panel" id="panel-${index}-steps" role="tabpanel" aria-labelledby="tab-${index}-steps" data-panel="steps">${steps || '<p class="empty">尚未执行任何步骤</p>'}</div><div class="panel" id="panel-${index}-assertions" role="tabpanel" aria-labelledby="tab-${index}-assertions" data-panel="assertions" hidden>${assertions.map((s) => `<section class="assertion-item"><h3>${escape(s.description)} ${badge(s.status)}</h3>${s.assertion ? compare(s, index) : `<p class="reason">${escape(s.reason ?? "此断言未执行，没有实际值与比较结果。")}</p>`}</section>`).join("") || '<p class="empty">尚无已执行的断言；不能据此判定通过。</p>'}<details class="inspect"><summary>输入数据与冻结预期</summary><pre>${json(i.data)}</pre></details>${i.revision_history?.length ? `<details class="inspect"><summary>动态检查来源与事后标记</summary><pre>${json(i.revision_history)}</pre></details>` : ""}</div><div class="panel attachments" id="panel-${index}-attachments" role="tabpanel" aria-labelledby="tab-${index}-attachments" data-panel="attachments" hidden>${ids.map((id) => attachment(id, index)).join("") || '<p class="empty">本用例没有采集附件</p>'}</div></article>`;
+    })
     .join("");
   const options = (key: "case_id" | "data_id" | "status") =>
     [...new Set(run.instances.map((i) => i[key]))]
-      .map((v) => `<option>${escape(v)}</option>`)
+      .map(
+        (v) =>
+          `<option value="${escape(v)}">${escape(key === "status" ? (labels[v] ?? v) : v)}</option>`,
+      )
       .join("");
-  const html = `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escape(run.name)} · 测试报告</title><style>
-  :root{color-scheme:light;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#1c2b3a;background:#f4f7fa}*{box-sizing:border-box}body{margin:0}main{max-width:1180px;margin:auto;padding:48px 28px}.hero{border-top:5px solid #0c8278;padding:28px 0 24px}.eyebrow{font-size:12px;font-weight:650;letter-spacing:.08em;color:#607589}h1{font-size:32px;margin:12px 0}h2{font-size:22px;margin:8px 0}h3{font-size:16px;margin:5px 0}p{line-height:1.7}.muted{color:#647789;font-size:13px;overflow-wrap:anywhere}.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin:22px 0}.metric{background:white;padding:20px;border:1px solid #dce5eb;border-radius:10px}.metric strong{display:block;font-size:30px;margin-bottom:7px}.metric span{color:#607589;font-size:13px}.filters{display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:18px 0}select,button{font:inherit;background:white;border:1px solid #c5d3de;padding:9px 14px;border-radius:6px}label{font-size:12px;color:#607589}article.case{margin:20px 0 32px;background:white;border:1px solid #dce5eb;border-radius:12px;padding:26px;box-shadow:0 4px 14px #22334405}header{display:flex;justify-content:space-between;align-items:center;gap:18px}.badge{display:inline-block;font-size:12px;font-weight:750;background:#e9eef3;color:#4b6074;padding:6px 10px;border-radius:5px;white-space:nowrap}.PASS,.SUCCEEDED{background:#e0f4ed;color:#146c4f}.FAIL,.ERROR{background:#fde8e7;color:#b02f2e}.BLOCKED,.INCONCLUSIVE,.CANCELLED{background:#fff0d8;color:#885611}.step{border-top:1px solid #e5ebf0;padding:23px 0 5px;margin-top:22px}.step-title{display:flex;gap:14px;align-items:center}.number{background:#edf3f6;border-radius:50%;width:30px;height:30px;display:grid;place-items:center;flex-shrink:0;font-size:13px;font-weight:650}.duration{margin-left:auto;white-space:nowrap;font-size:12px;color:#6e8293}.comparison{display:grid;grid-template-columns:1fr 1fr;border:1px solid #dce5eb;border-radius:8px;margin-top:18px;overflow:hidden}.comparison>div{padding:16px 20px;background:#f9fbfc}.comparison>div+div{border-left:1px solid #dce5eb}.comparison pre{font-size:20px;padding:7px 0;margin:0;background:none}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.65 ui-monospace,Menlo,monospace;background:#f3f6f8;border-radius:5px;padding:12px;max-height:500px;overflow:auto}details{margin:12px 0;font-size:13px}summary{cursor:pointer;color:#355d7b;overflow-wrap:anywhere;line-height:1.6}.call{border-left:2px solid #d8e3eb;padding:10px 16px;margin:14px 0}.call small,.hash{display:block;color:#788a99;overflow-wrap:anywhere;font-size:10px;margin:6px 0}.evidence{display:inline-block;margin:10px 12px 0 0;color:#087b73}aside{padding:16px;background:#fff7e9;border-left:3px solid #d3a039;font-size:13px;line-height:1.8;overflow-wrap:anywhere}.danger{background:#fff0ee;border-color:#c44843}.missing{color:#b02f2e}.reason{font-size:13px;color:#926538}#empty{display:none;text-align:center;padding:50px;color:#647789}footer{font-size:12px;color:#718395;line-height:1.8}@media(max-width:700px){main{padding:20px 12px}h1{font-size:24px}.cards{grid-template-columns:repeat(2,1fr)}article.case{padding:16px}.step-title{flex-wrap:wrap}.comparison{grid-template-columns:1fr}.comparison>div+div{border-left:0;border-top:1px solid #dce5eb}.duration{margin-left:0}.badge{font-size:11px}}
-  </style><main><div class="hero"><span class="eyebrow">DEEPSEEK HARNESS / TEST RUN</span><h1>${escape(run.name)}</h1><p class="muted">${escape(run.created_at)} → ${escape(run.finished_at ?? "运行中")}<br>运行 ${escape(run.suite_run_id)}</p></div>
-  ${run.incomplete || run.resource_quarantined ? `<aside class="danger">${run.incomplete ? "记录不完整。" : ""}${run.resource_quarantined ? "环境已隔离，外部执行可能仍未停止。" : ""}</aside>` : ""}
-  <div class="cards"><div class="metric"><strong>${stats.total}</strong><span>测试实例</span></div><div class="metric"><strong>${stats.PASS ?? 0}</strong><span>通过</span></div><div class="metric"><strong>${(stats.FAIL ?? 0) + (stats.ERROR ?? 0)}</strong><span>失败 / 错误</span></div><div class="metric"><strong>${stats.total ? Math.round((finished / stats.total) * 100) : 0}%</strong><span>结果结算率 · 不代表外部执行完成</span></div></div>
-  <div class="filters"><label>用例 <select id="case"><option value="">全部</option>${options("case_id")}</select></label><label>数据 <select id="data"><option value="">全部</option>${options("data_id")}</select></label><label>状态 <select id="status"><option value="">全部</option>${options("status")}</select></label><button id="clear">清除筛选</button><span id="count" class="muted"></span></div>${body}<p id="empty">没有符合筛选条件的实例</p>
-  <details><summary>运行配置与预算</summary><pre>${json(run.manifest)}</pre></details><footer>本报告依据冻结计划、绑定的实际观察和确定性比较结果生成。<br>原始数据：<a href="results.json">results.json</a> · <a href="events.jsonl">事件账本</a> · <a href="plan.json">冻结计划</a></footer></main>
-  <script>const filters=['case','data','status'].map(id=>document.getElementById(id));function update(){let n=0;for(const el of document.querySelectorAll('article.case')){const show=filters.every(f=>!f.value||el.dataset[f.id]===f.value);el.hidden=!show;if(show)n++;}document.getElementById('count').textContent='显示 '+n+' 个实例';document.getElementById('empty').style.display=n?'none':'block';}filters.forEach(f=>f.addEventListener('change',update));document.getElementById('clear').onclick=()=>{filters.forEach(f=>f.value='');update();};update();</script></html>`;
+  const list = run.instances
+    .map(
+      (i, index) =>
+        `<button class="case-row" data-select-case="case-${index}" aria-current="${index === 0}">${i.status === "PASS" ? icon("circle-check", "status-icon") : ""}<span class="row-content"><strong>${escape(i.name)}</strong><small>${escape(i.data_id)} · ${escape(labels[i.status] ?? i.status)}</small></span><span class="row-time">${duration(i.steps.reduce((n, s) => n + s.duration_ms, 0))}</span></button>`,
+    )
+    .join("");
+  const links =
+    '<div class="footer-links"><a href="results.json" target="_blank" rel="noopener">运行数据</a><a href="events.jsonl" target="_blank" rel="noopener">事件账本</a><a href="plan.json" target="_blank" rel="noopener">冻结计划</a></div>';
+  const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escape(run.name)} · 测试报告</title><style>${reportStyle}</style></head><body><nav class="rail" aria-label="报告导航"><div class="brand">DSH / TEST REPORT</div>${[
+    ["overview", "home", "概览"],
+    ["cases", "list-details", "测试用例"],
+    ["info", "info-circle", "运行信息"],
+  ]
+    .map(
+      ([key, img, label]) =>
+        `<button class="nav-button${key === "cases" ? " active" : ""}" data-nav="${key}" aria-current="${key === "cases" ? "page" : "false"}">${icon(img as keyof typeof reportIcons)}${label}</button>`,
+    )
+    .join(
+      "",
+    )}<small>静态测试报告<br>可离线查看</small></nav><main class="app"><header class="run-header"><h1>${escape(run.name)}</h1><div class="run-meta"><span>${escape(time(run.created_at))}</span><span>${run.lifecycle === "FINISHED" ? "已结束" : "记录未结算"}</span><span>静态报告</span></div><div class="metrics"><div class="metric"><strong>${stats.total}</strong><span>用例总数</span></div><div class="metric"><strong class="positive">${stats.PASS ?? 0}</strong><span>通过</span></div><div class="metric"><strong class="${stats.total - (stats.PASS ?? 0) ? "negative" : ""}">${stats.total - (stats.PASS ?? 0)}</strong><span>未通过 / 未完成</span></div><div class="metric"><strong>${duration(totalMs)}</strong><span>运行总耗时（含规划）</span></div></div></header>${run.incomplete || run.resource_quarantined ? `<aside class="issue danger">${run.incomplete ? "记录不完整。" : ""}${run.resource_quarantined ? "环境已隔离，外部执行可能仍未停止。" : ""}</aside>` : ""}<section class="workspace" data-view="cases"><aside class="case-list"><div class="list-title"><h3>测试用例</h3><span>${stats.total} 个实例</span></div><label class="search">${icon("search")}<input id="search" type="search" placeholder="搜索用例名称或标识…" aria-label="搜索用例"></label><div class="filters"><label>用例<select id="case"><option value="">全部</option>${options("case_id")}</select></label><label>数据<select id="data"><option value="">全部</option>${options("data_id")}</select></label><label>状态<select id="status"><option value="">全部</option>${options("status")}</select></label></div><div class="list-subtitle"><span id="count" aria-live="polite"></span><button id="clear" class="text-button">清除筛选</button></div><div class="case-rows">${list}</div><p class="empty" id="empty" hidden>没有符合筛选条件的实例</p></aside><div class="detail">${cases}<div id="no-detail" class="empty" hidden>没有可展示的用例，请调整筛选条件。</div></div></section><section class="overview" data-view="overview" hidden><h2>运行总览</h2><p>${stats.total ? (((stats.PASS ?? 0) / stats.total) * 100).toFixed(1) + "%" : "—"} 用例通过率 · ${passedAssertions} / ${assertionCount} 条已执行断言通过</p><div class="distribution">${Object.entries(
+    stats,
+  )
+    .filter(([k, v]) => k !== "total" && v > 0)
+    .map(
+      ([k, v]) =>
+        `<button data-filter-status="${escape(k)}">${badge(k)}<strong>${v}</strong></button>`,
+    )
+    .join(
+      "",
+    )}</div><h2>测试套件与用例</h2><div class="table-wrap"><table><thead><tr><th>用例名称</th><th>数据集</th><th>状态</th><th>断言通过 / 已执行</th><th>步骤耗时</th></tr></thead><tbody>${run.instances.map((i, index) => `<tr><td><button class="case-link" data-open-case="case-${index}">${escape(i.name)}</button></td><td>${escape(i.data_id)}</td><td>${badge(i.status)}</td><td>${i.steps.filter((s) => s.assertion?.status === "PASS").length} / ${i.steps.filter((s) => s.assertion).length}</td><td>${duration(i.steps.reduce((n, s) => n + s.duration_ms, 0))}</td></tr>`).join("")}</tbody></table></div><p class="note">通过率以全部用例实例为分母。取消、阻塞和未确定不会计为通过。断言统计仅计入真实比较记录；未执行的断言可在用例详情中查看。</p>${links}</section><section class="run-info" data-view="info" hidden><h2>运行信息</h2><dl><dt>运行 ID</dt><dd>${escape(run.suite_run_id)}</dd><dt>开始时间</dt><dd>${escape(time(run.created_at))}</dd><dt>结束时间</dt><dd>${escape(time(run.finished_at))}</dd><dt>执行模式</dt><dd>${escape(run.manifest.execution ?? run.manifest.tools_mode ?? "未记录")}</dd><dt>发起会话</dt><dd>${escape(run.manifest.origin_session_id ?? "未记录")}</dd><dt>插件版本</dt><dd>${escape(run.manifest.plugin_version ?? "未记录")}</dd></dl><details class="inspect"><summary>完整运行配置与预算</summary><pre>${json(run.manifest)}</pre></details><p>本报告依据冻结计划、绑定的实际观察和确定性比较结果生成。采集定位的运行时调整保存在对应步骤中，原始预期保持不变。</p>${links}</section></main><script>(${reportInteractions.toString()})();</script></body></html>`;
   atomicWrite(safePath(directory, filename), html);
 }
