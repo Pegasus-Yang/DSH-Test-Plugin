@@ -10,6 +10,16 @@ export function apply(ctx,config){
   mkdirSync(dirname(config.output),{recursive:true});
   const state={status:'RUNNING',checks:[],events:[],bodies:0};
   const save=()=>writeFileSync(config.output,JSON.stringify(state,null,2));
+  ctx.effect(()=>ctx.commands.register({name:'test-m0-approval',description:'验证原生审批',handler:({agent,rawInput})=>{
+    const file=dirname(config.output)+'/approval-'+rawInput.trim()+'.json';const record={session_id:agent.id,bodies:0,status:'RUNNING'};
+    const persist=()=>writeFileSync(file,JSON.stringify(record,null,2));persist();
+    const removeTool=agent.ctx.tools.register({name:'m0_approval',description:'请求一次无害测试审批，然后结束。',parameters:{type:'object',properties:{},additionalProperties:false},output:{schema:{type:'object'},render:(_,v)=>[{type:'text',text:JSON.stringify(v)}]},execute:async(_,exec)=>{record.bodies++;persist();exec.concludeTurn();return {ok:true};}});
+    let asked=false;
+    const removeGate=agent.ctx.on('tools/pre-execute',async(exec,next)=>{if(exec.name!=='m0_approval')return {kind:'deny',reason:'M0只允许审批探针'};if(asked)return {kind:'deny',reason:'不得重试审批'};asked=true;return {kind:'ask',reason:'M0原生审批验证：只增加本地计数，不改变网站数据'};});
+    agent.followup({content:[{type:'text',text:'只调用一次 m0_approval；无论批准还是拒绝，都不要重试，随后结束。'}],source:{kind:'user'}});
+    void agent.whenIdle().then(()=>{record.status='FINISHED';persist();removeGate();removeTool();});
+    return {kind:'success',text:'原生审批探针已启动'};
+  }}));
   const check=(name,ok,detail)=>{state.checks.push({name,ok,detail});save();if(!ok)throw new Error(name);};
   let handle;
   ctx.on('session/event',(session,event)=>{
