@@ -9,7 +9,7 @@ import { rebuild } from "../../src/recorder.js";
 const cleanups: (() => void)[] = [];
 afterEach(() => cleanups.splice(0).forEach((f) => f()));
 // 生命周期替身只驱动官方公开接口；真实宿主与模型在网页验收中单独验证。
-function setup(value = 3) {
+function setup(value = 3, preparePreview?: () => Promise<void>) {
   const root = mkdtempSync(join(tmpdir(), "native-test-"));
   const events = new Map<string, Set<Function>>();
   const definitions = new Map<string, any>();
@@ -147,7 +147,11 @@ function setup(value = 3) {
       };
     },
   };
-  const manager = new NativeTests(ctx, { outputRoot: root, cancelGraceMs: 25 });
+  const manager = new NativeTests(
+    ctx,
+    { outputRoot: root, cancelGraceMs: 25 },
+    preparePreview,
+  );
   cleanups.push(() => {
     for (const test of manager.sessions.values()) test.dispose();
     rmSync(root, { recursive: true, force: true });
@@ -1311,4 +1315,60 @@ it("CSV审核前取消保留全部未执行实例，不请求接口或派发清�
   expect(
     readFileSync(join(run.recorder.directory, "report.html"), "utf8"),
   ).toContain("计划未获批准");
+});
+
+it("进度只属于原会话，准备清理与业务分别呈现；读状态不会派发工具", async () => {
+  const t = setup(3);
+  await t.manager.start(t.agent, "点赞不为0", sample());
+  const dispatched = t.dispatched.length;
+  expect(t.manager.presentation("other-session")).toBeNull();
+  expect(t.manager.presentation("origin")).toMatchObject({
+    session_id: "origin",
+    total_steps: 2,
+    settled_steps: 0,
+  });
+  expect(t.dispatched).toHaveLength(dispatched);
+  await t.step();
+  expect(t.manager.presentation("origin")).toMatchObject({
+    current_step_id: "read",
+    phase: "executing",
+  });
+  await t.step();
+  expect(t.manager.presentation("origin")).toMatchObject({
+    phase: "cleanup",
+    settled_steps: 2,
+  });
+  await t.step();
+  await t.call("test_finish");
+  const state = t.manager.presentation("origin")!;
+  expect(state).toMatchObject({
+    phase: "finished",
+    settled_steps: 2,
+    total_steps: 2,
+  });
+  expect(state.instances[0]?.setup).toHaveLength(1);
+  expect(state.instances[0]?.cleanup).toHaveLength(1);
+  expect(state.report_url).toContain("report.html");
+  expect((await t.manager.preview.state(state.run_id)).ready).toBe(false);
+  await t.end();
+});
+
+it("预览接入准备也保持互斥，不能在准备过程中启动第二条测试", async () => {
+  let release!: () => void;
+  const prepare = vi.fn(
+    () =>
+      new Promise<void>((done) => {
+        release = done;
+      }),
+  );
+  const t = setup(3, prepare);
+  const first = t.manager.start(t.agent, "检查预览准备", sample());
+  expect(prepare).toHaveBeenCalledTimes(1);
+  expect(t.manager.sessions.size).toBe(0);
+  await expect(
+    t.manager.start({ ...t.agent, id: "other" }, "另一条测试", sample()),
+  ).rejects.toThrow("已有测试");
+  release();
+  await first;
+  expect(t.manager.sessions.size).toBe(1);
 });
