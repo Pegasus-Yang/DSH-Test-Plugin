@@ -49,7 +49,9 @@ import {
   textPlanSchema,
   textReview,
   validateTextExpectation,
+  parseTextExpected,
 } from "./text-plan.js";
+import { testLanguage, languageGuide } from "./language.js";
 import { applyRevision } from "./revisions.js";
 
 declare module "@deepseek-ai/dsh-llm" {
@@ -70,9 +72,9 @@ const output = {
 };
 const guide = `当前对话已启用测试增强，仍由本会话正常推理、工具调用、审批、追问和回复完成任务，不创建其他会话或后台任务。
 规划阶段只根据用户描述分析目标、业务步骤、输入和预期。禁止访问网站、运行命令、调用API或提前验证用例；不能通过预跑寻找选择器。只可使用test_submit_plan、test_current、todo_write和ask_user_question。已给目标、输入和预期时直接形成计划；缺少必要信息时在本会话追问。
-test_submit_plan只提交{name,steps:[{description,checks?:string[]}]}。把用户的一段话按常规理解拆成几个业务动作短句，checks只写用户预期的自然语言。不要提供suite_id、cases、工具、选择器、能力类型、URL白名单、输出Schema、字段路径或比较器；不要为了未知页面结构追问用户。例如steps:[{description:"访问ceshiren.com"},{description:"搜索agent"},{description:"打开第一条搜索结果"},{description:"查看帖子的点赞数",checks:["点赞数不为0"]}]。用户没有提供的操作细节无需在规划期补齐。
+test_submit_plan只提交{name,rationale:"一两句面向用户的拆分说明",steps:[{description,checks?:string[]}]}。把用户的一段话按常规理解拆成几个业务动作短句，checks只写用户预期的自然语言。不要提供suite_id、cases、工具、选择器、能力类型、URL白名单、输出Schema、字段路径或比较器；不要为了未知页面结构追问用户。例如steps:[{description:"访问ceshiren.com"},{description:"搜索agent"},{description:"打开第一条搜索结果"},{description:"查看帖子的点赞数",checks:["点赞数不为0"]}]。用户没有提供的操作细节无需在规划期补齐。rationale简要说明为什么按这些业务动作拆分、怎样核对目标，不展开详细推理。/test提交成功后，必须先在正常对话中用原始任务、拆分思路、步骤清单三个部分通报返回的plan_summary，再执行第一个动作；/test-plan通过原生审核卡片展示这三部分。
 文字计划执行：每次只处理test_current的当前步骤。需要操作目标时先test_define_step({capability:"browser"或"api",allowed_targets:[本步目标网址],reason:"当前步骤依据"})设定操作范围，无需填写outputs。随后使用原生工具观察、操作、调整；了解实际页面后直接test_capture采集。采集时插件按采集方式自动登记输出类型，无需先写输出Schema；已有成功观察不可覆盖，但可补采其他输出。API通常以response保存完整响应。不是在执行开始时编译整份计划，不能配置未来步骤。
-文字检查点：获得可信观察后，对当前步骤的每个checks，调用test_bind_check({check_index:从0开始,assertion:{observation_ref:"step_编号.输出名.可选嵌套路径",operator:"eq/neq/...",expected_json:"用户预期的JSON文本，如0或\\\"agent\\\""}})。也可用expected_observation_ref比较前一步观察（例如第一条搜索结果链接）。rule_ref由插件绑定文字检查点；不用提交actual。预期来自原文和文字检查，不能按实际值改写；数字不为0用neq和expected_json字符串"0"（按JSON解析后为数字0，不是数组或对象）。每个文字检查都必须绑定程序断言，不能靠口头宣布通过；纯检查步骤可以直接引用前一步的可信观察。绑定后test_finish_step结算当前步骤并计算断言。无法完成用test_fail_step说明原因。
+文字检查点：获得可信观察后，对当前步骤的每个checks，调用test_bind_check({check_index:从0开始,assertion:{observation_ref:"step_编号.输出名.可选嵌套路径",operator:"eq/neq/...",expected_value:"用户预期原文，例如agent或0；不加引号或数组包装"}})。也可用expected_observation_ref比较前一步观察（例如第一条搜索结果链接）。rule_ref由插件绑定文字检查点；不用提交actual。预期来自原文和文字检查，不能按实际值改写；数字不为0用neq和expected_value直接填"0"（按数字条件解析为数值0）。每个文字检查都必须绑定程序断言，不能靠口头宣布通过；纯检查步骤可以直接引用前一步的可信观察。绑定后test_finish_step结算当前步骤并计算断言。无法完成用test_fail_step说明原因。
 执行阶段：文字计划提交（/test-plan还需批准）后按test_current执行当前业务目标。此时才使用正常Playwright工具查看页面、点击、输入、等待和检查DOM，可根据实际状态调整定位、操作组合和重试，无需重跑整条用例；只完成当前步骤，不提前执行后续步骤。browser_evaluate可用于实际页面结构检查，断言实际值仍只接受test_capture可信采集。JSON文件计划已提交时直接按test_current继续，不能重复提交计划或预跑。
 运行时采集：完成当前动作后，按页面/接口实际情况调用test_capture({capture:{输出名:采集定义},reason:"依据当前页面选择或修正定位的原因"})。它不接受actual或任意执行代码。dom mode支持text/number/count/visible/url/attribute/value；selector为真实CSS，可用index定位集合。页面路径用{kind:"dom",mode:"url",field:"pathname"}；元素href用{kind:"dom",mode:"attribute",attribute:"href",selector:"实际选择器",index:0,field:"pathname"}；数字用mode:number；文本框用mode:value；http仅用于返回JSON的GET接口。HTTP采集本身会发送请求，直接调用test_capture，无需先用test_api_get预发一次。完整响应为{status:number,body:JSON}，不含headers；可声明单一object输出，用{kind:"http",url:"授权URL",field:""}一次采集，再通过step_id.output_name.status及step_id.output_name.body的嵌套路径断言。必要输出都要采集。采集定义可根据实际页面修正，保留每次原因和调用记录；已有成功观察不可覆盖，只补采尚缺的输出。不能改变输出含义、输出类型、目标范围或断言预期。静态JSON的capture和自动清理已有采集定义，直接test_capture({})即可。
 采集成功后调用test_finish_step；程序计算断言，模型不能填写实际值或口头改判。定位失败可修正重试；确实无法完成时test_fail_step说明原因。用户停止后不再执行业务，只按同会话收尾指导执行预授权清理。全部完成调用test_finish，并在原生最终回复写明逐步结果、断言实际/预期、保存位置和工具返回的报告链接。BLOCKED、SKIPPED或缺证据不能写成通过。`;
@@ -275,6 +277,7 @@ export class NativeTest {
   private timer?: ReturnType<typeof setTimeout>;
   private stoppingTimer?: ReturnType<typeof setTimeout>;
   private task: string;
+  private readonly originalTask: string;
   private draft?: SuiteRun["plan"];
   private reviewCall?: string;
   private reviewDismissed = false;
@@ -287,6 +290,7 @@ export class NativeTest {
   ) {
     this.agent = agent;
     this.task = task;
+    this.originalTask = task;
     const id =
       "run-" +
       new Date().toISOString().replace(/[:.]/g, "-") +
@@ -353,14 +357,16 @@ export class NativeTest {
         order: 10500,
         interpolate: false,
         text: () =>
-          this.reportReady
+          languageGuide(testLanguage(this.owner.ctx, this.task)) +
+          "\n" +
+          (this.reportReady
             ? "测试报告已生成。请在本轮回复中只总结test_finish返回的权威统计、逐步状态和断言。BLOCKED或缺少断言记录绝不能写成PASS；页面口头观察不能替代程序断言。给出报告链接。"
             : guide +
               (this.review && !this.planned
                 ? "\n本次为/test-plan：原生plan模式中只规划。test_submit_plan仅保存可修改草案，不会执行。提交成功后，将返回的review_markdown原样作为exit_plan_mode的plan参数展示审核。不要自行缩写或替换审核内容。用户要求修改时重新test_submit_plan再审核；同意后插件自动冻结已审草案并开始执行。关闭plan模式不代表批准。"
                 : "") +
               "\n当前测试状态：" +
-              JSON.stringify(this.state()),
+              JSON.stringify(this.state())),
       }),
     );
     const tool = (
@@ -494,10 +500,10 @@ export class NativeTest {
             properties: {
               observation_ref: assertionSchema.properties.observation_ref,
               operator: assertionSchema.properties.operator,
-              expected_json: {
+              expected_value: {
                 type: "string",
                 description:
-                  '用户给出的预期，按JSON文本传递：数字用"0"，字符串用"\\\"agent\\\""，布尔用"true"；不是Schema，不包value对象。与expected_observation_ref二选一',
+                  "用户预期原文。例如agent、dsh、0或200；不加JSON引号、不包数组或value对象。数字/布尔按检查和观察类型解析；仅对象、数组或range预期写JSON。与expected_observation_ref二选一",
               },
               expected_observation_ref:
                 assertionSchema.properties.expected_observation_ref,
@@ -516,7 +522,15 @@ export class NativeTest {
         const id = `${c.step.step_id}_check_${args.check_index + 1}`;
         if (c.instance.effective_steps.some((s) => s.step_id === id))
           throw new Error("检查点已经绑定，不能改写预期");
-        const { expected_json, ...definition } = args.assertion;
+        const { expected_value, ...definition } = args.assertion;
+        const [producer, outputName, ...path] = String(
+          definition.observation_ref,
+        ).split(".");
+        const observation = c.instance.steps
+          .find((s) => s.step_id === producer)
+          ?.observations.find((o) => o.output_name === outputName);
+        if (!observation) throw new Error("请先采集可信观察，再绑定文字检查");
+        const actual = field(observation.value, path.join("."));
         const step: Step = {
           step_id: id,
           kind: "assertion",
@@ -525,9 +539,16 @@ export class NativeTest {
           depends_on: [c.step.step_id],
           assertion: {
             ...definition,
-            ...(expected_json === undefined
+            ...(expected_value === undefined
               ? {}
-              : { literal: JSON.parse(expected_json) }),
+              : {
+                  literal: parseTextExpected(
+                    text,
+                    expected_value,
+                    actual,
+                    definition.operator,
+                  ),
+                }),
             rule_ref: id,
           },
         };
@@ -536,10 +557,16 @@ export class NativeTest {
         const position = effective.findIndex(
           (s) => s.step_id === c.step.step_id,
         );
-        effective.splice(position + 1, 0, step);
+        const earlierIds = c.step
+          .checks!.slice(0, args.check_index)
+          .map((_, n) => `${c.step.step_id}_check_${n + 1}`);
+        const preceding = effective.filter((s) =>
+          earlierIds.includes(s.step_id),
+        ).length;
+        effective.splice(position + 1 + preceding, 0, step);
         this.validateEffective(c.instance, effective);
         c.instance.effective_steps = effective;
-        this.entries.splice(this.cursor, 0, {
+        this.entries.splice(this.cursor + preceding, 0, {
           instance: c.instance,
           phase: "test",
           step,
@@ -1029,7 +1056,13 @@ export class NativeTest {
     if (this.planned) throw new Error("计划已冻结；不能替换预期");
     const plan = trustedFile
       ? parsePlan(input)
-      : parseTextPlan(input, this.task, this.id);
+      : parseTextPlan(
+          input,
+          this.task,
+          this.id,
+          this.originalTask,
+          testLanguage(this.owner.ctx, this.task),
+        );
     if (this.timer) clearTimeout(this.timer);
     if (this.review) {
       this.draft = plan;
@@ -1039,7 +1072,15 @@ export class NativeTest {
       this.save();
       return this.state();
     }
-    return this.freeze(plan);
+    this.freeze(plan);
+    return {
+      ...this.state(),
+      plan_summary: textReview(
+        plan,
+        false,
+        testLanguage(this.owner.ctx, this.task),
+      ),
+    };
   }
   private validateEffective(instance: CaseRun, steps: Step[]): void {
     const original = this.run.plan.cases.find(
@@ -1049,7 +1090,11 @@ export class NativeTest {
   }
   private reviewMarkdown(): string {
     if (!this.draft) return "";
-    return textReview(this.draft);
+    return textReview(
+      this.draft,
+      true,
+      testLanguage(this.owner.ctx, this.task),
+    );
   }
   private freeze(plan: SuiteRun["plan"]): unknown {
     if (this.timer) clearTimeout(this.timer);

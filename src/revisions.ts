@@ -79,7 +79,10 @@ export function applyRevision(
     )
       throw new Error("实例已进入fail-fast");
     for (const added of proposal.added_steps) {
-      if (steps.some((s) => s.step_id === added.step_id))
+      if (
+        instance.effective_required_assertion_ids.includes(added.step_id) ||
+        steps.some((s) => s.step_id === added.step_id)
+      )
         throw new Error("重复检查点");
       const producer = added.assertion!.observation_ref.split(".")[0];
       if (

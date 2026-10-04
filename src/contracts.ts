@@ -95,6 +95,7 @@ export interface TestCase {
   cleanup: Step[];
 }
 export interface TestSuite {
+  planning?: { original_task: string; rationale: string };
   schema_version: "1";
   suite_id: string;
   name: string;
@@ -340,6 +341,15 @@ export const planSchema = {
   required: ["schema_version", "suite_id", "name", "source_refs", "cases"],
   additionalProperties: false,
   properties: {
+    planning: {
+      type: "object",
+      required: ["original_task", "rationale"],
+      additionalProperties: false,
+      properties: {
+        original_task: { type: "string" },
+        rationale: { type: "string" },
+      },
+    },
     schema_version: {
       type: "string",
       enum: ["1"],
@@ -470,7 +480,10 @@ export function parsePlan(input: unknown, allowIntents = false): TestSuite {
       throw new Error("至少需要一个必需业务断言");
     const seen = new Map<string, Step>();
     for (const s of [...c.preconditions, ...c.steps, ...c.cleanup]) {
-      if (s.kind === "intent" && (!allowIntents || !s.checks))
+      if (
+        (!allowIntents && s.checks !== undefined) ||
+        (s.kind === "intent" && (!allowIntents || !s.checks))
+      )
         throw new Error("文字步骤仅由自然语言规划入口生成");
       if (s.step_id.startsWith("__"))
         throw new Error("步骤ID不得使用保留前缀__");

@@ -424,6 +424,8 @@ it("自然语言计划由插件补齐固定字段，不要求模型编造版本�
   await t.manager.start(t.agent, "点赞不为0");
   const result = await t.call("test_submit_plan", reviewPlan());
   expect(result.isError).toBe(false);
+  expect(result.value.plan_summary).toContain("原始任务");
+  expect(result.value.plan_summary).toContain("拆分思路");
   const frozen = t.manager.sessions.get("origin")!.run.plan;
   expect(frozen.schema_version).toBe("1");
   expect(frozen.cases[0].cleanup).toEqual([]);
@@ -625,7 +627,7 @@ async function finishTextStep(t: ReturnType<typeof setup>) {
         assertion: {
           observation_ref: "step_1.likes",
           operator: "neq",
-          expected_json: "0",
+          expected_value: "0",
         },
       })
     ).isError,
@@ -848,15 +850,15 @@ it("文字计划只冻结短句，运行时按采集方式登记输出；缺少�
     assertion: {
       observation_ref: "step_1.likes",
       operator: "neq",
-      expected_json: "0",
+      expected_value: "0",
     },
   };
-  for (const expected_json of ['["0"]', '"0"', "{"])
+  for (const expected_value of ['["0"]', '"0"', "{"])
     expect(
       (
         await t.call("test_bind_check", {
           ...check,
-          assertion: { ...check.assertion, expected_json },
+          assertion: { ...check.assertion, expected_value },
         })
       ).isError,
     ).toBe(true);
@@ -883,7 +885,7 @@ it("纯接口文字步骤运行时确定响应结构，下一步只核对已采�
       name: "接口检查",
       steps: [
         { description: "请求httpbin接口" },
-        { description: "检查响应", checks: ["状态码为200"] },
+        { description: "检查响应", checks: ["状态码为200", "关键字为agent"] },
       ],
     });
     const run = t.manager.sessions.get("origin")!;
@@ -898,8 +900,46 @@ it("纯接口文字步骤运行时确定响应结构，下一步只核对已采�
       },
       reason: "保存完整响应",
     });
+    expect(
+      (
+        await t.call("test_propose_checkpoint", {
+          reason: "不得覆盖尚未绑定的文字检查",
+          source_refs: run.run.plan.source_refs,
+          added_steps: [
+            {
+              step_id: "step_2_check_1",
+              kind: "assertion",
+              description: "覆盖",
+              required: true,
+              depends_on: ["step_1"],
+              assertion: {
+                observation_ref: "step_1.response.status",
+                operator: "eq",
+                literal: 200,
+                rule_ref: "user_task",
+              },
+            },
+          ],
+          target_instance_ids: ["scenario--default"],
+          insertion_boundary: "step_2",
+          post_hoc: true,
+        })
+      ).isError,
+    ).toBe(true);
     await t.call("test_finish_step");
     expect(run.state().current?.step.step_id).toBe("step_2");
+    expect(
+      (
+        await t.call("test_bind_check", {
+          check_index: 1,
+          assertion: {
+            observation_ref: "step_1.response.body.args.keyword",
+            operator: "eq",
+            expected_value: "agent",
+          },
+        })
+      ).isError,
+    ).toBe(false);
     expect(
       (
         await t.call("test_bind_check", {
@@ -907,7 +947,7 @@ it("纯接口文字步骤运行时确定响应结构，下一步只核对已采�
           assertion: {
             observation_ref: "step_1.response.status",
             operator: "eq",
-            expected_json: "200",
+            expected_value: "200",
           },
         })
       ).isError,
@@ -918,7 +958,13 @@ it("纯接口文字步骤运行时确定响应结构，下一步只核对已采�
     expect(t.dispatched.some((n) => n.includes("playwright"))).toBe(false);
     expect(run.run.instances[0].effective_required_assertion_ids).toEqual([
       "step_2_check_1",
+      "step_2_check_2",
     ]);
+    expect(
+      run.run.instances[0].steps
+        .filter((s) => s.assertion)
+        .map((s) => s.step_id),
+    ).toEqual(["step_2_check_1", "step_2_check_2"]);
     await t.end();
   } finally {
     spy.mockRestore();
