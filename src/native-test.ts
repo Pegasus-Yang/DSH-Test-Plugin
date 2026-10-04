@@ -878,12 +878,7 @@ export class NativeTest {
             .filter((block) => block.type === "text")
             .map((block) => (block as { text: string }).text)
             .join("\n");
-          const compact = (text: string) => text.replace(/[\s#*>`_]/g, "");
-          if (
-            this.announcement.required.every((part) =>
-              compact(this.announcement!.text).includes(compact(part)),
-            )
-          ) {
+          if (!this.missingAnnouncement().length) {
             this.announcement = undefined;
             this.recorder.event("plan_announced", { session_id: this.id });
           }
@@ -1002,7 +997,9 @@ export class NativeTest {
           )
         )
           return (
-            "执行前必须先在正常对话中完整通报以下计划（无需用户确认），不要只说计划已批准：\n" +
+            "执行前请先补齐正常对话中的通报内容（无需用户确认）。缺少：" +
+            JSON.stringify(this.missingAnnouncement()) +
+            "\n完整计划如下：\n" +
             this.announcement.summary
           );
         if (this.review && !this.planned && exec.name === "exit_plan_mode") {
@@ -1069,6 +1066,13 @@ export class NativeTest {
       this.owner.ctx.effect(() => () => {
         if (!this.closed) void this.shutdown();
       }),
+    );
+  }
+  private missingAnnouncement(): string[] {
+    if (!this.announcement) return [];
+    const compact = (text: string) => text.replace(/[\s#*>`_]/g, "");
+    return this.announcement.required.filter(
+      (part) => !compact(this.announcement!.text).includes(compact(part)),
     );
   }
   private outputLanguage(): string {
@@ -1500,23 +1504,56 @@ export class NativeTest {
       this.cancelled = true;
       for (const i of this.run.instances) i.cancelled = aborted;
       if (!this.planned) {
-        // 规划没有触碰外部环境，只记录未完成的规划实例，不派发清理工具。
-        const instance = expand({
-          ...this.run.plan,
-          cases: [
-            {
-              case_id: "planning",
-              name: "规划未完成",
+        if (this.input) {
+          // 未批准的批量计划也保留全部输入实例，不能缩成一个规划占位实例。
+          this.run.manifest.plan_approved = false;
+          this.run.plan = this.draft ?? {
+            ...this.run.plan,
+            planning: {
+              original_task: this.originalTask,
+              rationale: "规划未完成，未执行",
+              input: structuredClone(this.input),
+            },
+            cases: this.input.instances.map((i) => ({
+              case_id: i.id,
+              name: `用例${i.case_number} · 数据行${i.data_row ?? "—"}（未执行）`,
               preconditions: [],
               steps: [],
               cleanup: [],
-              datasets: [{ data_id: "default", inputs: {}, expected: {} }],
-            },
-          ],
-        })[0]!;
-        instance.session_id = this.id;
-        instance.cancelled = aborted;
-        this.run.instances.push(instance);
+              datasets: [
+                {
+                  data_id: i.data_row ? `row_${i.data_row}` : "default",
+                  inputs: { ...i.parameters },
+                  expected: {},
+                },
+              ],
+            })),
+          };
+          this.run.instances = expand(this.run.plan);
+          for (const instance of this.run.instances) {
+            instance.session_id = this.id;
+            instance.cancelled = aborted;
+          }
+          this.recorder.json("plan.json", this.run.plan);
+        } else {
+          // 规划没有触碰外部环境，只记录未完成的规划实例，不派发清理工具。
+          const instance = expand({
+            ...this.run.plan,
+            cases: [
+              {
+                case_id: "planning",
+                name: "规划未完成",
+                preconditions: [],
+                steps: [],
+                cleanup: [],
+                datasets: [{ data_id: "default", inputs: {}, expected: {} }],
+              },
+            ],
+          })[0]!;
+          instance.session_id = this.id;
+          instance.cancelled = aborted;
+          this.run.instances.push(instance);
+        }
       }
       this.cleanupTurn = true;
       this.nudges = 0;

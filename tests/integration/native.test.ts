@@ -1249,3 +1249,66 @@ it("两个文字浏览器实例分别初始化清理，第一例失败不污染�
     ),
   ).toBe(true);
 });
+
+it("Markdown无参数时不要求通报空对象，缺少实质内容仍明确拦截", async () => {
+  const { createTextInput, parseCases } = await import(
+    "../../src/case-input.js"
+  );
+  const source = createTextInput(
+    parseCases("- 访问页面，检查点赞不为0", ".md"),
+  );
+  const t = setup();
+  await t.manager.start(t.agent, "cases.md", undefined, false, source);
+  const submitted = await t.call("test_submit_plan", {
+    name: "MD",
+    cases: [
+      {
+        instance_id: "case_1",
+        name: "页面",
+        steps: [{ description: "读取点赞", checks: ["点赞数不为0"] }],
+      },
+    ],
+  });
+  const args = {
+    capability: "browser",
+    allowed_targets: ["https://example.test"],
+    reason: "读取",
+  };
+  const rejected = await t.call("test_define_step", args);
+  expect(rejected.content[0].text).toContain("缺少");
+  await t.announce(submitted.value.plan_summary.replaceAll("```\n{}\n```", ""));
+  expect((await t.call("test_define_step", args)).isError).toBe(false);
+});
+
+it("CSV审核前取消保留全部未执行实例，不请求接口或派发清理", async () => {
+  const { createTextInput, parseCases } = await import(
+    "../../src/case-input.js"
+  );
+  const source = createTextInput(parseCases("验证${x}\n再次验证${x}", ".txt"), {
+    path: "data.csv",
+    content: "x\n001\n002",
+  });
+  const t = setup();
+  await t.manager.start(
+    t.agent,
+    "data.csv --file cases.txt",
+    undefined,
+    true,
+    source,
+  );
+  const run = t.manager.sessions.get("origin")!;
+  run.stop();
+  await t.end(true);
+  expect(run.closed).toBe(true);
+  expect(run.run.instances).toHaveLength(4);
+  expect(
+    run.run.instances.every(
+      (i) => i.status === "CANCELLED" && i.steps.length === 0,
+    ),
+  ).toBe(true);
+  expect(run.run.manifest.plan_approved).toBe(false);
+  expect(t.dispatched).toEqual([]);
+  expect(
+    readFileSync(join(run.recorder.directory, "report.html"), "utf8"),
+  ).toContain("计划未获批准");
+});

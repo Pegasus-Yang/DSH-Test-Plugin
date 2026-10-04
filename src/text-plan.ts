@@ -217,7 +217,9 @@ function batchReview(
       return [
         `### ${n + 1}. ${c.name} (${instance.id})`,
         `${label("来源用例", "Source case")}: ${instance.case_number}; ${label("数据行", "Data row")}: ${instance.data_row ?? "—"}`,
-        literalBlock(JSON.stringify(instance.parameters, null, 2)),
+        ...(Object.keys(instance.parameters).length
+          ? [literalBlock(JSON.stringify(instance.parameters, null, 2))]
+          : []),
         `**${label("展开后的任务", "Expanded task")}**`,
         literalBlock(instance.task),
         `**${label("拆分思路", "Approach")}**: ${c.rationale}`,
@@ -249,7 +251,9 @@ export function announcementParts(plan: TestSuite, language: string): string[] {
       ? input.instances.flatMap((i) => [
           i.id,
           i.task,
-          JSON.stringify(i.parameters, null, 2),
+          ...(Object.keys(i.parameters).length
+            ? [JSON.stringify(i.parameters, null, 2)]
+            : []),
         ])
       : []),
   ];
