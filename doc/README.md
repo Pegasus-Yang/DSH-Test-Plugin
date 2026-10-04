@@ -10,6 +10,7 @@ The English guides describe the current implementation. Historical design and ac
 
 ## 当前版本
 
+- [文本用例与参数化验收](project/文本用例与参数化验收.md)：0.6.0 TXT、Markdown、CSV、原生审核及多实例报告的实际结果。
 - [文字规划与中文对话验收](project/文字规划与中文对话验收.md)：0.5.0 文字步骤、运行时定义、原文与拆分思路、中文通报及验证边界。
 - [计划审核与接口测试验收](project/计划审核与接口测试验收.md)：0.4.0 原生 plan 审核、修改及真实 HTTP 报告核验。
 - [开发与验收记录](project/开发进度.md)：分步提交、真实运行证据与未完成范围。
