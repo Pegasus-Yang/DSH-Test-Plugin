@@ -105,7 +105,7 @@ it("新会话没有运行记录时也能读取隔离；启动错误明确说明�
     }),
   ).toMatchObject({
     kind: "error",
-    text: expect.stringContaining("输入框上方"),
+    text: expect.stringContaining("设置 → 测试插件 → 测试环境"),
   });
   expect(t.runner.sessions.size).toBe(0);
   expect(

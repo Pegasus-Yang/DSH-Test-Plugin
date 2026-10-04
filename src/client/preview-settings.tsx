@@ -1,4 +1,4 @@
-/** 设置页只编辑本插件偏好；MCP 接入留到下一次测试开始。 */
+/** 测试插件设置提供环境处置和预览偏好；MCP 接入留到下一次测试开始。 */
 import { useEffect, useState, useSyncExternalStore } from "react";
 import type {
   ConfigForms,
@@ -9,10 +9,14 @@ import {
   type PreviewPreferences,
   type PreviewSettingsInfo,
 } from "../preview-preferences.js";
+import { RecoveryPanel, type RecoveryActions } from "./recovery-panel.js";
 
 type Fields = { browserPreview?: PreviewPreferences };
 
-export function PreviewSettingsPage({ forms }: { forms: ConfigForms }) {
+export function PreviewSettingsPage({
+  forms,
+  ...recovery
+}: { forms: ConfigForms } & RecoveryActions) {
   const [info, setInfo] = useState<PreviewSettingsInfo>();
   const [error, setError] = useState("");
   useEffect(() => {
@@ -33,6 +37,9 @@ export function PreviewSettingsPage({ forms }: { forms: ConfigForms }) {
   }, []);
   return (
     <section className="dsh-test-settings" data-test-preview-settings>
+      <h2>测试环境</h2>
+      <p>测试提示环境未释放时，请先在这里处理，完成后重新执行测试命令。</p>
+      <RecoveryPanel {...recovery} />
       <h2>浏览器实时预览</h2>
       <p>
         让你看到测试正在操作的网页。接口测试或没有浏览器画面时，不会打开浮窗。

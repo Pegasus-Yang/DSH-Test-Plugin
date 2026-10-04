@@ -25,15 +25,16 @@ it("在真实 Cordis 依赖边界下可调用原生恢复命令，不能依赖�
     },
   } as never);
   ctx.provide("sidebarRightTabs", { register: () => () => {} } as never);
-  ctx.provide("sidebarRight", {} as never);
+  ctx.provide("sidebarRight", {
+    mounted: { getSnapshot: () => "one" },
+  } as never);
+  ctx.provide("configForms", {} as never);
   ctx.provide("remote", { commands: { execute } } as never);
   ctx.provide("remote.commands", { execute } as never);
   ctx.plugin(clientPlugin);
   try {
-    await vi.waitFor(() =>
-      expect(entries.has("harness-test-progress")).toBe(true),
-    );
-    const actions = entries.get("harness-test-progress").inject("one");
+    await vi.waitFor(() => expect(entries.has("harness-test")).toBe(true));
+    const actions = entries.get("harness-test").inject();
     await expect(actions.recover("a".repeat(64))).resolves.toBe("已释放");
     expect(execute).toHaveBeenCalledWith(
       "one",
@@ -50,6 +51,7 @@ function setup() {
     head: { append: vi.fn() },
   });
   const entries = new Map<string, any>();
+  const events = new Map<string, Function>();
   const execute = vi.fn(async () => ({
     ok: true,
     value: { result: { kind: "success", text: "测试环境已释放" } },
@@ -73,8 +75,10 @@ function setup() {
       tab = undefined;
     }),
   };
-  apply({
-    inject: vi.fn(() => () => {}),
+  const ctx = {
+    inject: (_names: string[], callback: Function) => callback(ctx),
+    on: (name: string, listener: Function) => events.set(name, listener),
+    configForms: {},
     remote: { commands: { execute } },
     effect: (effect: Function) => effect(),
     sidebarRight: sidebar,
@@ -85,7 +89,8 @@ function setup() {
         entries.set(entry.name + "/" + (entry.id ?? entry.key), entry);
       },
     },
-  } as never);
+  };
+  apply(ctx as never);
   const actions = entries
     .get("conversation.input.dock/harness-test-progress")
     .inject("one");
@@ -97,11 +102,16 @@ function setup() {
   } as ProgressSnapshot;
   return {
     actions,
+    settings: entries.get("settings.section/harness-test").inject(),
+    sessionActions: (id: string) =>
+      entries.get("conversation.input.dock/harness-test-progress").inject(id),
+    executed: (sessionId: string, name: string, result: object) =>
+      events.get("command/executed")!(sessionId, name, result),
     state,
     sidebar,
     execute,
-    switchSession: () => {
-      currentSession = "other";
+    switchSession: (sessionId = "other") => {
+      currentSession = sessionId;
     },
   };
 }
@@ -125,12 +135,13 @@ it("读取隔离不调用释放；确认操作走当前会话的原生命令，�
     })),
   );
   await expect(
-    t.actions.readRecovery(new AbortController().signal),
+    t.settings.readRecovery(new AbortController().signal),
   ).resolves.toMatchObject({ quarantine: null });
   expect(t.execute).not.toHaveBeenCalled();
-  expect(await t.actions.recover("a".repeat(64))).toContain("已释放");
+  t.switchSession();
+  expect(await t.settings.recover("a".repeat(64))).toContain("已释放");
   expect(t.execute).toHaveBeenCalledWith(
-    "one",
+    "other",
     `/test-recover --confirm ${"a".repeat(64)}`,
     [],
   );
@@ -138,7 +149,63 @@ it("读取隔离不调用释放；确认操作走当前会话的原生命令，�
     ok: true,
     value: { result: { kind: "error", text: "关闭失败，隔离仍保留" } },
   });
-  await expect(t.actions.recover("a".repeat(64))).rejects.toThrow("隔离仍保留");
+  await expect(t.settings.recover("a".repeat(64))).rejects.toThrow(
+    "隔离仍保留",
+  );
+});
+it("普通对话不提供隔离查询或释放入口，未执行测试命令时没有提示", () => {
+  const t = setup();
+  expect(t.actions).not.toHaveProperty("readRecovery");
+  expect(t.actions).not.toHaveProperty("recover");
+  expect(t.actions.notice.getSnapshot()).toBe("");
+  expect(t.sessionActions("other").notice.getSnapshot()).toBe("");
+  expect(t.execute).not.toHaveBeenCalled();
+});
+it("只有本插件命令失败才向发起对话提示，不影响其他对话；关闭提示不会释放环境", () => {
+  const t = setup();
+  const changed = vi.fn();
+  const unsubscribe = t.actions.notice.subscribe(changed);
+  t.executed("one", "help", { kind: "error", text: "其他命令失败" });
+  t.executed("one", "test-other-plugin", {
+    kind: "error",
+    text: "其他插件失败",
+  });
+  expect(t.actions.notice.getSnapshot()).toBe("");
+  t.executed("one", "test", {
+    kind: "error",
+    text: "Error: 请进入设置释放环境",
+  });
+  expect(t.actions.notice.getSnapshot()).toBe("请进入设置释放环境");
+  expect(t.sessionActions("other").notice.getSnapshot()).toBe("");
+  expect(changed).toHaveBeenCalledTimes(1);
+  t.executed("one", "help", { kind: "success" });
+  expect(t.actions.notice.getSnapshot()).toContain("设置");
+  t.actions.notice.dismiss();
+  expect(t.actions.notice.getSnapshot()).toBe("");
+  expect(t.execute).not.toHaveBeenCalled();
+  unsubscribe();
+  t.executed("one", "test-run", { kind: "error", text: "文件不存在" });
+  expect(changed).toHaveBeenCalledTimes(2);
+  t.executed("one", "test-run", { kind: "success" });
+  expect(t.actions.notice.getSnapshot()).toBe("");
+});
+it("设置释放失败保留已有提示，成功后清除；没有当前对话时不会发送原生命令", async () => {
+  const t = setup();
+  t.executed("one", "test-plan", { kind: "error", text: "请进入设置释放" });
+  t.execute.mockResolvedValueOnce({
+    ok: true,
+    value: { result: { kind: "error", text: "关闭失败" } },
+  });
+  await expect(t.settings.recover("a".repeat(64))).rejects.toThrow("关闭失败");
+  expect(t.actions.notice.getSnapshot()).toContain("设置");
+  await t.settings.recover("a".repeat(64));
+  expect(t.actions.notice.getSnapshot()).toBe("");
+  t.switchSession("");
+  t.execute.mockClear();
+  await expect(t.settings.recover("a".repeat(64))).rejects.toThrow(
+    "打开一个对话",
+  );
+  expect(t.execute).not.toHaveBeenCalled();
 });
 it("首帧自动打开一次，用户关闭后不反复弹出；手动重开只调用布局操作", () => {
   const { actions, state, sidebar } = setup();

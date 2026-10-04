@@ -1,5 +1,5 @@
 /** 会话进度与只读画面组件；所有业务状态来自服务端快照。 */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type {
   InjectFace,
   PropsRuntime,
@@ -12,9 +12,13 @@ import type {
   ProgressSnapshot,
   ProgressStep,
 } from "../progress-model.js";
-import { RecoveryPanel, type RecoveryActions } from "./recovery-panel.js";
 
-export interface ProgressActions extends RecoveryActions {
+export interface ProgressActions {
+  notice: {
+    getSnapshot: () => string;
+    subscribe: (listener: () => void) => () => void;
+    dismiss: () => void;
+  };
   read: (signal: AbortSignal) => Promise<ProgressSnapshot | null>;
   openDetails: () => void;
   openPreview: (state: ProgressSnapshot) => void;
@@ -207,6 +211,10 @@ function Heading({
 export function ProgressDock(
   props: PropsRuntime<"conversation.input.dock"> & InjectFace<ProgressActions>,
 ) {
+  const notice = useSyncExternalStore(
+    props.notice.subscribe,
+    props.notice.getSnapshot,
+  );
   const { snapshot, failed, now } = useProgress(props);
   useEffect(() => {
     if (snapshot && !failed) props.followPreview(snapshot);
@@ -214,10 +222,20 @@ export function ProgressDock(
   const instance = snapshot ? selectedInstance(snapshot) : undefined;
   return (
     <>
-      <RecoveryPanel
-        readRecovery={props.readRecovery}
-        recover={props.recover}
-      />
+      {notice && (
+        <section
+          className="dsh-test-command-notice"
+          data-test-command-notice
+          aria-label="测试命令提示"
+        >
+          <p role="alert">{notice}</p>
+          <div className="dsh-test-actions">
+            <button type="button" onClick={props.notice.dismiss}>
+              关闭提示
+            </button>
+          </div>
+        </section>
+      )}
       {snapshot && (
         <section
           className="dsh-test-dock"

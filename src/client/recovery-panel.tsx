@@ -1,4 +1,4 @@
-/** 在新会话输入区也展示隔离原因，用户确认后才执行资源恢复。 */
+/** 仅在测试插件设置页读取环境状态，用户确认后才执行资源恢复。 */
 import { useEffect, useState } from "react";
 import type { RecoverySnapshot } from "../recovery.js";
 
@@ -67,13 +67,17 @@ export function RecoveryPanel({ readRecovery, recover }: RecoveryActions) {
       setPending(false);
     }
   };
-  if (!quarantine && !message && !failed) return null;
   return (
     <section
       className="dsh-test-recovery"
       data-test-recovery
+      data-state={quarantine || failed ? "blocked" : "ready"}
       aria-label="测试环境处置"
     >
+      {!state && !failed && <p>正在读取测试环境状态…</p>}
+      {state && !quarantine && !failed && !message && (
+        <p role="status">测试环境已就绪，无需释放。</p>
+      )}
       {failed && <p role="alert">无法读取测试环境状态，请检查连接后重试。</p>}
       {quarantine && (
         <>

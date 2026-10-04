@@ -2,6 +2,7 @@
 import type { Context } from "@deepseek-ai/cordis";
 import type {} from "@deepseek-ai/dsh-commands";
 import type {} from "@deepseek-ai/dsh-api-remotes/client";
+import type {} from "@deepseek-ai/dsh-client-ui-commands/client";
 import type {} from "@deepseek-ai/dsh-client-ui-conversation/client";
 import type {} from "@deepseek-ai/dsh-client-ui-renderer/client";
 import type {} from "@deepseek-ai/dsh-client-ui-sidebar-right/client";
@@ -11,6 +12,7 @@ import type {} from "@deepseek-ai/dsh-client-ui-settings/client";
 import { PreviewSettingsPage } from "./preview-settings.js";
 import type { ProgressSnapshot } from "../progress-model.js";
 import type { RecoverySnapshot } from "../recovery.js";
+import type { RecoveryActions } from "./recovery-panel.js";
 import {
   PreviewPanel,
   ProgressDetails,
@@ -32,8 +34,46 @@ const progressKind = "harness-test-progress";
 const previewKind = "harness-test-preview";
 const progressId = "dsh-test-plugin:progress";
 const previewId = "dsh-test-plugin:preview";
+const testCommands = new Set([
+  "test",
+  "test-plan",
+  "test-run",
+  "test-data",
+  "test-status",
+  "test-stop",
+  "test-report",
+  "test-recover",
+  "test-release",
+]);
 
 export function apply(ctx: Context): void {
+  const recovery: RecoveryActions = {
+    readRecovery: async (signal) => {
+      const response = await fetch("/test-recovery", {
+        signal,
+        cache: "no-store",
+      });
+      if (!response.ok) throw new Error("隔离状态读取失败");
+      return (await response.json()) as RecoverySnapshot;
+    },
+    recover: async (token) => {
+      const sessionId = ctx.sidebarRight.mounted.getSnapshot();
+      if (!sessionId)
+        throw new Error(
+          "请先关闭设置并打开一个对话，再进入测试插件设置释放环境。",
+        );
+      const result = await ctx.remote.commands.execute(
+        sessionId,
+        `/test-recover --confirm ${token}`,
+        [],
+      );
+      if (!result.ok) throw new Error(result.error.message);
+      if (!result.value || result.value.result.kind === "error")
+        throw new Error(result.value?.result.text ?? "释放命令未被识别");
+      for (const record of faces.values()) record.setNotice("");
+      return result.value.result.text ?? "测试环境已释放，请重新发送测试命令。";
+    },
+  };
   ctx.inject(["configForms"], (settings) => {
     settings.slots.inject("settings.section", () =>
       settings.slots.register(
@@ -42,7 +82,7 @@ export function apply(ctx: Context): void {
           id: "harness-test",
           order: 35,
           label: () => "测试插件",
-          inject: () => ({ forms: settings.configForms }),
+          inject: () => ({ forms: settings.configForms, ...recovery }),
         },
         PreviewSettingsPage,
       ),
@@ -63,10 +103,23 @@ export function apply(ctx: Context): void {
       ctx.sidebarRightTabs.register({ id, kind, title: () => title }),
     );
 
-  const faces = new Map<string, ProgressActions>();
+  const faces = new Map<
+    string,
+    {
+      actions: ProgressActions;
+      setNotice: (message: string) => void;
+    }
+  >();
   const face = (sessionId: string): ProgressActions => {
     const existing = faces.get(sessionId);
-    if (existing) return existing;
+    if (existing) return existing.actions;
+    let notice = "";
+    const listeners = new Set<() => void>();
+    const setNotice = (message: string) => {
+      if (notice === message) return;
+      notice = message;
+      for (const listener of listeners) listener();
+    };
     const opened = new Set<string>();
     let tabId: TabId | undefined;
     let previewRun: string | undefined;
@@ -87,26 +140,15 @@ export function apply(ctx: Context): void {
         ctx.sidebarRight.toggleExpanded();
     };
     const actions: ProgressActions = {
-      readRecovery: async (signal) => {
-        const response = await fetch("/test-recovery", {
-          signal,
-          cache: "no-store",
-        });
-        if (!response.ok) throw new Error("隔离状态读取失败");
-        return (await response.json()) as RecoverySnapshot;
-      },
-      recover: async (token) => {
-        const result = await ctx.remote.commands.execute(
-          sessionId as Parameters<typeof ctx.remote.commands.execute>[0],
-          `/test-recover --confirm ${token}`,
-          [],
-        );
-        if (!result.ok) throw new Error(result.error.message);
-        if (!result.value || result.value.result.kind === "error")
-          throw new Error(result.value?.result.text ?? "释放命令未被识别");
-        return (
-          result.value.result.text ?? "测试环境已释放，请重新发送测试命令。"
-        );
+      notice: {
+        getSnapshot: () => notice,
+        subscribe: (listener) => {
+          listeners.add(listener);
+          return () => {
+            listeners.delete(listener);
+          };
+        },
+        dismiss: () => setNotice(""),
       },
       read: async (signal) => {
         const response = await fetch(
@@ -142,9 +184,20 @@ export function apply(ctx: Context): void {
           openPreview(state);
       },
     };
-    faces.set(sessionId, actions);
+    faces.set(sessionId, { actions, setNotice });
     return actions;
   };
+  ctx.on("command/executed", (sessionId, command, result) => {
+    if (!testCommands.has(command)) return;
+    face(sessionId);
+    faces
+      .get(sessionId)!
+      .setNotice(
+        result.kind === "error"
+          ? (result.text ?? "测试命令执行失败").replace(/^Error:\s*/, "")
+          : "",
+      );
+  });
   ctx.slots.inject("conversation.input.dock", () =>
     ctx.slots.register(
       {

@@ -274,11 +274,11 @@ export function apply(ctx: Context, config: PluginConfig = {}): void {
       const confirmation = /^--confirm ([a-f0-9]{64})$/.exec(rawInput.trim());
       if (!confirmation)
         throw new Error(
-          "请在输入框上方点击处理并释放，阅读说明并确认旧测试及外部操作已停止；也可使用 /test-release 提交实际处置证据。",
+          "请进入“设置 → 测试插件 → 测试环境”，点击处理并释放，阅读说明并确认旧测试及外部操作已停止；也可使用 /test-release 提交实际处置证据。",
         );
       return tests.recovery.recover(agent, confirmation[1]!, signal);
     },
-    "通过隔离提示卡片确认释放；命令形式为 --confirm 当前隔离编号",
+    "通过测试插件设置确认释放；命令形式为 --confirm 当前隔离编号",
   );
   register(
     "test-release",
