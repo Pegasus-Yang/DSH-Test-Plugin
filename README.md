@@ -58,6 +58,8 @@ pnpm dsh plugin --profile web add /绝对路径/DeepseekHarnessTestPlugin/artifa
 
 **保留当前安装的 tgz 文件。** profile 将其记录为本地 `file:` 依赖。后续统一使用 `dsh-test-plugin.tgz`；若删除旧包后安装报 ENOENT，请按 [旧包路径恢复流程](doc/deployment/安装与运维.md#安装报-enoent指向已删除的旧安装包) 先按包名 remove，再 add 新包，不要删除整个 profile。
 
+开发版本重新打包到同一路径时，请先执行 `pnpm dsh plugin --profile web remove dsh-test-plugin`，再执行上面的 add 命令；实测同路径同版本直接 add 可能仍复用旧内容。安装后重启服务并刷新网页。
+
 ### 3. 配置工作区与 Playwright MCP，启动 DSH
 
 安装包会自动登记插件，但不替你配置模型或浏览器。按 [安装与运维中的配置示例](doc/deployment/安装与运维.md#配置) 创建 `/绝对路径/DeepseekHarnessTestPlugin/.local/dsh-test.patch.yml`：指定插件 `workspace`、`outputRoot`，启用 native 工具模式，并为 UI 测试配置专用 Playwright MCP。纯 API 测试可省略 MCP 项。

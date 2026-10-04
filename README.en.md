@@ -60,6 +60,8 @@ If you already have a standalone `dsh` CLI, use `dsh` instead of `pnpm dsh`. Ins
 
 **Keep the installed tgz file.** The profile records it as a local `file:` dependency. Use the stable filename `dsh-test-plugin.tgz` for subsequent builds. If an old archive was deleted and installation reports ENOENT, follow the [old-path recovery procedure](doc/deployment/安装与运维.en.md#recover-from-a-deleted-package-path): remove the dependency by package name, then add the new archive. Do not delete the whole profile.
 
+For development updates at the same archive path, run `pnpm dsh plugin --profile web remove dsh-test-plugin` before the `add` command above. Re-adding the same path and version was observed to reuse old files. Restart the service and refresh the page after installation.
+
 ### 3. Configure the workspace and MCP, then start DSH
 
 The bundle registers the plugin but does not configure a model or a browser. Create `/absolute/path/DeepseekHarnessTestPlugin/.local/dsh-test.patch.yml` using the [deployment configuration](doc/deployment/安装与运维.en.md#configure-the-installed-plugin). Set `workspace`, `outputRoot`, native tool mode, and a dedicated Playwright MCP for UI tests. Omit the MCP entry for API-only tests.
