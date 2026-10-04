@@ -10,6 +10,8 @@ The English guides describe the current implementation. Historical design and ac
 
 ## 当前版本
 
+- [测试环境卡住怎么办](user-guide/测试环境卡住怎么办.md)：0.8.1 隔离提示、超时提醒、确认释放和失败处置。
+- [隔离提示与确认释放验收](project/隔离提示与确认释放验收.md)：0.8.1 新会话提示、确认门禁、原生恢复、失败保留和真实 Cordis 依赖验证。
 - [浏览器实时预览一步一步配置](user-guide/浏览器实时预览一步一步配置.md)：0.8.0 设置入口、首次准备、逐项填写、运行命令、关闭与排错。
 - [预览设置与自动接入验收](project/预览设置与自动接入验收.md)：0.8.0 设置持久化、MCP 接入、直接 /test、API 无浮窗及安装包验证。
 
