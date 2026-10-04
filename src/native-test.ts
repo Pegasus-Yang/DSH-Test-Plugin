@@ -43,6 +43,12 @@ import { captureStep } from "./adapters.js";
 import { evaluate } from "./assertions.js";
 import { writeReport } from "./report.js";
 import { ReportAccess } from "./report-access.js";
+import { PreviewManager } from "./preview.js";
+import {
+  projectProgress,
+  type ProgressSnapshot,
+  type ProgressPhase,
+} from "./progress-model.js";
 import { defaults, type TestConfig } from "./config.js";
 import {
   parseTextPlan,
@@ -119,12 +125,17 @@ interface Entry {
 export class NativeTests {
   readonly config: TestConfig;
   readonly reports: ReportAccess;
+  readonly preview: PreviewManager;
   readonly sessions = new Map<string, NativeTest>();
+  private readonly historicalProgress = new Map<string, SuiteRun | null>();
+  private starting = false;
   constructor(
     readonly ctx: Context,
     config: Partial<TestConfig>,
+    private readonly preparePreview?: () => Promise<void>,
   ) {
     this.config = { ...defaults, ...config };
+    this.preview = new PreviewManager(this.config.preview);
     for (const key of [
       "stepTimeoutMs",
       "cleanupTimeoutMs",
@@ -186,22 +197,28 @@ export class NativeTests {
       throw new Error(
         "共享环境处于隔离状态；确认外部操作已停止并重置后使用/test-release提交处置证据",
       );
-    if ([...this.sessions.values()].some((s) => !s.closed))
+    if (this.starting || [...this.sessions.values()].some((s) => !s.closed))
       throw new Error("已有测试使用共享浏览器，请先结束或停止该测试");
     if (review && !this.ctx.commands.find(agent, "plan"))
       throw new Error(
         "/test-plan 需要宿主启用原生 dsh-plan-mode 和用户审核通道",
       );
-    const test = new NativeTest(this, agent, task, review, input);
-    this.sessions.set(agent.id, test);
+    this.starting = true;
     try {
-      if (review) await test.enterPlanMode();
-      test.attach();
-      if (plan !== undefined) test.submit(plan, true);
-      return await test.start(task);
-    } catch (error) {
-      test.dispose();
-      throw error;
+      await this.preparePreview?.();
+      const test = new NativeTest(this, agent, task, review, input);
+      this.sessions.set(agent.id, test);
+      try {
+        if (review) await test.enterPlanMode();
+        test.attach();
+        if (plan !== undefined) test.submit(plan, true);
+        return await test.start(task);
+      } catch (error) {
+        test.dispose();
+        throw error;
+      }
+    } finally {
+      this.starting = false;
     }
   }
   reportId(sessionId: string): string | undefined {
@@ -228,6 +245,32 @@ export class NativeTests {
         /* 不把损坏记录作为当前会话报告。 */
       }
     }
+  }
+  presentation(sessionId: string): ProgressSnapshot | null {
+    const current = this.sessions.get(sessionId);
+    if (current) return current.presentation();
+    if (!this.historicalProgress.has(sessionId)) {
+      const id = this.reportId(sessionId);
+      this.historicalProgress.set(
+        sessionId,
+        id
+          ? (JSON.parse(
+              readFileSync(
+                join(this.config.outputRoot, id, "results.json"),
+                "utf8",
+              ),
+            ) as SuiteRun)
+          : null,
+      );
+    }
+    const run = this.historicalProgress.get(sessionId);
+    return run
+      ? projectProgress({
+          run,
+          phase: "finished",
+          reportUrl: this.reports.url(run.suite_run_id),
+        })
+      : null;
   }
   quarantine(run: SuiteRun, reason: string): void {
     run.resource_quarantined = true;
@@ -259,6 +302,7 @@ export class NativeTests {
   async shutdown(): Promise<void> {
     for (const test of this.sessions.values())
       if (!test.closed) await test.shutdown();
+    await this.preview.shutdown();
   }
 }
 
@@ -323,7 +367,7 @@ export class NativeTest {
       incomplete: false,
       resource_quarantined: false,
       manifest: {
-        plugin_version: "0.6.0",
+        plugin_version: "0.8.0",
         plan_review: review,
         execution: "native-conversation",
         origin_session_id: agent.id,
@@ -1394,6 +1438,34 @@ export class NativeTest {
           : "调用test_finish生成报告并在回复中给出链接",
     };
   }
+  presentation(): ProgressSnapshot {
+    const phase: ProgressPhase =
+      this.cleanupTurn || this.current?.phase === "cleanup"
+        ? "cleanup"
+        : this.cancelled
+          ? "stopping"
+          : this.planned
+            ? "executing"
+            : this.draft
+              ? "reviewing"
+              : "planning";
+    return this.recorder.sanitize(
+      projectProgress({
+        run: this.run,
+        plan: this.draft ?? this.run.plan,
+        phase,
+        ...(this.current
+          ? {
+              current: {
+                case_run_id: this.current.instance.case_run_id,
+                step_id: this.current.step.step_id,
+              },
+            }
+          : {}),
+        reportUrl: this.owner.reports.url(this.run.suite_run_id),
+      }),
+    ) as unknown as ProgressSnapshot;
+  }
   private bind(id: string, name: string, args: unknown): void {
     if (!this.current || this.calls.has(id) || this.reportReady) return;
     const call: CallRecord = {
@@ -1671,6 +1743,11 @@ export class NativeTest {
   }
   private save(): void {
     this.recorder.snapshot(this.run);
+    try {
+      this.owner.preview.sync(this.run);
+    } catch (error) {
+      this.owner.ctx.logger.warn("更新浏览器预览归属失败：%s", String(error));
+    }
   }
   private emergency(error: unknown): void {
     this.run.incomplete = true;

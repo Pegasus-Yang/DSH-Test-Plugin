@@ -1,5 +1,16 @@
 /** 测试配置与默认值。 */
 import { resolve } from "node:path";
+import type { Volatile } from "@deepseek-ai/cordis";
+import z from "@deepseek-ai/schemastery";
+import {
+  previewPreferenceDefaults,
+  type PreviewPreferences,
+} from "./preview-preferences.js";
+export interface PreviewConfig {
+  workDir: string;
+  browscreenUrl: string;
+  browscreenProject?: string;
+}
 export interface TestConfig {
   workspace: string;
   outputRoot: string;
@@ -7,6 +18,7 @@ export interface TestConfig {
   cleanupTimeoutMs: number;
   cancelGraceMs: number;
   maxRevisions: number;
+  preview?: PreviewConfig;
 }
 export const defaults: TestConfig = {
   workspace: process.cwd(),
@@ -16,3 +28,40 @@ export const defaults: TestConfig = {
   cancelGraceMs: 10000,
   maxRevisions: 10,
 };
+
+export interface PluginConfig extends Partial<TestConfig> {
+  browserPreview?: Volatile<PreviewPreferences | undefined>;
+}
+const PreviewSchema = z.object({
+  workDir: z.string().required(),
+  browscreenUrl: z.string().required(),
+  browscreenProject: z.string(),
+});
+const PreferencesSchema = z.object({
+  enabled: z.boolean().default(false),
+  browscreenProject: z.string().default(""),
+  port: z
+    .number()
+    .step(1)
+    .min(1)
+    .max(65535)
+    .default(previewPreferenceDefaults.port),
+  mcpId: z.string().default(""),
+});
+// 对象 schema 默认补成 {}；保留“没有保存新偏好”与“明确关闭”的区别。
+delete PreviewSchema.meta.default;
+delete PreferencesSchema.meta.default;
+/** 只有预览偏好可即时保存；下一次测试读取它，不重载执行中的插件。 */
+export const Config = z.object({
+  workspace: z.string().default(defaults.workspace),
+  outputRoot: z.string().default(defaults.outputRoot),
+  stepTimeoutMs: z.number().default(defaults.stepTimeoutMs),
+  cleanupTimeoutMs: z.number().default(defaults.cleanupTimeoutMs),
+  cancelGraceMs: z.number().default(defaults.cancelGraceMs),
+  maxRevisions: z.number().default(defaults.maxRevisions),
+  preview: PreviewSchema,
+  browserPreview: PreferencesSchema.volatile(),
+}) as z<
+  Partial<TestConfig> & { browserPreview?: PreviewPreferences },
+  PluginConfig
+>;

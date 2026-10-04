@@ -8,11 +8,15 @@ import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { extname, join, relative, resolve, sep } from "node:path";
 import { fileArgument, loadDataInput, loadTextInput } from "./case-input.js";
 import { NativeTests } from "./native-test.js";
-import type { TestConfig } from "./config.js";
+import type { PluginConfig } from "./config.js";
+import type {} from "@deepseek-ai/dsh-settings";
+import { PreviewSetup } from "./preview-setup.js";
 import { reportPrefix } from "./report-access.js";
+import { ProgressAccess, progressPrefix } from "./progress-access.js";
 import { atomicJson, rebuild } from "./recorder.js";
 import { writeReport } from "./report.js";
 export { parsePlan } from "./contracts.js";
+export { Config } from "./config.js";
 export const name = "harness-test";
 export const inject = ["commands", "tools", "systemPrompt"] as const;
 declare module "@deepseek-ai/cordis" {
@@ -20,8 +24,30 @@ declare module "@deepseek-ai/cordis" {
     nativeTests: NativeTests;
   }
 }
-export function apply(ctx: Context, config: Partial<TestConfig> = {}): void {
-  const tests = new NativeTests(ctx, config);
+export function apply(ctx: Context, config: PluginConfig = {}): void {
+  const { browserPreview, ...runtimeConfig } = config;
+  const setup = new PreviewSetup(
+    ctx,
+    () => browserPreview?.get(),
+    runtimeConfig,
+  );
+  const tests = new NativeTests(ctx, runtimeConfig, async () => {
+    try {
+      await tests.preview.configure(await setup.prepare());
+    } catch (error) {
+      await tests.preview.configure(undefined);
+      tests.preview.unavailable(setup.failed(error));
+    }
+  });
+  ctx.inject(["settings"], (settings) => {
+    settings.effect(() =>
+      settings.settings.configure({ auto: false }, ctx.fiber),
+    );
+  });
+  const progress = new ProgressAccess(
+    (sessionId) => tests.presentation(sessionId),
+    tests.preview,
+  );
   ctx.provide("nativeTests", tests);
   ctx.inject(["webServer", "connection"], (web) => {
     tests.reports.origin = () => `http://127.0.0.1:${web.webServer.port}`;
@@ -31,10 +57,42 @@ export function apply(ctx: Context, config: Partial<TestConfig> = {}): void {
     web.effect(() =>
       web.webServer.register({
         kind: "prefix",
+        path: "/test-preview-settings",
+        handler: (req, res) => {
+          if (!web.connection.authorizeIndex(req, res)) return;
+          if (req.method !== "GET") {
+            res.writeHead(405);
+            res.end();
+            return;
+          }
+          res.writeHead(200, {
+            "Content-Type": "application/json; charset=utf-8",
+            "Cache-Control": "no-store",
+          });
+          res.end(JSON.stringify(setup.describe()));
+        },
+      }),
+    );
+    web.effect(() =>
+      web.webServer.register({
+        kind: "prefix",
         path: reportPrefix,
         handler: (req, res) => {
           if (web.connection.authorizeIndex(req, res))
             tests.reports.serve(req, res);
+        },
+      }),
+    );
+    web.effect(() =>
+      web.webServer.register({
+        kind: "prefix",
+        path: progressPrefix,
+        handler: (req, res) => {
+          if (web.connection.authorizeIndex(req, res))
+            void progress.serve(req, res).catch(() => {
+              if (!res.headersSent) res.writeHead(503);
+              res.end();
+            });
         },
       }),
     );
