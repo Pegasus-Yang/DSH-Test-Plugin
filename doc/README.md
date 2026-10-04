@@ -26,6 +26,7 @@ The English guides describe the current implementation. Historical design and ac
 - [开发与验收记录](project/开发进度.md)：分步提交、真实运行证据与未完成范围。
 - [当前实现](architecture/当前实现.md)：模块及数据流、支持边界。
 - [安装与运维](deployment/安装与运维.md)：构建、插件安装、MCP、预算及隔离处置。
+- [版本发布与Git标签](deployment/版本发布与Git标签.md)：发布步骤、版本与提交的对应表、历史标签补全及查找方法。
 - [使用说明](user-guide/使用说明.md)：命令、输入、断言及报告。
 
 ## 设计与实施
