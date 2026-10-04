@@ -4,7 +4,7 @@
 
 A TypeScript plugin that adds test planning, UI/API execution, evidence capture, deterministic assertions, and static HTML reports to **the current DeepSeek Harness (DSH) conversation**. Describe a task in natural language or run a prepared JSON test suite. The plugin uses DSH's normal model loop, tools, approvals, and conversation persistence; it does not create a separate execution agent or modify the host core.
 
-Current version: **0.8.1 (development release)**. An environment quarantine now has a visible warning, an elapsed-time alert, and a confirmation step for closing the test browser and releasing quarantine. Browser-close failures retain quarantine and show the outcome. The preview settings and CDP/first-frame gate remain. See the [recovery guide (Chinese)](doc/user-guide/测试环境卡住怎么办.md), [preview setup guide (Chinese)](doc/user-guide/浏览器实时预览一步一步配置.md), and [development record (Chinese)](doc/project/开发进度.md).
+Current version: **0.8.2 (development release)**. Environment status and release controls live in **Settings → 测试插件 → 测试环境**. A test command blocked by quarantine shows a notice only in the conversation that submitted it, directing the user to release the environment in settings and retry. Ordinary conversations without test commands show no quarantine warning. Confirmation, elapsed-time alerts, failure handling, preview settings, and the CDP/first-frame gate remain. See the [recovery guide (Chinese)](doc/user-guide/测试环境卡住怎么办.md), [preview setup guide (Chinese)](doc/user-guide/浏览器实时预览一步一步配置.md), and [development record (Chinese)](doc/project/开发进度.md).
 
 ## Features
 
