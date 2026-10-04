@@ -582,7 +582,7 @@ export class NativeTest {
     );
     tool(
       "test_capture",
-      "执行可信采集。运行时绑定传capture与reason，只能补采尚缺输出；固定计划和清理传空对象。",
+      "执行可信采集。运行时绑定传capture与reason，只能补采尚缺输出；固定计划和清理调用test_capture({})，也接受capture:{}，沿用既有采集定义。",
       {
         type: "object",
         properties: {
@@ -652,8 +652,10 @@ export class NativeTest {
                 "已有可信观察不能覆盖: " + name + "；只补采缺少的输出",
               );
           captures = structuredClone(args.capture);
-        } else if (args.capture) {
-          throw new Error("该步骤使用固定采集定义，请传空对象");
+        } else if (args.capture && Object.keys(args.capture).length) {
+          throw new Error(
+            "该步骤使用固定采集定义，调用test_capture({})，不要提供非空capture覆盖定义",
+          );
         }
         if (
           !Object.keys(captures).some(

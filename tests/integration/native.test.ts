@@ -234,6 +234,39 @@ it.each([
   },
 );
 
+it("固定采集与清理接受空capture而不允许覆盖冻结定义", async () => {
+  const t = setup();
+  await t.manager.start(t.agent, "点赞不为0", sample());
+  await t.step();
+  const run = t.manager.sessions.get("origin")!;
+  const plan = structuredClone(run.run.plan);
+  expect(
+    (
+      await t.call("test_capture", {
+        capture: { likes: { kind: "dom", mode: "number", selector: "#other" } },
+      })
+    ).isError,
+  ).toBe(true);
+  expect((await t.call("test_capture", { capture: {} })).isError).toBe(false);
+  expect((await t.call("test_finish_step")).isError).toBe(false);
+  expect(
+    (
+      await t.call("test_capture", {
+        capture: {
+          released: { kind: "dom", mode: "visible", selector: "body" },
+        },
+      })
+    ).isError,
+  ).toBe(true);
+  expect((await t.call("test_capture", { capture: {} })).isError).toBe(false);
+  expect((await t.call("test_finish_step")).isError).toBe(false);
+  expect((await t.call("test_finish")).value.statistics.PASS).toBe(1);
+  expect(run.run.plan).toEqual(plan);
+  expect(
+    run.run.instances[0].steps.find((s) => s.step_id === "__close")?.status,
+  ).toBe("SUCCEEDED");
+});
+
 it("允许正常追问并等待同一会话补充；其他会话不继承测试上下文", async () => {
   const t = setup();
   await t.manager.start(t.agent, "检查点赞");
