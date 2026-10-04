@@ -235,3 +235,14 @@ it("结束或切换运行时关闭旧浮窗，不把上一运行的画面留给�
   });
   expect(sidebar.openTab).toHaveBeenCalledTimes(1);
 });
+it("采集终止后关闭已有浮窗，不为失败状态重新打开窗口", () => {
+  const { actions, state, sidebar } = setup();
+  actions.followPreview({ ...state, preview: { ready: true } });
+  actions.followPreview({
+    ...state,
+    preview: { ready: false, failed: true, reason: "采集已退出" },
+  });
+  expect(sidebar.close).toHaveBeenCalledTimes(1);
+  expect(sidebar.openTab).toHaveBeenCalledTimes(1);
+  expect(actions.notice.getSnapshot()).toBe("");
+});

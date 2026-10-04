@@ -1,7 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import {
   mkdtempSync,
-  mkdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -26,15 +25,19 @@ function folder() {
   return root;
 }
 
-it("声明的设置生成可读取引用，非法端口在保存前拒绝，旧预览配置仍可加载", () => {
+it("设置与运行配置默认使用本机命令，非法端口在保存前拒绝", () => {
   const config = Config({
     preview: {
-      workDir: "/tmp/legacy",
+      workDir: "/tmp/preview-cli",
       browscreenUrl: "http://127.0.0.1:13390",
     },
   });
   expect(config.browserPreview?.get()).toBeUndefined();
-  expect(config.preview?.workDir).toBe("/tmp/legacy");
+  expect(config.preview?.browscreenExecutable).toBe("browscreen");
+  expect(
+    Config({ browserPreview: { enabled: false } }).browserPreview?.get()
+      ?.browscreenExecutable,
+  ).toBe("browscreen");
   expect(Config({ cancelGraceMs: 0.5 }).cancelGraceMs).toBe(0.5);
   expect(() =>
     Config({ browserPreview: { enabled: true, port: 65536 } }),
@@ -106,12 +109,6 @@ it("接入保留原有环境、浏览器参数和初始化脚本，重复准备�
 
 it("保存偏好不重启 MCP，下一次准备才接入；端口修改复用已有 MCP，关闭后不启动采集", async () => {
   const root = folder();
-  const project = join(root, "Browscreen");
-  mkdirSync(join(project, ".venv"), { recursive: true });
-  writeFileSync(
-    join(project, "pyproject.toml"),
-    "[project]\nname='browscreen'\n",
-  );
   const initializer = join(root, "cdp-publisher.cjs");
   writeFileSync(initializer, "module.exports = async () => {};\n");
   const preferences = createVolatile<PreviewPreferences | undefined>(undefined);
@@ -147,14 +144,14 @@ it("保存偏好不重启 MCP，下一次准备才接入；端口修改复用已
   expect(await setup.prepare()).toBeUndefined();
   set({
     enabled: true,
-    browscreenProject: project,
+    browscreenExecutable: "/tmp/installed browscreen/browscreen",
     port: 13390,
     mcpId: "selected",
   });
   expect(edit).not.toHaveBeenCalled();
   const prepared = await setup.prepare();
   expect(prepared).toMatchObject({
-    browscreenProject: project,
+    browscreenExecutable: "/tmp/installed browscreen/browscreen",
     browscreenUrl: "http://127.0.0.1:13390",
   });
   expect(edit).toHaveBeenCalledTimes(1);
@@ -174,8 +171,6 @@ it("保存偏好不重启 MCP，下一次准备才接入；端口修改复用已
 
 it("不存在或不支持的 MCP 不会被修改，错误原因可展示", async () => {
   const root = folder();
-  mkdirSync(join(root, ".venv"));
-  writeFileSync(join(root, "pyproject.toml"), "");
   const initializer = join(root, "cdp-publisher.cjs");
   writeFileSync(initializer, "");
   const edit = vi.fn();
@@ -187,7 +182,7 @@ it("不存在或不支持的 MCP 不会被修改，错误原因可展示", async
     ctx,
     () => ({
       enabled: true,
-      browscreenProject: root,
+      browscreenExecutable: "browscreen",
       port: 13390,
       mcpId: "missing",
     }),

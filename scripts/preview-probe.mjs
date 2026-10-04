@@ -5,6 +5,7 @@ import { readFile, writeFile, mkdir, readdir } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { spawn } from "node:child_process";
 import assert from "node:assert/strict";
+import { checkBrowscreen } from "../dist/browscreen-command.js";
 
 const directory = resolve(
   process.env.DSH_PREVIEW_PROBE_EVIDENCE ??
@@ -118,14 +119,11 @@ try {
   await new Promise((done) => listener.listen(0, "127.0.0.1", done));
   const previewPort = listener.address().port;
   await new Promise((done) => listener.close(done));
+  const detected = await checkBrowscreen(process.env.DSH_BROWSCREEN_EXECUTABLE);
+  assert(detected.ok, detected.message);
   sidecar = spawn(
-    "uv",
+    detected.executable,
     [
-      "run",
-      "--no-sync",
-      "--project",
-      resolve(process.env.DSH_BROWSCREEN_PROJECT ?? "../Browscreen"),
-      "browscreen",
       "--work-dir",
       directory,
       "--host",
@@ -134,7 +132,7 @@ try {
       String(previewPort),
     ],
     {
-      env: { ...process.env, UV_CACHE_DIR: join(directory, "uv-cache") },
+      shell: false,
       stdio: ["ignore", "pipe", "pipe"],
     },
   );

@@ -17,7 +17,7 @@ afterEach(() => {
   for (const root of roots.splice(0))
     rmSync(root, { recursive: true, force: true });
 });
-function setup() {
+function setup(authorized = true) {
   const root = mkdtempSync(join(tmpdir(), "test-commands-"));
   roots.push(root);
   type Definition = Parameters<Context["commands"]["register"]>[0];
@@ -33,7 +33,7 @@ function setup() {
         if (keys.includes("webServer"))
           effect({
             effect: (fn: () => unknown) => fn(),
-            connection: { authorizeIndex: () => true },
+            connection: { authorizeIndex: () => authorized },
             webServer: {
               port: 3080,
               register: (route: any) => {
@@ -63,6 +63,23 @@ function setup() {
       } as never);
   return { root, commands, execute, runner, routes };
 }
+
+it("安装检测路由继承宿主认证，未授权请求不能触发探测", () => {
+  const t = setup(false);
+  let touched = false;
+  t.routes.get("/test-preview-settings")(
+    { method: "POST", url: "/test-preview-settings/check" },
+    {
+      setHeader: () => {
+        touched = true;
+      },
+      end: () => {
+        touched = true;
+      },
+    },
+  );
+  expect(touched).toBe(false);
+});
 
 it("新会话没有运行记录时也能读取隔离；启动错误明确说明原因和处理入口", async () => {
   const t = setup();
