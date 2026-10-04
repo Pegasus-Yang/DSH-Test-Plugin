@@ -4,7 +4,7 @@
 
 简体中文 · [English](README.en.md)
 
-[版本 v0.8.3](https://github.com/Pegasus-Yang/DSH-Test-Plugin/tree/v0.8.3) · [更新日志](changelog.md) · [MIT 许可证](LICENSE) · [文档](doc/README.md) · [问题反馈](https://github.com/Pegasus-Yang/DSH-Test-Plugin/issues)
+[版本 v0.9.0](https://github.com/Pegasus-Yang/DSH-Test-Plugin/tree/v0.9.0) · [更新日志](changelog.md) · [MIT 许可证](LICENSE) · [文档](doc/README.md) · [问题反馈](https://github.com/Pegasus-Yang/DSH-Test-Plugin/issues)
 
 DSH Test Plugin 是 DeepSeek Harness（DSH）的原生 TypeScript 插件，支持网页和 GET JSON 接口测试。它复用当前对话的模型、工具、审批及会话记录，通过可信观察与确定性比较给出断言结果，并生成可离线查看的 HTML 报告。
 
@@ -85,7 +85,7 @@ pnpm dsh plugin --profile web add /绝对路径/DSH-Test-Plugin/artifacts/packag
 
 ## 浏览器实时预览
 
-在 **设置 → 测试插件 → 浏览器实时预览** 中保存 Browscreen 目录、采集端口和专用 Playwright MCP。准备完成后，下一次测试自动按需启动采集服务，浏览器仍可使用无头模式。
+先在 DSH 宿主安装 PyPI 的 `browscreen`（Python ≥3.14，支持稳定版本 `>=0.2.1,<0.3.0`）。在 **设置 → 测试插件 → 浏览器实时预览** 中启用、检测安装、选择采集端口及专用 Playwright MCP 并保存。命令默认是 `browscreen`，高级设置可填完整可执行文件路径；无需下载源码或提前启动服务。
 
 浮窗等待当前页面 CDP 和有效首帧；接口测试、没有 CDP 或画面尚未就绪时，不出现空浮窗。首次依赖准备、可编辑 MCP 注册及设置步骤见[逐步配置指南](doc/user-guide/浏览器实时预览一步一步配置.md)。
 

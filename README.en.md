@@ -4,7 +4,7 @@
 
 [简体中文](README.md) · English
 
-[Version v0.8.3](https://github.com/Pegasus-Yang/DSH-Test-Plugin/tree/v0.8.3) · [Changelog (Chinese)](changelog.md) · [MIT License](LICENSE) · [Documentation](doc/README.md) · [Issues](https://github.com/Pegasus-Yang/DSH-Test-Plugin/issues)
+[Version v0.9.0](https://github.com/Pegasus-Yang/DSH-Test-Plugin/tree/v0.9.0) · [Changelog (Chinese)](changelog.md) · [MIT License](LICENSE) · [Documentation](doc/README.md) · [Issues](https://github.com/Pegasus-Yang/DSH-Test-Plugin/issues)
 
 DSH Test Plugin is a native TypeScript plugin for DeepSeek Harness (DSH), supporting browser tests and HTTP GET JSON checks. It uses the current conversation's model, tools, approvals, and persistence, evaluates assertions against captured observations and sourced expectations, and produces static HTML reports.
 
@@ -85,7 +85,7 @@ File paths resolve against the plugin's configured `workspace`. Copy [examples](
 
 ## Live browser preview
 
-In **Settings → 测试插件 → 浏览器实时预览**, save the Browscreen directory, capture port, and dedicated Playwright MCP. Once dependencies are ready, the next test starts capture when needed, while the browser can remain headless.
+Install `browscreen` from PyPI on the DSH host first (Python ≥3.14; stable versions `>=0.2.1,<0.3.0`). In **Settings → 测试插件 → 浏览器实时预览**, enable preview, click 检测安装, select the capture port and dedicated Playwright MCP, and save. The command defaults to `browscreen`; advanced settings accept its absolute executable path. No source checkout or separate service startup is required.
 
 The floating preview waits for the current page's CDP and a valid first frame. API-only tests and unavailable browser frames show no empty preview. Follow the [step-by-step setup guide (Chinese)](doc/user-guide/浏览器实时预览一步一步配置.md) for dependencies and editable MCP registration.
 
