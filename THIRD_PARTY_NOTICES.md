@@ -2,6 +2,8 @@
 
 本项目原创代码使用MIT许可证。发行包依赖Ajv 8.17.1（MIT）；其运行时依赖fast-deep-equal、fast-uri、json-schema-traverse、require-from-string各自保留原许可证。
 
+文本文件导入使用 [mdast-util-from-markdown 2.0.2](https://github.com/syntax-tree/mdast-util-from-markdown)（MIT）解析 Markdown 语法树，以及 [csv-parse 6.1.0](https://csv.js.org/parse/)（MIT）解析标准 CSV。它们及传递依赖保留各自上游许可证。
+
 宿主peer依赖DeepSeek Harness及Cordis、Schemastery模块采用其上游MIT许可证；插件不复制或修改宿主核心源码。
 
 开发与实测工具包括TypeScript（Apache-2.0）、Vitest（MIT）、Prettier（MIT）、Playwright与Playwright MCP（Apache-2.0）、yaml（ISC）、@types/node（MIT）。这些工具不打包进插件dist。Chrome为用户系统已有浏览器，遵循其自身许可。
