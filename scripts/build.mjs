@@ -24,7 +24,11 @@ await build({
   format: "cjs",
   target: "es2022",
   jsx: "automatic",
-  external: ["react", "react/jsx-runtime"],
+  external: [
+    "react",
+    "react/jsx-runtime",
+    "@deepseek-ai/dsh-client-ui-primitives",
+  ],
   sourcemap: true,
   banner: {
     js: 'window.__ModuleLoader__.load({id:"dsh-test-plugin",factory:(require)=>{var module={exports:{}};var exports=module.exports;',

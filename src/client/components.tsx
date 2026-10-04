@@ -7,11 +7,21 @@ import type {
 import type {} from "@deepseek-ai/dsh-client-ui-conversation/client";
 import type {} from "@deepseek-ai/dsh-client-ui-sidebar-right/client";
 import type {} from "@deepseek-ai/dsh-client-ui-session/client";
-import type {
-  ProgressCase,
-  ProgressSnapshot,
-  ProgressStep,
-} from "../progress-model.js";
+import type { ProgressSnapshot, ProgressStep } from "../progress-model.js";
+
+import {
+  duration,
+  elapsed,
+  phaseLabels,
+  selectedInstance,
+  statusLabels,
+  tone,
+} from "./progress-view.js";
+import { ProgressCard } from "./progress-dock.js";
+import {
+  IconCheckOutlineRegular,
+  IconWarningOutlineRegular,
+} from "@deepseek-ai/dsh-client-ui-primitives";
 
 export interface ProgressActions {
   notice: {
@@ -23,47 +33,6 @@ export interface ProgressActions {
   openDetails: () => void;
   openPreview: (state: ProgressSnapshot) => void;
   followPreview: (state: ProgressSnapshot) => void;
-}
-const phaseLabels = {
-  planning: "正在规划",
-  reviewing: "等待计划审核",
-  executing: "执行中",
-  stopping: "正在停止",
-  cleanup: "正在清理",
-  finished: "已结束",
-  interrupted: "已中断",
-};
-const statusLabels: Record<string, string> = {
-  PENDING: "待执行",
-  RUNNING: "运行中",
-  SUCCEEDED: "已完成",
-  PASS: "通过",
-  FAIL: "失败",
-  ERROR: "错误",
-  BLOCKED: "阻塞",
-  SKIPPED: "跳过",
-  CANCELLED: "取消",
-  INCONCLUSIVE: "结论不足",
-};
-export function duration(milliseconds: number): string {
-  const seconds = Math.max(0, Math.floor(milliseconds / 1000));
-  return seconds < 60
-    ? `${seconds} 秒`
-    : `${Math.floor(seconds / 60)} 分 ${String(seconds % 60).padStart(2, "0")} 秒`;
-}
-function elapsed(step: ProgressStep, now: number): number {
-  return step.started_at && !step.finished_at && step.status === "RUNNING"
-    ? Math.max(0, now - Date.parse(step.started_at))
-    : step.duration_ms;
-}
-function tone(status: string): string {
-  return status === "RUNNING"
-    ? "running"
-    : ["PASS", "SUCCEEDED"].includes(status)
-      ? "pass"
-      : ["FAIL", "ERROR", "INCONCLUSIVE"].includes(status)
-        ? "error"
-        : "muted";
 }
 function useProgress(actions: ProgressActions, visible = true) {
   const [snapshot, setSnapshot] = useState<ProgressSnapshot | null>();
@@ -122,17 +91,6 @@ function useProgress(actions: ProgressActions, visible = true) {
     : Date.now();
   return { snapshot, failed, now };
 }
-function selectedInstance(
-  snapshot: ProgressSnapshot,
-): ProgressCase | undefined {
-  return (
-    snapshot.instances.find(
-      (instance) => instance.id === snapshot.current_instance_id,
-    ) ??
-    snapshot.instances.find((instance) => instance.status === "RUNNING") ??
-    snapshot.instances[0]
-  );
-}
 function StepFlow({
   steps,
   now,
@@ -153,11 +111,15 @@ function StepFlow({
           aria-current={step.status === "RUNNING" ? "step" : undefined}
         >
           <span className="dsh-test-node" aria-hidden="true">
-            {["PASS", "SUCCEEDED"].includes(step.status)
-              ? "✓"
-              : ["FAIL", "ERROR"].includes(step.status)
-                ? "!"
-                : index + 1}
+            {["PASS", "SUCCEEDED"].includes(step.status) ? (
+              <IconCheckOutlineRegular size={16} />
+            ) : ["FAIL", "ERROR", "BLOCKED", "INCONCLUSIVE"].includes(
+                step.status,
+              ) ? (
+              <IconWarningOutlineRegular size={16} />
+            ) : (
+              index + 1
+            )}
           </span>
           <span className="dsh-test-step-name">{step.description}</span>
           <span className="dsh-test-step-time">
@@ -219,7 +181,6 @@ export function ProgressDock(
   useEffect(() => {
     if (snapshot && !failed) props.followPreview(snapshot);
   }, [snapshot, failed, props.followPreview]);
-  const instance = snapshot ? selectedInstance(snapshot) : undefined;
   return (
     <>
       {notice && (
@@ -237,41 +198,12 @@ export function ProgressDock(
         </section>
       )}
       {snapshot && (
-        <section
-          className="dsh-test-dock"
-          data-test-progress
-          data-run-id={snapshot.run_id}
-          aria-label="测试执行进度"
-        >
-          <Heading state={snapshot} now={now} failed={failed} />
-          <div className="dsh-test-title" title={snapshot.title}>
-            {snapshot.title}
-            {snapshot.instances.length > 1 && instance
-              ? ` · 用例 ${snapshot.instances.indexOf(instance) + 1} / ${snapshot.instances.length}`
-              : ""}
-          </div>
-          {instance?.steps.length ? (
-            <StepFlow steps={instance.steps} now={now} />
-          ) : (
-            <span className="dsh-test-muted">正在拆分测试步骤</span>
-          )}
-          <div className="dsh-test-actions">
-            <button type="button" onClick={props.openDetails}>
-              查看步骤
-            </button>
-            {snapshot.preview.ready && !failed && (
-              <button type="button" onClick={() => props.openPreview(snapshot)}>
-                实时画面
-              </button>
-            )}
-            {snapshot.report_url && (
-              <a href={snapshot.report_url} target="_blank" rel="noreferrer">
-                测试报告
-              </a>
-            )}
-            <small>时间包含等待</small>
-          </div>
-        </section>
+        <ProgressCard
+          snapshot={snapshot}
+          now={now}
+          failed={failed}
+          actions={props}
+        />
       )}
     </>
   );
