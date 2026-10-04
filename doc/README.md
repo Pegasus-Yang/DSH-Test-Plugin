@@ -1,5 +1,13 @@
 # 文档导航
 
+## English documentation
+
+- [Project overview and quick start](../README.en.md)
+- [User guide](user-guide/使用说明.en.md)
+- [Installation and deployment](deployment/安装与运维.en.md)
+
+The English guides describe the current implementation. Historical design and acceptance records below are in Chinese; the report UI and some plugin messages also remain primarily Chinese.
+
 ## 当前版本
 
 - [文字规划与中文对话验收](project/文字规划与中文对话验收.md)：0.5.0 文字步骤、运行时定义、原文与拆分思路、中文通报及验证边界。
