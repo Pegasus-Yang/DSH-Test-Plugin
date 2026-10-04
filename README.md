@@ -1,172 +1,119 @@
-# DeepSeek Harness 测试插件
+# DSH Test Plugin
 
-简体中文 | [English](README.en.md)
+**在 DeepSeek Harness 对话中，用自然语言完成测试规划、执行、证据采集和报告。**
 
-在 **DeepSeek Harness（DSH）的当前对话** 中完成测试规划、UI/API 操作、证据采集、确定性断言和报告生成的 TypeScript 插件。用自然语言描述任务即可开始，也可以执行预先编写的 JSON 测试集合。插件复用 DSH 的模型循环、工具、审批和会话保存机制，不创建独立执行 Agent，也不修改宿主核心。
+简体中文 · [English](README.en.md)
 
-当前版本：**0.8.3（开发版本）**。底部步骤区采用天蓝色当前步骤面板，完整步骤按需展开，支持滚动、长文字和多实例连续编号；使用方法见[执行步骤与进度显示](doc/user-guide/执行步骤与进度显示.md)。环境状态和确认释放仍位于“设置 → 测试插件 → 测试环境”，普通对话不显示隔离提醒。预览配置见[逐步配置指南](doc/user-guide/浏览器实时预览一步一步配置.md)，验证范围见[开发与验收记录](doc/project/开发进度.md)。
+[版本 v0.8.3](https://github.com/Pegasus-Yang/DSH-Test-Plugin/tree/v0.8.3) · [MIT 许可证](LICENSE) · [文档](doc/README.md) · [问题反馈](https://github.com/Pegasus-Yang/DSH-Test-Plugin/issues)
 
-命令没有开始、环境未释放、预览不出现、构建或安装失败时，先查[常见问题速查与处理](doc/deployment/常见问题速查与处理.md)，按现象定位操作步骤和恢复标准。
+DSH Test Plugin 是 DeepSeek Harness（DSH）的原生 TypeScript 插件，支持网页和 GET JSON 接口测试。它复用当前对话的模型、工具、审批及会话记录，通过可信观察与确定性比较给出断言结果，并生成可离线查看的 HTML 报告。
 
-按版本查找代码或准备发布时，查看[版本发布与Git标签](doc/deployment/版本发布与Git标签.md)。
+在 DSH 输入框中描述一条测试：
 
-## 能做什么
+```text
+/test 访问ceshiren.com，搜索 agent，打开第一条搜索结果帖子，断言帖子的点赞数不为0
+```
 
-| 功能 | 使用方式与行为 |
+插件会展示文字计划，逐步执行、更新进度，最后给出测试结果和报告链接。需要先确认计划时，将 `/test` 改为 `/test-plan`。
+
+> 当前为开发版本，已验证适配 DSH `0.2.1-alpha.1`。请先按下文完成构建与安装；网页内容和模型执行可能变化，最终结果以报告中的观察、断言及清理状态为准。
+
+## 功能
+
+| 功能 | 说明 |
 | --- | --- |
-| 自然语言测试 | `/test` 将任务拆成业务短句和文字检查点，通报后直接执行 |
-| 先审核再执行 | `/test-plan` 使用原生 plan 模式，可要求修改，批准当前草案后才执行 |
-| 执行时调整操作 | 规划不访问目标；选择器、工具参数和采集方式在执行当前步骤时确定 |
-| UI 自动化 | 通过专用 Playwright MCP 浏览网页、搜索、点击并采集 DOM 数据和截图 |
-| 接口测试 | HTTP GET JSON 采集，验证状态码及响应字段；纯接口用例无需浏览器 |
-| 程序断言 | 从可信观察计算实际值，与有来源的预期比较；不能仅凭模型声称 PASS |
-| 对话内进度 | 当前步骤、完整步骤列表和实际耗时保留在同一会话 |
-| 浏览器实时画面 | 在“设置 → 测试插件”保存接入后，下次测试按需启动 Browscreen；仅在当前页面 CDP 和有效首帧就绪时出现浮窗，API 或无 CDP 任务不出现空浮窗 |
-| 静态报告 | 步骤、断言、实际/预期、工具调用、附件和筛选；最终回复提供查看链接和保存位置 |
-| 停止与清理 | 停止业务后等待在途结算，再在同一会话执行预授权清理；无法确认释放时隔离环境 |
-| JSON 集合 | 多用例、多数据行、依赖、准备及清理步骤；保留原始计划和运行账本 |
-| 文件用例与参数化 | TXT 每个非空行、Markdown 每个顶层列表项一条用例；CSV 首行参数名，其余记录逐行展开并审核 |
+| 自然语言规划 | 将任务拆成业务步骤和文字检查点；支持原生计划审核与修改 |
+| 网页与接口测试 | 通过专用 Playwright MCP 操作网页；采集 GET JSON 响应并校验状态码和字段 |
+| 可信断言 | 记录实际观察、预期及来源，用确定性比较判断结果 |
+| 文件与参数化 | 导入 TXT、Markdown、JSON 用例；CSV 数据展开后先审核再执行 |
+| 执行进度 | 天蓝色当前步骤面板，展示结算数量和耗时；完整列表按需展开，支持长文字和多实例编号 |
+| 浏览器实时画面 | 通过 Browscreen 显示无头浏览器画面；仅在当前页面 CDP 和有效首帧就绪后打开浮窗 |
+| 报告与收尾 | 静态 HTML 报告包含步骤、断言及附件；支持停止、资源清理和隔离环境处置 |
 
-## 安装到本地 DSH
+## 快速开始
 
-### 1. 准备环境并构建插件
+### 1. 准备环境
 
-需要 Node.js **22.19+**、pnpm **11.7.0**，以及已构建、已配置可用模型的本地 DSH **0.2.1-alpha.1**。本机验收使用 Node.js 22.22.3；其他 DSH 版本需要重新验证兼容性。宿主的依赖安装和构建请先按其自身文档完成。
+- Node.js **22.19+**，pnpm **11.7.0**。
+- 已构建并配置可用模型的本地 DeepSeek Harness **0.2.1-alpha.1**。
+- 网页测试需要专用 Playwright MCP 和 Chromium；仅做接口测试可跳过浏览器安装。
 
-在插件项目目录执行，替换示例中的绝对路径：
+宿主依赖和构建先按 DSH 自身文档完成。更换宿主或 MCP 版本后需要重新验证兼容性。
+
+### 2. 克隆、构建并打包
 
 ```sh
-cd /绝对路径/DeepseekHarnessTestPlugin
+git clone https://github.com/Pegasus-Yang/DSH-Test-Plugin.git
+cd DSH-Test-Plugin
 pnpm install
 node scripts/link-host.mjs /绝对路径/deepseek-harness
-pnpm typecheck
 pnpm build
 pnpm pack --out artifacts/package/dsh-test-plugin.tgz
 ```
 
-`link-host` 将开发依赖链接到本地已构建的宿主包，并在 `.local/host.json` 保存宿主路径；不修改宿主源码。仅执行 API 测试时无需安装浏览器；执行 UI 测试时继续运行：
+将示例路径换成你的本地 DSH 源码目录。`link-host` 只在插件目录链接宿主开发依赖，本机路径保存在被 Git 忽略的 `.local/` 中。
+
+网页测试还需在插件根目录执行：
 
 ```sh
 node scripts/install-browser.mjs
 ```
 
-### 2. 安装到 web profile
+### 3. 安装到 DSH
 
-在 **DSH 源码目录** 执行：
-
-```sh
-cd /绝对路径/deepseek-harness
-pnpm dsh plugin --profile web add /绝对路径/DeepseekHarnessTestPlugin/artifacts/package/dsh-test-plugin.tgz
-```
-
-已有独立 `dsh` CLI 时，可用 `dsh` 替代 `pnpm dsh`。默认安装到用户 DSH home；使用自定义 `DSH_HOME` 时，安装与启动必须指定同一个目录。
-
-**保留当前安装的 tgz 文件。** profile 将其记录为本地 `file:` 依赖。后续统一使用 `dsh-test-plugin.tgz`；若删除旧包后安装报 ENOENT，请按 [旧包路径恢复流程](doc/deployment/安装与运维.md#安装报-enoent指向已删除的旧安装包) 先按包名 remove，再 add 新包，不要删除整个 profile。
-
-开发版本重新打包到同一路径时，请先执行 `pnpm dsh plugin --profile web remove dsh-test-plugin`，再执行上面的 add 命令；实测同路径同版本直接 add 可能仍复用旧内容。安装后重启服务并刷新网页。
-
-### 3. 配置工作区与 Playwright MCP，启动 DSH
-
-安装包会自动登记插件，但不替你配置模型或浏览器。按 [安装与运维中的配置示例](doc/deployment/安装与运维.md#配置) 创建 `/绝对路径/DeepseekHarnessTestPlugin/.local/dsh-test.patch.yml`：指定插件 `workspace`、`outputRoot`，启用 native 工具模式，并为 UI 测试配置专用 Playwright MCP。纯 API 测试可省略 MCP 项。
-
-在 DSH 源码目录启动；已有服务请先正常停止，再使用原有启动参数加上此 patch，选择空闲端口：
+在 **DSH 源码目录** 执行，替换为刚生成的安装包绝对路径：
 
 ```sh
-pnpm dsh web --patch /绝对路径/DeepseekHarnessTestPlugin/.local/dsh-test.patch.yml --port 3080
+pnpm dsh plugin --profile web add /绝对路径/DSH-Test-Plugin/artifacts/package/dsh-test-plugin.tgz
 ```
 
-打开 DSH 输出的访问地址，进入测试工作区，使用标准模式创建会话。升级插件后须重启同一 profile 的宿主并刷新网页。插件已由 bundle 注册，配置 patch 只更新 `harness-test`，不要再插入一个同名实例。
+已有独立 `dsh` CLI 时可用 `dsh` 替代 `pnpm dsh`。随后按[安装与运维](doc/deployment/安装与运维.md#配置)配置测试 `workspace`、`outputRoot`、native 工具模式及专用 Playwright MCP，正常重启同一 Web profile 并刷新页面。
 
-## 开始使用
+**保留安装包文件。** profile 使用本地 `file:` 依赖；同路径升级时按[更新流程](doc/deployment/安装与运维.md#构建与打包)先 remove 再 add。使用自定义 `DSH_HOME` 时，安装与启动须使用同一个目录。
 
-以下是 **DSH 对话输入框中的命令**，不是终端命令。
+### 4. 在对话中执行测试
 
-不需要手写 JSON 即可运行多条用例：
+以下命令输入 **DSH 对话框**，不是终端。请逐条执行：
 
 ```text
-/test-run examples/httpbin-cases.txt
+/test-plan 发送GET请求到 https://httpbin.org/get?keyword=agent，验证HTTP状态码为200、返回的keyword为agent
 /test-run examples/httpbin-cases.md
-/test-plan --file examples/httpbin-cases.md
-```
-
-TXT 按非空行拆分；Markdown 按最外层有序或无序列表项拆分，项内段落、子列表和代码块整体保留。前两种入口通报全部文字计划后直接执行，第三种先审核。
-
-参数化入口始终先审核，可使用任务模板或用例文件：
-
-```text
-/test-data examples/httpbin-parameters.csv 请求https://httpbin.org/get?keyword=${keyword}，验证状态码为200，返回keyword为${keyword}
 /test-data examples/httpbin-parameters.csv --file examples/httpbin-parameterized.md
 ```
 
-CSV 首行为参数名，后续每条数据记录是一组值。每条用例使用全部数据行，例如 2 条用例 × 2 行数据 = 4 个执行实例。原生 plan 卡片会展示来源、原文、所有参数值、展开后的任务、数量及各实例步骤，批准后执行。值保留 `001`、空字符串等原意，`${参数名}` 只作一次文字替换。输入使用读取时快照，修改文件后需取消当前草案并重新提交。
+示例文件路径相对于插件配置的 `workspace`；使用其他工作区时，先将 [examples](examples) 中的文件复制过去。完整输入格式、审核过程和参数规则见[使用说明](doc/user-guide/使用说明.md)。
 
-直接规划并执行浏览器测试：
+## 浏览器实时预览
 
-```text
-/test 访问ceshiren.com，搜索 agent 关键字，并打开第一条搜索结果帖子，断言帖子的点赞数不为0
-```
+在 **设置 → 测试插件 → 浏览器实时预览** 中保存 Browscreen 目录、采集端口和专用 Playwright MCP。准备完成后，下一次测试自动按需启动采集服务，浏览器仍可使用无头模式。
 
-先审核接口测试计划：
+浮窗等待当前页面 CDP 和有效首帧；接口测试、没有 CDP 或画面尚未就绪时，不出现空浮窗。首次依赖准备、可编辑 MCP 注册及设置步骤见[逐步配置指南](doc/user-guide/浏览器实时预览一步一步配置.md)。
 
-```text
-/test-plan 发送GET请求到 https://httpbin.org/get?keyword=agent&client=dsh，验证HTTP状态码为200、返回的keyword为agent、client为dsh
-```
-
-审核卡片展示 **原始任务、拆分思路、步骤清单**。可以要求修改并补充意见；同意后才执行。`/test` 展示相同内容后直接执行，无需确认。缺少明确预期时，模型会在当前对话追问；无需提前提供未知页面的选择器或响应字段结构。
-
-执行工作区内的 JSON 示例：
-
-```text
-/test-run examples/ceshiren-agent.json
-/test-run examples/httpbin-get.json
-```
-
-逐条执行示例，不要同时共享同一浏览器环境。路径相对于插件配置的 `workspace`；使用其他工作区时，先将示例复制到该工作区。`/test-run` 接受 TXT、Markdown 或 JSON 路径；直接输入自然语言任务使用 `/test` 或 `/test-plan`。含空格的路径可以整体加引号。
+## 常用命令与报告
 
 | 命令 | 用途 |
 | --- | --- |
-| `/test-status` | 查看当前会话测试状态 |
-| `/test-stop` | 请求停止业务并完成允许的收尾；也可用原生“停止生成” |
-| `/test-report [运行ID]` | 重新生成报告；省略 ID 时只查当前会话 |
-| `/test-release <处置JSON路径>` | 核实停止和环境重置后，登记证据解除隔离 |
+| `/test <任务>` | 展示计划后直接执行 |
+| `/test-plan <任务>` | 先审核计划，再执行 |
+| `/test-run <文件>` | 执行 TXT、Markdown 或 JSON 用例 |
+| `/test-data <CSV> --file <用例文件>` | 展开参数数据，审核后执行 |
+| `/test-status` / `/test-stop` | 查看进度或请求停止并收尾 |
+| `/test-report [运行ID]` | 从记录重建报告；省略 ID 使用当前会话 |
 
-过程说明优先使用 DSH 显式语言偏好；未设置时，中文任务使用中文，否则回退到英文。输入区上方突出当前步骤和耗时，点击“查看全部步骤（数量）”展开可滚动列表，列表底部可打开准备、清理及完整详情；配置画面接入见 [安装与运维](doc/deployment/安装与运维.md#浏览器实时预览可选)。工具记录可能被 DSH 默认折叠，可以展开或查看“轨迹”。详细行为见 [使用说明](doc/user-guide/使用说明.md)。
+输入框上方显示步骤与耗时，最终回复提供报告链接及保存位置。报告为静态 HTML，可通过 DSH 登录态在线查看，也可随运行目录离线保存。[进度说明](doc/user-guide/执行步骤与进度显示.md) · [报告与运行数据](doc/user-guide/使用说明.md#查看测试报告) · [常见问题速查](doc/deployment/常见问题速查与处理.md)
 
-## 报告与运行数据
+环境未释放时，先进入 **设置 → 测试插件 → 测试环境**，确认旧操作已停止后按提示处置，再重新提交用例。详见[环境恢复指南](doc/user-guide/测试环境卡住怎么办.md)。
 
-最终回复给出 **查看测试报告** 链接及完整保存位置，无需手动查找运行 ID。HTTP 链接复用 DSH 服务和登录态；报告本身是静态 HTML，也可直接离线打开，无需额外报告服务。
+## 当前支持范围
 
-默认产物位置为插件 `outputRoot` 下的独立运行目录：
+- 仅支持 DSH native 工具模式；共享环境串行运行。多对话独立浏览器并行执行属于[后续优化](doc/design/多对话并行测试优化方案.md)。
+- 接口可信采集目前支持 **GET JSON**；浏览器自动预览使用本机 Chromium Playwright MCP，当前支持单活动页面。
+- JSON 用例执行仍参与模型循环；报告重建可以不调用模型，不代表无模型测试回放。
+- 报告界面及部分命令提示以中文为主。取消、证据缺失、工具错误或必要清理失败不会算作通过。
 
-```text
-artifacts/runs/<运行ID>/
-├── plan.json       # 原始计划
-├── events.jsonl    # 事件账本
-├── results.json    # 运行结果、观察与断言
-├── evidence/       # 截图和响应等证据
-└── report.html     # 静态报告
-```
+## 开发与贡献
 
-报告提供概览、用例筛选、步骤、断言、附件和运行信息，可对照实际值、预期及来源。复制整个目录可保留完整证据。`/test-report` 从账本重建为 `report-rebuilt.html` 和 `results-rebuilt.json`，不覆盖原始结果，也不重新调用模型或业务工具。
-
-## 当前边界
-
-- 仅支持 DSH native 工具模式，同一共享环境串行运行；浏览器工具名使用 `mcp__playwright__` 前缀。
-- 接口可信采集目前支持 **GET JSON**，不支持 POST 或自定义请求体。
-- JSON 执行仍使用 DSH 模型循环；只有报告重建不需要模型，不等同于无模型回放。
-- 自然语言规划和定位可能重试；简单数字条件有语义校验，但不保证任意自然语言的完整语义证明。
-- 对话可使用英文；报告界面和部分命令提示目前仍以中文为主。
-- 取消、证据缺失、工具错误和清理失败不会算作通过。历史设计清单中未执行的检查仍保留未验收状态。
-
-## 开发与文档
-
-如需独立开发环境，在完成前面的依赖安装、link-host、build 和浏览器安装后，从插件根目录运行：
-
-```sh
-node scripts/start-host.mjs
-```
-
-该辅助脚本默认在端口 13379 启动隔离 DSH home，加载本地 `dist`，从现有 `~/.dsh` 读取特定模型配置及凭据引用。它不是部署到现有 profile 的替代安装步骤；适用条件及变量见 [安装与运维](doc/deployment/安装与运维.md#隔离开发环境)。认证地址保存在 `.local/host-state.json`，不要公开该文件。
+完成依赖安装和 `link-host` 后，在插件根目录运行：
 
 ```sh
 pnpm typecheck
@@ -175,11 +122,21 @@ pnpm test:unit
 pnpm test:integration
 ```
 
-真实网页验收需要已运行的 DSH、模型和相应工具，不能由构建成功替代。构建产物、运行记录、日志和本地配置均由 `.gitignore` 排除。
+隔离开发服务和真实验收方法见[安装与运维](doc/deployment/安装与运维.md#隔离开发环境)。提交问题时请说明插件、DSH、Node.js 和 MCP 版本、复现步骤及已脱敏的错误信息；提交改动前完成相关检查并更新受影响文档。
 
-- [使用说明](doc/user-guide/使用说明.md) / [User guide](doc/user-guide/使用说明.en.md)
-- [安装与运维](doc/deployment/安装与运维.md) / [Installation and deployment](doc/deployment/安装与运维.en.md)
-- [当前实现](doc/architecture/当前实现.md)与[完整文档导航](doc/README.md)
-- [开发与验收记录](doc/project/开发进度.md)
+本地凭据、认证地址、日志、截图证据和运行报告应保存在 `.local/` 或 `artifacts/`，不要加入公开提交。发布新版本时按[版本发布与 Git 标签](doc/deployment/版本发布与Git标签.md)创建附注标签。
 
-许可证：[MIT](LICENSE)。第三方说明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+## 文档
+
+| 文档 | 内容 |
+| --- | --- |
+| [完整文档导航](doc/README.md) | 使用、部署、设计和历史验收记录 |
+| [使用说明](doc/user-guide/使用说明.md) | 命令、输入、参数、断言和报告 |
+| [安装与运维](doc/deployment/安装与运维.md) | 构建、安装、配置、升级及独立开发环境 |
+| [常见问题速查](doc/deployment/常见问题速查与处理.md) | 环境残留、预览、安装和报告问题 |
+| [当前架构](doc/architecture/当前实现.md) | 模块职责与执行链路 |
+| [开发与验收记录](doc/project/开发进度.md) | 实测范围和历史问题 |
+
+## 许可证
+
+本项目采用 [MIT](LICENSE) 许可证。第三方依赖及图标许可见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
