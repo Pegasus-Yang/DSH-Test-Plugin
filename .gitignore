@@ -12,6 +12,8 @@ coverage/
 .local/
 .dsh/
 .runtime/
+.credentials.yaml
+.credentials.yml
 
 # 调试、测试输出与临时文件；审核结论保存在 doc 中
 artifacts/
@@ -20,11 +22,15 @@ test-results/
 playwright-report/
 *.log
 *.trace
+*.tgz
 *.tmp
 *.swp
 .DS_Store
 .cache/
 tmp/
+
+# 本机视觉验收原始记录；公开结论保存在 doc 中
+/design-qa.md
 
 # 本机IDE配置
 .idea/

@@ -27,6 +27,7 @@ The English guides describe the current implementation. Historical design and ac
 - [当前实现](architecture/当前实现.md)：模块及数据流、支持边界。
 - [安装与运维](deployment/安装与运维.md)：构建、插件安装、MCP、预算及隔离处置。
 - [版本发布与Git标签](deployment/版本发布与Git标签.md)：发布步骤、版本与提交的对应表、历史标签补全及查找方法。
+- [GitHub公开内容检查](project/GitHub公开内容检查.md)：凭据与历史内容检查、本机资料整理及README公开阅读结构。
 - [使用说明](user-guide/使用说明.md)：命令、输入、断言及报告。
 
 ## 设计与实施
