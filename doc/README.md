@@ -24,6 +24,7 @@ The English guides describe the current implementation. Historical design and ac
 
 ## 设计与实施
 
+- [多对话并行测试优化方案](design/多对话并行测试优化方案.md)：后续优化，尚未实施；记录当前共享资源问题、CLI/独立 MCP 候选、运行与预览隔离、分阶段实施和验收标准。
 - [执行进度与浏览器实时预览方案](design/执行进度与浏览器实时预览方案.md)及[实施方案](design/执行进度与实时预览实施方案.md)：步骤图、实际耗时、DSH 原生浮窗和仅在 CDP 与首帧就绪时启用的 Browscreen 接入。
 - [文本用例与 CSV 参数化方案](design/文本用例与CSV参数化方案.md)及[实施方案](design/文本用例与CSV参数化实施方案.md)：0.6.0 文件用例、参数预览和原生审核的改造依据。
 
