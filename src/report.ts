@@ -86,6 +86,10 @@ export function writeReport(
     const a = s.assertion!;
     return `<div class="comparison"><div><label>实际值 ACTUAL</label><pre>${json(a.actual)}</pre></div><div><label>预期值 EXPECTED · ${escape(a.operator)}</label><pre>${json(a.expected)}</pre></div><div class="comparison-footer"><span>${escape(a.reason)}</span>${a.evidence_refs[0] ? `<button class="evidence-button" data-evidence="evidence-${caseIndex}-${escape(a.evidence_refs[0])}">${icon("photo")} 查看证据</button>` : ""}</div></div><details class="inspect"><summary>断言来源与操作数 · 修订 ${a.plan_revision}</summary><pre>${json(a.operand_snapshot)}</pre></details>`;
   };
+  const input = run.plan.planning?.input;
+  const sourceOf = (caseId: string) =>
+    input?.instances.find((item) => item.id === caseId);
+  const caseKey = (caseId: string) => sourceOf(caseId)?.template_id ?? caseId;
   const cases = run.instances
     .map((i, index) => {
       const caseMs = i.steps.reduce((n, s) => n + s.duration_ms, 0);
@@ -104,6 +108,10 @@ export function writeReport(
       const textPlan = textSteps.length
         ? `<details class="inspect"><summary>原始文字步骤与检查点</summary><ol>${textSteps.map((s) => `<li>${escape(s.description)}${s.checks?.length ? `<p>检查：${s.checks.map(escape).join("；")}</p>` : ""}</li>`).join("")}</ol><p>具体工具、采集方式和比较器在执行当前步骤时确定，见下方执行记录。</p></details>`
         : "";
+      const source = sourceOf(i.case_id);
+      const sourceInfo = source
+        ? `<details class="inspect"><summary>用例来源与参数 · 用例 ${source.case_number} · 数据行 ${source.data_row ?? "—"}</summary><p>用例文件：${escape(input?.case_file?.path ?? "对话模板")}；CSV：${escape(input?.csv_file?.path ?? "无")}</p><h3>原始用例</h3><pre>${escape(input!.templates.find((t) => t.id === source.template_id)!.text)}</pre><h3>参数值</h3><pre>${json(source.parameters)}</pre><h3>展开后的任务</h3><pre>${escape(source.task)}</pre></details>`
+        : "";
       const focus =
         i.steps.find((s) =>
           ["FAIL", "ERROR", "INCONCLUSIVE"].includes(s.status),
@@ -118,7 +126,7 @@ export function writeReport(
         (s) =>
           s.assertion || i.effective_required_assertion_ids.includes(s.step_id),
       );
-      return `<article class="case" id="case-${index}" data-case="${escape(i.case_id)}" data-data="${escape(i.data_id)}" data-status="${escape(i.status)}" data-search="${escape([i.name, i.case_id, i.data_id, i.status].join(" ").toLocaleLowerCase())}"${index ? " hidden" : ""}><header class="case-head"><div class="case-heading">${i.status === "PASS" ? icon("circle-check", "status-icon") : ""}<h2>${escape(i.name)}</h2>${badge(i.status)}</div><div class="case-meta"><span>用例标识<b>${escape(i.case_id)}</b></span><span>数据集<b>${escape(i.data_id)}</b></span><span>步骤耗时<b>${duration(caseMs)}</b></span></div></header>${i.issues.length ? `<aside class="issue">${i.issues.map(escape).join("<br>")}</aside>` : ""}${i.unsettled_call_ids.length ? `<aside class="issue danger">尚有 ${i.unsettled_call_ids.length} 次未结算调用；外部执行可能仍未停止。</aside>` : ""}${textPlan}<div class="tabs" role="tablist" aria-label="用例详情">${[
+      return `<article class="case" id="case-${index}" data-case="${escape(caseKey(i.case_id))}" data-data="${escape(i.data_id)}" data-status="${escape(i.status)}" data-search="${escape([i.name, i.case_id, i.data_id, i.status].join(" ").toLocaleLowerCase())}"${index ? " hidden" : ""}><header class="case-head"><div class="case-heading">${i.status === "PASS" ? icon("circle-check", "status-icon") : ""}<h2>${escape(i.name)}</h2>${badge(i.status)}</div><div class="case-meta"><span>用例标识<b>${escape(i.case_id)}</b></span><span>数据集<b>${escape(i.data_id)}</b></span><span>步骤耗时<b>${duration(caseMs)}</b></span></div></header>${i.issues.length ? `<aside class="issue">${i.issues.map(escape).join("<br>")}</aside>` : ""}${i.unsettled_call_ids.length ? `<aside class="issue danger">尚有 ${i.unsettled_call_ids.length} 次未结算调用；外部执行可能仍未停止。</aside>` : ""}${sourceInfo}${textPlan}<div class="tabs" role="tablist" aria-label="用例详情">${[
         ["steps", "步骤"],
         ["assertions", "断言"],
         ["attachments", "附件"],
@@ -133,7 +141,13 @@ export function writeReport(
     })
     .join("");
   const options = (key: "case_id" | "data_id" | "status") =>
-    [...new Set(run.instances.map((i) => i[key]))]
+    [
+      ...new Set(
+        run.instances.map((i) =>
+          key === "case_id" ? caseKey(i.case_id) : i[key],
+        ),
+      ),
+    ]
       .map(
         (v) =>
           `<option value="${escape(v)}">${escape(key === "status" ? (labels[v] ?? v) : v)}</option>`,
@@ -160,7 +174,7 @@ export function writeReport(
     )
     .join(
       "",
-    )}<small>静态测试报告<br>可离线查看</small></nav><main class="app"><header class="run-header"><h1>${escape(run.name)}</h1><div class="run-meta"><span>${escape(time(run.created_at))}</span><span>${run.lifecycle === "FINISHED" ? "已结束" : "记录未结算"}</span><span>静态报告</span></div><div class="metrics"><div class="metric"><strong>${stats.total}</strong><span>用例总数</span></div><div class="metric"><strong class="positive">${stats.PASS ?? 0}</strong><span>通过</span></div><div class="metric"><strong class="${stats.total - (stats.PASS ?? 0) ? "negative" : ""}">${stats.total - (stats.PASS ?? 0)}</strong><span>未通过 / 未完成</span></div><div class="metric"><strong>${duration(totalMs)}</strong><span>运行总耗时（含规划）</span></div></div></header>${run.incomplete || run.resource_quarantined ? `<aside class="issue danger">${run.incomplete ? "记录不完整。" : ""}${run.resource_quarantined ? "环境已隔离，外部执行可能仍未停止。" : ""}</aside>` : ""}<section class="workspace" data-view="cases"><aside class="case-list"><div class="list-title"><h3>测试用例</h3><span>${stats.total} 个实例</span></div><label class="search">${icon("search")}<input id="search" type="search" placeholder="搜索用例名称或标识…" aria-label="搜索用例"></label><div class="filters"><label>用例<select id="case"><option value="">全部</option>${options("case_id")}</select></label><label>数据<select id="data"><option value="">全部</option>${options("data_id")}</select></label><label>状态<select id="status"><option value="">全部</option>${options("status")}</select></label></div><div class="list-subtitle"><span id="count" aria-live="polite"></span><button id="clear" class="text-button">清除筛选</button></div><div class="case-rows">${list}</div><p class="empty" id="empty" hidden>没有符合筛选条件的实例</p></aside><div class="detail">${cases}<div id="no-detail" class="empty" hidden>没有可展示的用例，请调整筛选条件。</div></div></section><section class="overview" data-view="overview" hidden><h2>运行总览</h2><p>${stats.total ? (((stats.PASS ?? 0) / stats.total) * 100).toFixed(1) + "%" : "—"} 用例通过率 · ${passedAssertions} / ${assertionCount} 条已执行断言通过</p><div class="distribution">${Object.entries(
+    )}<small>静态测试报告<br>可离线查看</small></nav><main class="app"><header class="run-header"><h1>${escape(run.name)}</h1><div class="run-meta"><span>${escape(time(run.created_at))}</span><span>${run.lifecycle === "FINISHED" ? "已结束" : "记录未结算"}</span><span>静态报告</span></div><div class="metrics"><div class="metric"><strong>${stats.total}</strong><span>用例总数</span></div><div class="metric"><strong class="positive">${stats.PASS ?? 0}</strong><span>通过</span></div><div class="metric"><strong class="${stats.total - (stats.PASS ?? 0) ? "negative" : ""}">${stats.total - (stats.PASS ?? 0)}</strong><span>未通过 / 未完成</span></div><div class="metric"><strong>${duration(totalMs)}</strong><span>运行总耗时（含规划）</span></div></div></header>${run.incomplete || run.resource_quarantined ? `<aside class="issue danger">${run.incomplete ? "记录不完整。" : ""}${run.resource_quarantined ? "环境已隔离，外部执行可能仍未停止。" : ""}</aside>` : ""}<section class="workspace" data-view="cases"><aside class="case-list"><div class="list-title"><h3>测试用例</h3><span>${stats.total} 个实例</span></div><label class="search">${icon("search")}<input id="search" type="search" placeholder="搜索用例名称或标识…" aria-label="搜索用例"></label><div class="filters"><label>用例<select id="case"><option value="">全部</option>${options("case_id")}</select></label><label>数据<select id="data"><option value="">全部</option>${options("data_id")}</select></label><label>状态<select id="status"><option value="">全部</option>${options("status")}</select></label></div><div class="list-subtitle"><span id="count" aria-live="polite"></span><button id="clear" class="text-button">清除筛选</button></div><div class="case-rows">${list}</div><p class="empty" id="empty" hidden>没有符合筛选条件的实例</p></aside><div class="detail">${cases}<div id="no-detail" class="empty" hidden>没有可展示的用例，请调整筛选条件。</div></div></section><section class="overview" data-view="overview" hidden><h2>运行总览</h2>${input ? `<p>原始用例 ${input.templates.length} 条 · CSV 数据 ${input.rows.length} 行 · 执行实例 ${input.instances.length} 个</p>` : ""}<p>${stats.total ? (((stats.PASS ?? 0) / stats.total) * 100).toFixed(1) + "%" : "—"} 用例通过率 · ${passedAssertions} / ${assertionCount} 条已执行断言通过</p><div class="distribution">${Object.entries(
     stats,
   )
     .filter(([k, v]) => k !== "total" && v > 0)

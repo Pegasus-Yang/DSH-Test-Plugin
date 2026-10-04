@@ -122,3 +122,85 @@ it("审核与直接执行通报都保留原始任务和简短拆分思路", () =
   expect(notice).not.toContain("请审核");
   expect(textReview(plan, true, "en")).toContain("## Original task");
 });
+
+it("批量计划严格覆盖每个展开实例，原文参数和规则独立且审核完整", async () => {
+  const { createTextInput, parseCases } = await import(
+    "../../src/case-input.js"
+  );
+  const { parseBatchPlan, batchTextPlanSchema } = await import(
+    "../../src/text-plan.js"
+  );
+  const source = createTextInput(
+    parseCases("检查${编号}\n再次核对${编号}", ".txt"),
+    { path: "data.csv", content: '编号,说明\n001,"a,b"\n002,"第一行\n第二行"' },
+  );
+  const draft = {
+    name: "批量任务",
+    cases: source.instances.map((i) => ({
+      instance_id: i.id,
+      name: "核对" + i.parameters.编号,
+      steps: [
+        { description: i.task, checks: ["编号等于" + i.parameters.编号] },
+      ],
+    })),
+  };
+  const plan = parseBatchPlan(
+    draft,
+    source,
+    "原始命令\n补充说明",
+    "session",
+    "zh",
+    "原始命令",
+  );
+  expect(plan.planning!.original_task).toBe("原始命令");
+  expect(plan.cases).toHaveLength(4);
+  expect(new Set(plan.source_refs.map((s) => s.id)).size).toBe(
+    plan.source_refs.length,
+  );
+  expect(
+    new Set(plan.cases.flatMap((c) => c.steps.map((s) => s.step_id))).size,
+  ).toBe(4);
+  const review = textReview(plan);
+  expect(review).toContain("原始用例数: 2; CSV数据行数: 2; 执行实例总数: 4");
+  expect(review).toContain('"001"');
+  expect(review).toContain("第一行\\n第二行");
+  for (const i of source.instances) expect(review).toContain(i.id);
+  expect(textReview(plan, true, "en")).toContain("Execution instances: 4");
+  expect(
+    batchTextPlanSchema.properties.cases.items.properties,
+  ).not.toHaveProperty("parameters");
+  source.rows[0]!.编号 = "999";
+  expect(plan.planning!.input!.rows[0]!.编号).toBe("001");
+  expect(() =>
+    parseBatchPlan(
+      { ...draft, cases: draft.cases.slice(1) },
+      source,
+      "任务",
+      "s",
+    ),
+  ).toThrow("不能遗漏");
+  expect(() =>
+    parseBatchPlan(
+      {
+        ...draft,
+        cases: [draft.cases[0], draft.cases[0], ...draft.cases.slice(2)],
+      },
+      source,
+      "任务",
+      "s",
+    ),
+  ).toThrow("不能遗漏");
+  expect(() =>
+    parseBatchPlan(
+      {
+        ...draft,
+        cases: draft.cases.map((c, n) =>
+          n ? c : { ...c, instance_id: "fake" },
+        ),
+      },
+      source,
+      "任务",
+      "s",
+    ),
+  ).toThrow("不能遗漏");
+});

@@ -79,3 +79,26 @@ it("保留路径边界与JSON解析错误，不把错误改为运行成功", asy
   });
   expect(runner.sessions.size).toBe(0);
 });
+
+it("TXT与Markdown入口直接规划，文件审核和CSV入口强制原生审核", async () => {
+  const { root, execute, runner, commands } = setup();
+  const { vi } = await import("vitest");
+  const start = vi.spyOn(runner, "start").mockResolvedValue("已接收");
+  writeFileSync(join(root, "cases one.txt"), "检查${值}\n再次检查${值}");
+  writeFileSync(join(root, "cases.md"), "- 检查${值}\n- 再次检查${值}");
+  writeFileSync(join(root, "data.csv"), "值\n001\n002");
+  await execute("test-run", '"cases one.txt"');
+  expect(start.mock.calls.at(-1)![3]).toBe(false);
+  expect(start.mock.calls.at(-1)![4]!.instances).toHaveLength(2);
+  await execute("test-plan", "--file cases.md");
+  expect(start.mock.calls.at(-1)![3]).toBe(true);
+  await execute("test-data", "data.csv --file cases.md");
+  expect(start.mock.calls.at(-1)![3]).toBe(true);
+  expect(start.mock.calls.at(-1)![4]!.instances).toHaveLength(4);
+  expect(commands.get("test-data")!.input?.hint).toBeTruthy();
+  start.mockClear();
+  expect(await execute("test-data", "data.csv 检查${missing}")).toMatchObject({
+    kind: "error",
+  });
+  expect(start).not.toHaveBeenCalled();
+});

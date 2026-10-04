@@ -50,7 +50,11 @@ import {
   textReview,
   validateTextExpectation,
   parseTextExpected,
+  batchTextPlanSchema,
+  parseBatchPlan,
+  announcementParts,
 } from "./text-plan.js";
+import type { TextInput } from "./case-input.js";
 import { testLanguage, languageGuide } from "./language.js";
 import { applyRevision } from "./revisions.js";
 
@@ -72,7 +76,7 @@ const output = {
 };
 const guide = `当前对话已启用测试增强，仍由本会话正常推理、工具调用、审批、追问和回复完成任务，不创建其他会话或后台任务。
 规划阶段只根据用户描述分析目标、业务步骤、输入和预期。禁止访问网站、运行命令、调用API或提前验证用例；不能通过预跑寻找选择器。只可使用test_submit_plan、test_current、todo_write和ask_user_question。已给目标、输入和预期时直接形成计划；缺少必要信息时在本会话追问。
-test_submit_plan只提交{name,rationale:"一两句面向用户的拆分说明",steps:[{description,checks?:string[]}]}。把用户的一段话按常规理解拆成几个业务动作短句，checks只写用户预期的自然语言。不要提供suite_id、cases、工具、选择器、能力类型、URL白名单、输出Schema、字段路径或比较器；不要为了未知页面结构追问用户。例如steps:[{description:"访问ceshiren.com"},{description:"搜索agent"},{description:"打开第一条搜索结果"},{description:"查看帖子的点赞数",checks:["点赞数不为0"]}]。用户没有提供的操作细节无需在规划期补齐。rationale简要说明为什么按这些业务动作拆分、怎样核对目标，不展开详细推理。/test提交成功后，必须先在正常对话中用原始任务、拆分思路、步骤清单三个部分通报返回的plan_summary，再执行第一个动作；/test-plan通过原生审核卡片展示这三部分。
+test_submit_plan按工具schema提交：普通任务为{name,rationale:"一两句面向用户的拆分说明",steps:[{description,checks?:string[]}]}；文件/参数化批量模式为{name,rationale,cases:[{instance_id,name,rationale,steps}]}，按planning_input.instances每个id恰好提交一次，使用对应已展开task与参数，不能合并、遗漏或自行改参数。把用户的一段话按常规理解拆成几个业务动作短句，checks只写用户预期的自然语言。不要提供suite_id、执行工具、选择器、能力类型、URL白名单、输出Schema、字段路径或比较器；不要为了未知页面结构追问用户。例如steps:[{description:"访问ceshiren.com"},{description:"搜索agent"},{description:"打开第一条搜索结果"},{description:"查看帖子的点赞数",checks:["点赞数不为0"]}]。用户没有提供的操作细节无需在规划期补齐。rationale简要说明为什么按这些业务动作拆分、怎样核对目标，不展开详细推理。/test提交成功后，必须先在正常对话中用原始任务、拆分思路、步骤清单三个部分通报返回的plan_summary，再执行第一个动作；/test-plan通过原生审核卡片展示这三部分。
 文字计划执行：每次只处理test_current的当前步骤。需要操作目标时先test_define_step({capability:"browser"或"api",allowed_targets:[本步目标网址],reason:"当前步骤依据"})设定操作范围，无需填写outputs。随后使用原生工具观察、操作、调整；了解实际页面后直接test_capture采集。采集时插件按采集方式自动登记输出类型，无需先写输出Schema；已有成功观察不可覆盖，但可补采其他输出。API通常以response保存完整响应。不是在执行开始时编译整份计划，不能配置未来步骤。
 文字检查点：获得可信观察后，对当前步骤的每个checks，调用test_bind_check({check_index:从0开始,assertion:{observation_ref:"step_编号.输出名.可选嵌套路径",operator:"eq/neq/...",expected_value:"用户预期原文，例如agent或0；不加引号或数组包装"}})。也可用expected_observation_ref比较前一步观察（例如第一条搜索结果链接）。rule_ref由插件绑定文字检查点；不用提交actual。预期来自原文和文字检查，不能按实际值改写；数字不为0用neq和expected_value直接填"0"（按数字条件解析为数值0）。每个文字检查都必须绑定程序断言，不能靠口头宣布通过；纯检查步骤可以直接引用前一步的可信观察。绑定后test_finish_step结算当前步骤并计算断言。无法完成用test_fail_step说明原因。
 执行阶段：文字计划提交（/test-plan还需批准）后按test_current执行当前业务目标。此时才使用正常Playwright工具查看页面、点击、输入、等待和检查DOM，可根据实际状态调整定位、操作组合和重试，无需重跑整条用例；只完成当前步骤，不提前执行后续步骤。browser_evaluate可用于实际页面结构检查，断言实际值仍只接受test_capture可信采集。JSON文件计划已提交时直接按test_current继续，不能重复提交计划或预跑。
@@ -173,6 +177,7 @@ export class NativeTests {
     task: string,
     plan?: unknown,
     review = false,
+    input?: TextInput,
   ): Promise<string> {
     if (!task.trim()) throw new Error("请提供动作、输入和可验证预期");
     if (agent.status !== "idle")
@@ -187,7 +192,7 @@ export class NativeTests {
       throw new Error(
         "/test-plan 需要宿主启用原生 dsh-plan-mode 和用户审核通道",
       );
-    const test = new NativeTest(this, agent, task, review);
+    const test = new NativeTest(this, agent, task, review, input);
     this.sessions.set(agent.id, test);
     try {
       if (review) await test.enterPlanMode();
@@ -288,10 +293,12 @@ export class NativeTest {
     agent: Agent,
     task: string,
     private review = false,
+    private input?: TextInput,
   ) {
     this.agent = agent;
     this.task = task;
     this.originalTask = task;
+    this.input = input ? structuredClone(input) : undefined;
     const id =
       "run-" +
       new Date().toISOString().replace(/[:.]/g, "-") +
@@ -358,7 +365,7 @@ export class NativeTest {
         order: 10500,
         interpolate: false,
         text: () =>
-          languageGuide(testLanguage(this.owner.ctx, this.task)) +
+          languageGuide(this.outputLanguage()) +
           "\n" +
           (this.reportReady
             ? "测试报告已生成。请在本轮回复中只总结test_finish返回的权威统计、逐步状态和断言。BLOCKED或缺少断言记录绝不能写成PASS；页面口头观察不能替代程序断言。给出报告链接。"
@@ -390,8 +397,8 @@ export class NativeTest {
       );
     tool(
       "test_submit_plan",
-      "提交本对话测试计划；/test-plan只保存待审核草案，其余入口直接冻结。从用户原文提取预期，不能提交实际结果。",
-      textPlanSchema,
+      "提交本对话文字测试计划；审核入口只保存草案。从原文提取预期，不能提交实际结果。批量模式每个instance_id恰好规划一次。",
+      this.input ? batchTextPlanSchema : textPlanSchema,
       (args) => this.submit(args),
     );
     tool(
@@ -1064,7 +1071,14 @@ export class NativeTest {
       }),
     );
   }
+  private outputLanguage(): string {
+    return testLanguage(
+      this.owner.ctx,
+      this.task + "\n" + (this.input?.instances[0]?.task ?? ""),
+    );
+  }
   async start(task: string): Promise<string> {
+    if (this.input) this.recorder.json("input.json", this.input);
     this.save();
     if (!this.planned)
       this.timer = setTimeout(
@@ -1085,13 +1099,22 @@ export class NativeTest {
     if (this.planned) throw new Error("计划已冻结；不能替换预期");
     const plan = trustedFile
       ? parsePlan(input)
-      : parseTextPlan(
-          input,
-          this.task,
-          this.id,
-          this.originalTask,
-          testLanguage(this.owner.ctx, this.task),
-        );
+      : this.input
+        ? parseBatchPlan(
+            input,
+            this.input,
+            this.task,
+            this.id,
+            this.outputLanguage(),
+            this.originalTask,
+          )
+        : parseTextPlan(
+            input,
+            this.task,
+            this.id,
+            this.originalTask,
+            this.outputLanguage(),
+          );
     if (this.timer) clearTimeout(this.timer);
     if (this.review) {
       this.draft = plan;
@@ -1102,27 +1125,12 @@ export class NativeTest {
       return this.state();
     }
     this.freeze(plan);
-    const summary = textReview(
-      plan,
-      false,
-      testLanguage(this.owner.ctx, this.task),
-    );
+    const summary = textReview(plan, false, this.outputLanguage());
     if (!trustedFile) {
-      const zh = testLanguage(this.owner.ctx, this.task).startsWith("zh");
       this.announcement = {
         summary,
         text: "",
-        required: [
-          ...(zh
-            ? ["原始任务", "拆分思路", "步骤清单"]
-            : ["Original task", "Approach", "Steps"]),
-          plan.planning!.original_task,
-          plan.planning!.rationale,
-          ...plan.cases[0]!.steps.flatMap((step) => [
-            step.description,
-            ...(step.checks ?? []),
-          ]),
-        ],
+        required: announcementParts(plan, this.outputLanguage()),
       };
     }
     return {
@@ -1138,11 +1146,7 @@ export class NativeTest {
   }
   private reviewMarkdown(): string {
     if (!this.draft) return "";
-    return textReview(
-      this.draft,
-      true,
-      testLanguage(this.owner.ctx, this.task),
-    );
+    return textReview(this.draft, true, this.outputLanguage());
   }
   private freeze(plan: SuiteRun["plan"]): unknown {
     if (this.timer) clearTimeout(this.timer);
@@ -1317,6 +1321,7 @@ export class NativeTest {
     return {
       run_id: this.run.suite_run_id,
       session_id: this.id,
+      ...(!this.planned && this.input ? { planning_input: this.input } : {}),
       phase: this.reportReady
         ? "finished"
         : this.planned

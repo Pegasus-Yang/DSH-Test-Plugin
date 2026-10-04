@@ -1,5 +1,6 @@
 /** 测试计划、运行事实及结果的共同类型与输入校验。 */
 import { Ajv } from "ajv";
+import type { TextInput } from "./case-input.js";
 export type Json =
   | null
   | boolean
@@ -89,13 +90,14 @@ export interface Step {
 export interface TestCase {
   case_id: string;
   name: string;
+  rationale?: string;
   preconditions: Step[];
   datasets: DataRow[];
   steps: Step[];
   cleanup: Step[];
 }
 export interface TestSuite {
-  planning?: { original_task: string; rationale: string };
+  planning?: { original_task: string; rationale: string; input?: TextInput };
   schema_version: "1";
   suite_id: string;
   name: string;
@@ -348,6 +350,7 @@ export const planSchema = {
       properties: {
         original_task: { type: "string" },
         rationale: { type: "string" },
+        input: { type: "object" },
       },
     },
     schema_version: {
@@ -375,6 +378,7 @@ export const planSchema = {
         properties: {
           case_id: id,
           name: { type: "string" },
+          rationale: { type: "string" },
           preconditions: { type: "array", items: stepSchema },
           datasets: {
             type: "array",
@@ -462,6 +466,8 @@ export function parsePlan(input: unknown, allowIntents = false): TestSuite {
   const plan = structuredClone(input),
     cases = new Set<string>(),
     sourceIds = new Set(plan.source_refs.map((s) => s.id));
+  if (!allowIntents && plan.planning?.input)
+    throw new Error("文字输入快照仅由文件与参数化入口生成");
   if (sourceIds.size !== plan.source_refs.length) throw new Error("来源ID重复");
   for (const c of plan.cases) {
     if (cases.has(c.case_id)) throw new Error("用例ID重复: " + c.case_id);

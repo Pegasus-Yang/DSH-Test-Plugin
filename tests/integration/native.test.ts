@@ -1041,3 +1041,211 @@ it("纯接口文字步骤运行时确定响应结构，下一步只核对已采�
     spy.mockRestore();
   }
 });
+
+it("文件与CSV四实例只在完整原生审核后执行，参数、证据和失败状态相互隔离", async () => {
+  const { createTextInput, parseCases } = await import(
+    "../../src/case-input.js"
+  );
+  const source = createTextInput(
+    parseCases(
+      "请求https://httpbin.org/get?keyword=${keyword}，核对keyword为${keyword}\n再次请求并核对keyword为${keyword}",
+      ".txt",
+    ),
+    { path: "data.csv", content: "keyword\nagent\ntesting" },
+  );
+  const t = setup();
+  const fetchSpy = vi.spyOn(globalThis, "fetch");
+  try {
+    await t.manager.start(
+      t.agent,
+      "data.csv --file cases.txt",
+      undefined,
+      true,
+      source,
+    );
+    const draft = {
+      name: "四实例",
+      cases: source.instances.map((i) => ({
+        instance_id: i.id,
+        name: i.id,
+        steps: [
+          {
+            description: i.task,
+            checks: ["keyword等于" + i.parameters.keyword],
+          },
+        ],
+      })),
+    };
+    const first = await t.call("test_submit_plan", draft);
+    expect(first.value.phase).toBe("reviewing");
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(
+      (
+        await t.call("test_define_step", {
+          capability: "api",
+          allowed_targets: ["https://httpbin.org"],
+          reason: "提前请求",
+        })
+      ).isError,
+    ).toBe(true);
+    t.definitions.set("exit_plan_mode", {
+      execute: () => ({ approved: true }),
+    });
+    const updated = structuredClone(draft);
+    updated.cases[0]!.steps[0]!.description += "，在运行时决定字段";
+    const second = await t.call("test_submit_plan", updated);
+    expect(
+      (await t.call("exit_plan_mode", { plan: first.value.review_markdown }))
+        .isError,
+    ).toBe(true);
+    expect(
+      (await t.call("exit_plan_mode", { plan: second.value.review_markdown }))
+        .isError,
+    ).toBe(false);
+    const run = t.manager.sessions.get("origin")!;
+    const frozen = structuredClone(run.run.plan);
+    for (const [n, i] of source.instances.entries()) {
+      expect(run.state().current!.instance).toBe(i.id + "--row_" + i.data_row);
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            args: { keyword: n === 1 ? "wrong" : i.parameters.keyword },
+          }),
+          { status: 200 },
+        ),
+      );
+      expect(
+        (
+          await t.call("test_define_step", {
+            capability: "api",
+            allowed_targets: ["https://httpbin.org"],
+            reason: "执行当前实例",
+          })
+        ).isError,
+      ).toBe(false);
+      expect(
+        (
+          await t.call("test_capture", {
+            capture: {
+              response: {
+                kind: "http",
+                url: "https://httpbin.org/get?keyword=" + i.parameters.keyword,
+                field: "",
+              },
+            },
+            reason: "请求并采集当前参数对应的响应",
+          })
+        ).isError,
+      ).toBe(false);
+      const id = run.state().current!.step.step_id;
+      expect(
+        (
+          await t.call("test_bind_check", {
+            check_index: 0,
+            assertion: {
+              observation_ref: id + ".response.body.args.keyword",
+              operator: "eq",
+              expected_value: i.parameters.keyword,
+            },
+          })
+        ).isError,
+      ).toBe(false);
+      expect((await t.call("test_finish_step")).isError).toBe(false);
+    }
+    const final = await t.call("test_finish");
+    expect(final.value.statistics).toMatchObject({
+      total: 4,
+      PASS: 3,
+      FAIL: 1,
+    });
+    expect(fetchSpy).toHaveBeenCalledTimes(4);
+    expect(t.dispatched.some((name) => name.includes("playwright"))).toBe(
+      false,
+    );
+    expect(run.run.plan).toEqual(frozen);
+    expect(rebuild(run.recorder.directory)).toEqual(run.run);
+    const html = readFileSync(
+      join(run.recorder.directory, "report.html"),
+      "utf8",
+    );
+    expect(html).toContain("原始用例 2 条 · CSV 数据 2 行 · 执行实例 4 个");
+    expect(html).toContain("用例来源与参数");
+    expect(html).toContain('data-case="case_1"');
+    expect(html).toContain('data-case="case_2"');
+    await t.end();
+  } finally {
+    fetchSpy.mockRestore();
+  }
+});
+
+it("两个文字浏览器实例分别初始化清理，第一例失败不污染下一例的断言", async () => {
+  const { createTextInput, parseCases } = await import(
+    "../../src/case-input.js"
+  );
+  const source = createTextInput(
+    parseCases("检查第一页点赞不为0\n检查第二页点赞不为0", ".txt"),
+  );
+  const t = setup();
+  await t.manager.start(t.agent, "cases.txt", undefined, false, source);
+  const submitted = await t.call("test_submit_plan", {
+    name: "浏览器集合",
+    cases: source.instances.map((i) => ({
+      instance_id: i.id,
+      name: i.id,
+      steps: [{ description: i.task, checks: ["点赞数不为0"] }],
+    })),
+  });
+  await t.announce(submitted.value.plan_summary);
+  const run = t.manager.sessions.get("origin")!;
+  for (const likes of [0, 3]) {
+    expect(
+      (
+        await t.call("test_define_step", {
+          capability: "browser",
+          allowed_targets: ["https://example.test"],
+          reason: "当前实例读取点赞",
+        })
+      ).isError,
+    ).toBe(false);
+    t.setDomResult({ values: { likes } });
+    expect(
+      (
+        await t.call("test_capture", {
+          capture: {
+            likes: { kind: "dom", mode: "number", selector: "#likes" },
+          },
+          reason: "当前页面点赞",
+        })
+      ).isError,
+    ).toBe(false);
+    const step = run.state().current!.step.step_id;
+    expect(
+      (
+        await t.call("test_bind_check", {
+          check_index: 0,
+          assertion: {
+            observation_ref: step + ".likes",
+            operator: "neq",
+            expected_value: "0",
+          },
+        })
+      ).isError,
+    ).toBe(false);
+    await t.call("test_finish_step");
+    expect(run.state().current!.step.step_id).toBe("__close");
+    await t.step();
+  }
+  expect((await t.call("test_finish")).value.statistics).toMatchObject({
+    total: 2,
+    FAIL: 1,
+    PASS: 1,
+  });
+  expect(
+    t.dispatched.filter((name) => name.endsWith("browser_close")),
+  ).toHaveLength(4);
+  expect(
+    run.run.instances.every(
+      (i) => i.resources.browser_context.state === "absent",
+    ),
+  ).toBe(true);
+});

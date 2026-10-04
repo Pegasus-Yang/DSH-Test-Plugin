@@ -5,7 +5,8 @@ import type {} from "@deepseek-ai/dsh-host-webserver";
 import type {} from "@deepseek-ai/dsh-client-connection";
 import type {} from "@deepseek-ai/dsh-system-prompt";
 import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
-import { join, relative, resolve, sep } from "node:path";
+import { extname, join, relative, resolve, sep } from "node:path";
+import { fileArgument, loadDataInput, loadTextInput } from "./case-input.js";
 import { NativeTests } from "./native-test.js";
 import type { TestConfig } from "./config.js";
 import { reportPrefix } from "./report-access.js";
@@ -74,20 +75,32 @@ export function apply(ctx: Context, config: Partial<TestConfig> = {}): void {
   register(
     "test-plan",
     "在原生plan模式规划测试，经用户审核修改并同意后执行",
-    ({ agent, rawInput }) =>
-      tests.start(agent, rawInput.trim(), undefined, true),
-    "任务描述；规划后先审核，确认后执行",
+    ({ agent, rawInput }) => {
+      const file = /^--file\s+([\s\S]+)$/.exec(rawInput.trim());
+      if (rawInput.trim() === "--file")
+        throw new Error("请提供TXT或Markdown用例路径");
+      return tests.start(
+        agent,
+        rawInput.trim(),
+        undefined,
+        true,
+        file
+          ? loadTextInput(tests.config.workspace, fileArgument(file[1]!))
+          : undefined,
+      );
+    },
+    "任务描述或 --file cases.md；规划后先审核，确认后执行",
   );
   register(
     "test-run",
-    "在当前对话执行JSON测试集合；自然语言请使用 /test",
+    "执行TXT、Markdown文字用例或完整JSON测试集合",
     ({ agent, rawInput }) => {
       const usage =
-        "请提供工作区内的JSON测试集合文件路径，例如 /test-run examples/ceshiren-agent.json；自然语言任务请使用 /test <任务描述>。";
+        "请提供工作区内的TXT、Markdown或JSON测试集合文件路径，例如 /test-run examples/cases.txt；自然语言任务请使用 /test <任务描述>。";
       if (!rawInput.trim()) throw new Error(usage);
       let path: string;
       try {
-        path = inputPath(rawInput);
+        path = inputPath(fileArgument(rawInput));
       } catch (error) {
         if (
           ["ENOENT", "ENOTDIR"].includes(
@@ -98,6 +111,17 @@ export function apply(ctx: Context, config: Partial<TestConfig> = {}): void {
         throw error;
       }
       if (!statSync(path).isFile()) throw new Error(usage);
+      const extension = extname(path).toLowerCase();
+      if ([".txt", ".md", ".markdown"].includes(extension)) {
+        return tests.start(
+          agent,
+          rawInput.trim(),
+          undefined,
+          false,
+          loadTextInput(tests.config.workspace, path),
+        );
+      }
+      if (extension !== ".json") throw new Error(usage);
       const plan = JSON.parse(readFileSync(path, "utf8"));
       return tests.start(
         agent,
@@ -105,7 +129,20 @@ export function apply(ctx: Context, config: Partial<TestConfig> = {}): void {
         plan,
       );
     },
-    "JSON测试集合路径；自然语言请使用 /test",
+    "TXT、Markdown或JSON文件路径；自然语言请使用 /test",
+  );
+  register(
+    "test-data",
+    "读取CSV参数与任务模板，先审核每个实例的参数和文字步骤，再执行",
+    ({ agent, rawInput }) =>
+      tests.start(
+        agent,
+        rawInput.trim(),
+        undefined,
+        true,
+        loadDataInput(tests.config.workspace, rawInput),
+      ),
+    "data.csv <包含${参数名}的任务> 或 data.csv --file cases.md",
   );
   register("test-status", "查看当前对话的测试状态", ({ agent }) => {
     const test = tests.sessions.get(agent.id);
