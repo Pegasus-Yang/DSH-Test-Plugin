@@ -11,13 +11,7 @@ import type {} from "@deepseek-ai/dsh-system-prompt";
 import type {} from "@deepseek-ai/dsh-plan-mode/types";
 import type {} from "@deepseek-ai/dsh-session-projection";
 import { randomUUID } from "node:crypto";
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  readdirSync,
-  unlinkSync,
-} from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import {
   aggregate,
@@ -38,7 +32,8 @@ import {
   type StepResult,
   type SuiteRun,
 } from "./contracts.js";
-import { Recorder, atomicJson } from "./recorder.js";
+import { Recorder } from "./recorder.js";
+import { RecoveryManager } from "./recovery.js";
 import { captureStep } from "./adapters.js";
 import { evaluate } from "./assertions.js";
 import { writeReport } from "./report.js";
@@ -126,6 +121,7 @@ export class NativeTests {
   readonly config: TestConfig;
   readonly reports: ReportAccess;
   readonly preview: PreviewManager;
+  readonly recovery: RecoveryManager;
   readonly sessions = new Map<string, NativeTest>();
   private readonly historicalProgress = new Map<string, SuiteRun | null>();
   private starting = false;
@@ -136,6 +132,12 @@ export class NativeTests {
   ) {
     this.config = { ...defaults, ...config };
     this.preview = new PreviewManager(this.config.preview);
+    this.recovery = new RecoveryManager(
+      this.config.outputRoot,
+      this.config.cleanupTimeoutMs,
+      () => this.starting || [...this.sessions.values()].some((s) => !s.closed),
+      () => this.preview.shutdown(),
+    );
     for (const key of [
       "stepTimeoutMs",
       "cleanupTimeoutMs",
@@ -193,11 +195,16 @@ export class NativeTests {
     if (!task.trim()) throw new Error("请提供动作、输入和可验证预期");
     if (agent.status !== "idle")
       throw new Error("请等待当前对话轮次结束后再启动测试");
-    if (existsSync(join(this.config.outputRoot, "quarantine.json")))
+    const quarantine = this.recovery.status().quarantine;
+    if (quarantine)
       throw new Error(
-        "共享环境处于隔离状态；确认外部操作已停止并重置后使用/test-release提交处置证据",
+        `测试环境暂不可用：${quarantine.reason}。${quarantine.overdue ? "隔离时间已超过清理超时，可能异常卡住。" : ""}请在输入框上方查看隔离提示并确认处理释放，或使用 /test-release 提交实际处置证据。`,
       );
-    if (this.starting || [...this.sessions.values()].some((s) => !s.closed))
+    if (
+      this.starting ||
+      this.recovery.busy ||
+      [...this.sessions.values()].some((s) => !s.closed)
+    )
       throw new Error("已有测试使用共享浏览器，请先结束或停止该测试");
     if (review && !this.ctx.commands.find(agent, "plan"))
       throw new Error(
@@ -274,32 +281,13 @@ export class NativeTests {
   }
   quarantine(run: SuiteRun, reason: string): void {
     run.resource_quarantined = true;
-    atomicJson(join(this.config.outputRoot, "quarantine.json"), {
-      created_at: new Date().toISOString(),
-      details: { run_id: run.suite_run_id, reason },
-    });
+    this.recovery.mark(run, reason);
   }
   release(evidenceFile: string): void {
-    if ([...this.sessions.values()].some((s) => !s.closed))
-      throw new Error("活动测试不能解除隔离");
-    const proof = JSON.parse(readFileSync(evidenceFile, "utf8"));
-    if (
-      proof.external_stopped !== true ||
-      proof.environment_reset !== true ||
-      !proof.operator ||
-      !proof.details ||
-      !proof.evidence
-    )
-      throw new Error("需提供外部停止、环境重置、操作者与处置证据");
-    const path = join(this.config.outputRoot, "quarantine.json");
-    const quarantine = JSON.parse(readFileSync(path, "utf8"));
-    atomicJson(
-      join(this.config.outputRoot, "release-" + randomUUID() + ".json"),
-      { quarantine, proof, released_at: new Date().toISOString() },
-    );
-    unlinkSync(path);
+    this.recovery.release(evidenceFile);
   }
   async shutdown(): Promise<void> {
+    this.recovery.cancel();
     for (const test of this.sessions.values())
       if (!test.closed) await test.shutdown();
     await this.preview.shutdown();
@@ -367,7 +355,7 @@ export class NativeTest {
       incomplete: false,
       resource_quarantined: false,
       manifest: {
-        plugin_version: "0.8.0",
+        plugin_version: "0.8.1",
         plan_review: review,
         execution: "native-conversation",
         origin_session_id: agent.id,

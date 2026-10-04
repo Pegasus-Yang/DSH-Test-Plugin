@@ -1,5 +1,11 @@
 import { it, expect, afterEach } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync, symlinkSync } from "node:fs";
+import {
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+  symlinkSync,
+  mkdirSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Context } from "@deepseek-ai/cordis";
@@ -16,13 +22,27 @@ function setup() {
   roots.push(root);
   type Definition = Parameters<Context["commands"]["register"]>[0];
   const commands = new Map<string, Definition>();
+  const routes = new Map<string, any>();
   let runner!: NativeTests;
   apply(
     {
       provide: (_name: string, value: NativeTests) => {
         runner = value;
       },
-      inject: () => {},
+      inject: (keys: string[], effect: Function) => {
+        if (keys.includes("webServer"))
+          effect({
+            effect: (fn: () => unknown) => fn(),
+            connection: { authorizeIndex: () => true },
+            webServer: {
+              port: 3080,
+              register: (route: any) => {
+                routes.set(route.path, route.handler);
+                return () => {};
+              },
+            },
+          });
+      },
       effect: (fn: () => unknown) => fn(),
       commands: {
         register: (command: Definition) => {
@@ -33,10 +53,75 @@ function setup() {
     } as unknown as Context,
     { workspace: root, outputRoot: join(root, "runs") },
   );
-  const execute = (name: string, rawInput: string) =>
-    commands.get(name)!.handler({ rawInput } as never);
-  return { root, commands, execute, runner };
+  const execute = (name: string, rawInput: string, agent?: unknown) =>
+    commands
+      .get(name)!
+      .handler({
+        rawInput,
+        agent,
+        signal: new AbortController().signal,
+      } as never);
+  return { root, commands, execute, runner, routes };
 }
+
+it("新会话没有运行记录时也能读取隔离；启动错误明确说明原因和处理入口", async () => {
+  const t = setup();
+  const directory = join(t.root, "runs/run-old");
+  mkdirSync(directory);
+  writeFileSync(
+    join(directory, "results.json"),
+    JSON.stringify({
+      suite_run_id: "run-old",
+      instances: [{ resources: { browser_context: { state: "exists" } } }],
+    }),
+  );
+  writeFileSync(
+    join(t.root, "runs/quarantine.json"),
+    JSON.stringify({
+      created_at: new Date(Date.now() - 120000).toISOString(),
+      details: { run_id: "run-old", reason: "浏览器释放未获确认" },
+    }),
+  );
+  let body = "";
+  const writeHead = () => {};
+  t.routes.get("/test-recovery")(
+    { method: "GET", url: "/test-recovery" },
+    {
+      writeHead,
+      end: (value: string) => {
+        body = value;
+      },
+    },
+  );
+  expect(JSON.parse(body).quarantine).toMatchObject({
+    run_id: "run-old",
+    overdue: true,
+    can_recover: true,
+  });
+  expect(
+    await t.execute("test", "访问页面并断言点赞不为0", {
+      id: "new",
+      status: "idle",
+    }),
+  ).toMatchObject({
+    kind: "error",
+    text: expect.stringContaining("输入框上方"),
+  });
+  expect(t.runner.sessions.size).toBe(0);
+  expect(
+    await t.execute("test-recover", "", { id: "new", status: "idle" }),
+  ).toMatchObject({ kind: "error", text: expect.stringContaining("确认") });
+});
+
+it("隔离读取路由不能以POST请求直接释放", () => {
+  const t = setup();
+  const codes: number[] = [];
+  t.routes.get("/test-recovery")(
+    { method: "POST", url: "/test-recovery" },
+    { writeHead: (code: number) => codes.push(code), end: () => {} },
+  );
+  expect(codes).toEqual([405]);
+});
 
 it("向网页声明参数输入，菜单选择后等待参数，带参数提交仍属于命令", () => {
   const { commands } = setup();

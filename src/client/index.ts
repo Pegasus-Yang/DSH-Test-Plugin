@@ -1,5 +1,7 @@
 /** 同一个插件包的浏览器端入口，使用 DSH 官方插槽与浮窗。 */
 import type { Context } from "@deepseek-ai/cordis";
+import type {} from "@deepseek-ai/dsh-commands";
+import type {} from "@deepseek-ai/dsh-api-remotes/client";
 import type {} from "@deepseek-ai/dsh-client-ui-conversation/client";
 import type {} from "@deepseek-ai/dsh-client-ui-renderer/client";
 import type {} from "@deepseek-ai/dsh-client-ui-sidebar-right/client";
@@ -8,6 +10,7 @@ import type {} from "@deepseek-ai/dsh-client-ui-session/client";
 import type {} from "@deepseek-ai/dsh-client-ui-settings/client";
 import { PreviewSettingsPage } from "./preview-settings.js";
 import type { ProgressSnapshot } from "../progress-model.js";
+import type { RecoverySnapshot } from "../recovery.js";
 import {
   PreviewPanel,
   ProgressDetails,
@@ -18,7 +21,13 @@ import {
 import { progressStyle } from "./style.js";
 
 export const name = "harness-test-ui";
-export const inject = ["slots", "sidebarRightTabs", "sidebarRight"] as const;
+export const inject = [
+  "slots",
+  "sidebarRightTabs",
+  "sidebarRight",
+  "remote",
+  "remote.commands",
+] as const;
 const progressKind = "harness-test-progress";
 const previewKind = "harness-test-preview";
 const progressId = "dsh-test-plugin:progress";
@@ -78,6 +87,27 @@ export function apply(ctx: Context): void {
         ctx.sidebarRight.toggleExpanded();
     };
     const actions: ProgressActions = {
+      readRecovery: async (signal) => {
+        const response = await fetch("/test-recovery", {
+          signal,
+          cache: "no-store",
+        });
+        if (!response.ok) throw new Error("隔离状态读取失败");
+        return (await response.json()) as RecoverySnapshot;
+      },
+      recover: async (token) => {
+        const result = await ctx.remote.commands.execute(
+          sessionId as Parameters<typeof ctx.remote.commands.execute>[0],
+          `/test-recover --confirm ${token}`,
+          [],
+        );
+        if (!result.ok) throw new Error(result.error.message);
+        if (!result.value || result.value.result.kind === "error")
+          throw new Error(result.value?.result.text ?? "释放命令未被识别");
+        return (
+          result.value.result.text ?? "测试环境已释放，请重新发送测试命令。"
+        );
+      },
       read: async (signal) => {
         const response = await fetch(
           `/test-progress/${encodeURIComponent(sessionId)}`,

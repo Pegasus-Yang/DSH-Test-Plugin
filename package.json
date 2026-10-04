@@ -1,6 +1,6 @@
 {
   "name": "dsh-test-plugin",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "DeepSeek Harness 原生测试计划、执行、断言和报告插件",
   "type": "module",
   "license": "MIT",
@@ -52,6 +52,7 @@
     "@deepseek-ai/dsh-plan-mode": "0.2.1-alpha.1",
     "@deepseek-ai/dsh-session-projection": "0.2.1-alpha.1",
     "@deepseek-ai/dsh-settings": "0.2.1-alpha.1",
+    "@deepseek-ai/dsh-api-remotes": "0.2.1-alpha.1",
     "@deepseek-ai/dsh-client-ui-conversation": "0.2.1-alpha.1",
     "@deepseek-ai/dsh-client-ui-renderer": "0.2.1-alpha.1",
     "@deepseek-ai/dsh-client-ui-sidebar-right": "0.2.1-alpha.1",
@@ -79,6 +80,7 @@
     "client": {
       "platform": "web",
       "inject": [
+        "@deepseek-ai/dsh-api-remotes",
         "@deepseek-ai/dsh-client-ui-conversation",
         "@deepseek-ai/dsh-client-ui-renderer",
         "@deepseek-ai/dsh-client-ui-sidebar-right",
@@ -106,6 +108,9 @@
     "./icon": "./icon.svg"
   },
   "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-api-remotes": {
+      "optional": true
+    },
     "@deepseek-ai/dsh-host-webserver": {
       "optional": true
     },

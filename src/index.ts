@@ -57,6 +57,28 @@ export function apply(ctx: Context, config: PluginConfig = {}): void {
     web.effect(() =>
       web.webServer.register({
         kind: "prefix",
+        path: "/test-recovery",
+        handler: (req, res) => {
+          if (!web.connection.authorizeIndex(req, res)) return;
+          if (
+            req.method !== "GET" ||
+            req.url?.split("?")[0] !== "/test-recovery"
+          ) {
+            res.writeHead(405);
+            res.end();
+            return;
+          }
+          res.writeHead(200, {
+            "Content-Type": "application/json; charset=utf-8",
+            "Cache-Control": "no-store",
+          });
+          res.end(JSON.stringify(tests.recovery.status()));
+        },
+      }),
+    );
+    web.effect(() =>
+      web.webServer.register({
+        kind: "prefix",
         path: "/test-preview-settings",
         handler: (req, res) => {
           if (!web.connection.authorizeIndex(req, res)) return;
@@ -203,6 +225,8 @@ export function apply(ctx: Context, config: PluginConfig = {}): void {
     "data.csv <包含${参数名}的任务> 或 data.csv --file cases.md",
   );
   register("test-status", "查看当前对话的测试状态", ({ agent }) => {
+    const recovery = tests.recovery.status();
+    if (recovery.quarantine) return JSON.stringify({ recovery }, null, 2);
     const test = tests.sessions.get(agent.id);
     return test
       ? JSON.stringify(
@@ -242,6 +266,19 @@ export function apply(ctx: Context, config: PluginConfig = {}): void {
       return `报告为静态HTML，可离线打开。\n保存位置：${join(directory, "report-rebuilt.html")}\n查看测试报告：${tests.reports.url(runId, "report-rebuilt.html")}`;
     },
     "运行ID（可留空，查看当前对话报告）",
+  );
+  register(
+    "test-recover",
+    "确认旧操作已停止，关闭测试专用浏览器并解除当前隔离",
+    ({ agent, rawInput, signal }) => {
+      const confirmation = /^--confirm ([a-f0-9]{64})$/.exec(rawInput.trim());
+      if (!confirmation)
+        throw new Error(
+          "请在输入框上方点击处理并释放，阅读说明并确认旧测试及外部操作已停止；也可使用 /test-release 提交实际处置证据。",
+        );
+      return tests.recovery.recover(agent, confirmation[1]!, signal);
+    },
+    "通过隔离提示卡片确认释放；命令形式为 --confirm 当前隔离编号",
   );
   register(
     "test-release",

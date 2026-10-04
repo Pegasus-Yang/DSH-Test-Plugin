@@ -12,8 +12,9 @@ import type {
   ProgressSnapshot,
   ProgressStep,
 } from "../progress-model.js";
+import { RecoveryPanel, type RecoveryActions } from "./recovery-panel.js";
 
-export interface ProgressActions {
+export interface ProgressActions extends RecoveryActions {
   read: (signal: AbortSignal) => Promise<ProgressSnapshot | null>;
   openDetails: () => void;
   openPreview: (state: ProgressSnapshot) => void;
@@ -210,44 +211,51 @@ export function ProgressDock(
   useEffect(() => {
     if (snapshot && !failed) props.followPreview(snapshot);
   }, [snapshot, failed, props.followPreview]);
-  if (!snapshot) return null;
-  const instance = selectedInstance(snapshot);
+  const instance = snapshot ? selectedInstance(snapshot) : undefined;
   return (
-    <section
-      className="dsh-test-dock"
-      data-test-progress
-      data-run-id={snapshot.run_id}
-      aria-label="测试执行进度"
-    >
-      <Heading state={snapshot} now={now} failed={failed} />
-      <div className="dsh-test-title" title={snapshot.title}>
-        {snapshot.title}
-        {snapshot.instances.length > 1 && instance
-          ? ` · 用例 ${snapshot.instances.indexOf(instance) + 1} / ${snapshot.instances.length}`
-          : ""}
-      </div>
-      {instance?.steps.length ? (
-        <StepFlow steps={instance.steps} now={now} />
-      ) : (
-        <span className="dsh-test-muted">正在拆分测试步骤</span>
+    <>
+      <RecoveryPanel
+        readRecovery={props.readRecovery}
+        recover={props.recover}
+      />
+      {snapshot && (
+        <section
+          className="dsh-test-dock"
+          data-test-progress
+          data-run-id={snapshot.run_id}
+          aria-label="测试执行进度"
+        >
+          <Heading state={snapshot} now={now} failed={failed} />
+          <div className="dsh-test-title" title={snapshot.title}>
+            {snapshot.title}
+            {snapshot.instances.length > 1 && instance
+              ? ` · 用例 ${snapshot.instances.indexOf(instance) + 1} / ${snapshot.instances.length}`
+              : ""}
+          </div>
+          {instance?.steps.length ? (
+            <StepFlow steps={instance.steps} now={now} />
+          ) : (
+            <span className="dsh-test-muted">正在拆分测试步骤</span>
+          )}
+          <div className="dsh-test-actions">
+            <button type="button" onClick={props.openDetails}>
+              查看步骤
+            </button>
+            {snapshot.preview.ready && !failed && (
+              <button type="button" onClick={() => props.openPreview(snapshot)}>
+                实时画面
+              </button>
+            )}
+            {snapshot.report_url && (
+              <a href={snapshot.report_url} target="_blank" rel="noreferrer">
+                测试报告
+              </a>
+            )}
+            <small>时间包含等待</small>
+          </div>
+        </section>
       )}
-      <div className="dsh-test-actions">
-        <button type="button" onClick={props.openDetails}>
-          查看步骤
-        </button>
-        {snapshot.preview.ready && !failed && (
-          <button type="button" onClick={() => props.openPreview(snapshot)}>
-            实时画面
-          </button>
-        )}
-        {snapshot.report_url && (
-          <a href={snapshot.report_url} target="_blank" rel="noreferrer">
-            测试报告
-          </a>
-        )}
-        <small>时间包含等待</small>
-      </div>
-    </section>
+    </>
   );
 }
 
