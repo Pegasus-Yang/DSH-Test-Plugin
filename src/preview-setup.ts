@@ -7,6 +7,7 @@ import { isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 import type { PreviewConfig, TestConfig } from "./config.js";
+import { normalizeBrowscreenExecutable } from "./browscreen-command.js";
 import type {
   PreviewPreferences,
   PreviewSettingsInfo,
@@ -142,11 +143,9 @@ export class PreviewSetup {
       this.message = "实时预览已关闭。";
       return;
     }
-    const project = preferences.browscreenProject.trim();
-    if (!isAbsolute(project) || !existsSync(join(project, "pyproject.toml")))
-      throw new Error("请填写包含 pyproject.toml 的 Browscreen 绝对目录");
-    if (!existsSync(join(project, ".venv")))
-      throw new Error("Browscreen 尚未准备 .venv，请先按配置指南安装依赖");
+    const executable = normalizeBrowscreenExecutable(
+      preferences.browscreenExecutable,
+    );
     if (!existsSync(this.initializer))
       throw new Error("插件缺少 CDP 初始化文件，请重新构建或安装插件");
     const editor = this.ctx.get("configEditor");
@@ -192,7 +191,7 @@ export class PreviewSetup {
     return {
       workDir,
       browscreenUrl: `http://127.0.0.1:${preferences.port}`,
-      browscreenProject: project,
+      browscreenExecutable: executable,
     };
   }
 

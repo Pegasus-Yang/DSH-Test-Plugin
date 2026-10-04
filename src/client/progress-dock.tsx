@@ -253,6 +253,21 @@ export function ProgressCard({
           )}
           <small>时间包含等待</small>
         </div>
+        {snapshot.preview.failed &&
+          !failed &&
+          snapshot.phase !== "finished" && (
+            <p
+              className="dsh-test-preview-note"
+              data-test-preview-error
+              role="status"
+            >
+              实时画面未启用：{snapshot.preview.reason}
+              <span>
+                请进入“设置 → 测试插件 →
+                浏览器实时预览”检测安装或调整配置；业务测试继续执行。
+              </span>
+            </p>
+          )}
         {expanded && (
           <div
             className="dsh-test-step-list"

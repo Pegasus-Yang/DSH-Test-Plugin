@@ -170,7 +170,9 @@ export function apply(ctx: Context): void {
         if (!foreground()) return;
         if (
           tabId &&
-          (state.run_id !== previewRun || state.phase === "finished")
+          (state.run_id !== previewRun ||
+            state.phase === "finished" ||
+            state.preview.failed)
         ) {
           ctx.sidebarRight.close(tabId);
           tabId = undefined;

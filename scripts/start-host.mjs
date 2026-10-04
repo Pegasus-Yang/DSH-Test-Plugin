@@ -18,18 +18,15 @@ const runtimePrefix = statePath
 const overlayPath = runtimePrefix + "-overlay.yml";
 const logPath = runtimePrefix + ".log";
 await mkdir(home, { recursive: true });
-const browscreenProject = resolve(
-  process.env.DSH_BROWSCREEN_PROJECT ?? "../Browscreen",
-);
 const preview =
-  process.env.DSH_TEST_PREVIEW !== "0" &&
-  existsSync(join(browscreenProject, "pyproject.toml"))
+  process.env.DSH_TEST_PREVIEW !== "0"
     ? {
         workDir: resolve(
           `.local/preview-${process.env.DSH_TEST_PORT ?? "13379"}`,
         ),
         browscreenUrl: `http://127.0.0.1:${Number(process.env.DSH_TEST_PORT ?? "13379") + 1}`,
-        browscreenProject,
+        browscreenExecutable:
+          process.env.DSH_BROWSCREEN_EXECUTABLE ?? "browscreen",
       }
     : undefined;
 if (preview) {

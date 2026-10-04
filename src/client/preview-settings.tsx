@@ -1,11 +1,13 @@
 /** 测试插件设置提供环境处置和预览偏好；MCP 接入留到下一次测试开始。 */
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type {
   ConfigForms,
   ConfigForm,
 } from "@deepseek-ai/dsh-client-ui-settings/client";
 import {
   previewPreferenceDefaults,
+  browscreenVersionRange,
+  type BrowscreenCheck,
   type PreviewPreferences,
   type PreviewSettingsInfo,
 } from "../preview-preferences.js";
@@ -73,29 +75,91 @@ function PreferencesForm({
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [editRevision, setEditRevision] = useState<number>();
+  const [checking, setChecking] = useState(false);
+  const [detected, setDetected] = useState<BrowscreenCheck>();
+  const checker = useRef<AbortController>();
+  useEffect(
+    () => () => {
+      checker.current?.abort();
+      checker.current = undefined;
+    },
+    [],
+  );
   useEffect(() => {
     if (dirty || state.status !== "ready") return;
-    const value = state.value?.browserPreview ?? previewPreferenceDefaults;
+    const value = {
+      ...previewPreferenceDefaults,
+      ...state.value?.browserPreview,
+    };
     setDraft(value);
     setPortText(String(value.port));
+    checker.current?.abort();
+    checker.current = undefined;
+    setChecking(false);
+    setDetected(undefined);
   }, [state.value, state.status, dirty]);
   const edit = (value: Partial<PreviewPreferences>) => {
+    if (value.browscreenExecutable !== undefined) {
+      checker.current?.abort();
+      checker.current = undefined;
+      setChecking(false);
+      setDetected(undefined);
+    }
     if (!dirty) setEditRevision(state.revision);
     setDraft((current) => ({ ...current, ...value }));
     setDirty(true);
     setMessage("");
   };
+  const check = async () => {
+    const controller = new AbortController();
+    checker.current = controller;
+    setChecking(true);
+    setDetected(undefined);
+    try {
+      const response = await fetch("/test-preview-settings/check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          browscreenExecutable:
+            draft.browscreenExecutable.trim() || "browscreen",
+        }),
+        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(8000)]),
+      });
+      if (!response.ok)
+        throw new Error("检测请求失败，请确认宿主和测试插件正常运行。");
+      const result = (await response.json()) as BrowscreenCheck;
+      if (!controller.signal.aborted) setDetected(result);
+    } catch (error) {
+      if (!controller.signal.aborted)
+        setDetected({
+          ok: false,
+          message: `安装检测失败：${error instanceof Error ? error.message : String(error)}`,
+        });
+    } finally {
+      if (checker.current === controller) {
+        checker.current = undefined;
+        setChecking(false);
+      }
+    }
+  };
   const save = async () => {
     const port = Number(portText);
+    const executable = draft.browscreenExecutable.trim() || "browscreen";
     if (!Number.isInteger(port) || port < 1 || port > 65535) {
       setMessage("端口请填写 1 到 65535 之间的整数，例如 13390。");
       return;
     }
+    if (draft.enabled && !draft.mcpId) {
+      setMessage("请先选择用于测试的 Playwright 浏览器。");
+      return;
+    }
     if (
-      draft.enabled &&
-      (!draft.browscreenProject.trim().startsWith("/") || !draft.mcpId)
+      executable !== "browscreen" &&
+      !/^(\/|[a-zA-Z]:[\\/]|\\\\)/.test(executable)
     ) {
-      setMessage("请先填写 Browscreen 完整目录，并选择 Playwright 浏览器。");
+      setMessage(
+        "请填写 browscreen 或可执行文件的完整路径，不要混入启动参数。",
+      );
       return;
     }
     setSaving(true);
@@ -107,8 +171,9 @@ function PreferencesForm({
             op: "set",
             path: ["browserPreview"],
             value: {
-              ...draft,
-              browscreenProject: draft.browscreenProject.trim(),
+              enabled: draft.enabled,
+              mcpId: draft.mcpId,
+              browscreenExecutable: executable,
               port,
             },
           },
@@ -159,19 +224,55 @@ function PreferencesForm({
       <p className="dsh-test-setting-hint">
         开启后也会等待浏览器画面就绪，不会提前打开空窗口。
       </p>
+      <p className="dsh-test-setting-hint">
+        请先在 DSH 所在电脑安装 Browscreen（Python ≥3.14）。支持稳定版本{" "}
+        {browscreenVersionRange}，建议使用 0.2.1。 默认从宿主 PATH 查找
+        browscreen，无需下载源码或提前启动服务。
+      </p>
+      <div className="dsh-test-setting-actions">
+        <button
+          type="button"
+          disabled={saving || checking}
+          onClick={() => void check()}
+        >
+          {checking ? "正在检测…" : "检测安装"}
+        </button>
+      </div>
+      {detected && (
+        <div
+          className="dsh-test-command-check"
+          data-test-browscreen-check
+          role={detected.ok ? "status" : "alert"}
+        >
+          <p>{detected.message}</p>
+          {detected.executable && (
+            <p>
+              命令位置：<code>{detected.executable}</code>
+            </p>
+          )}
+          {detected.version && <p>检测版本：{detected.version}</p>}
+        </div>
+      )}
       <fieldset disabled={saving}>
-        <label htmlFor="dsh-test-browscreen-project">Browscreen 项目目录</label>
-        <input
-          id="dsh-test-browscreen-project"
-          type="text"
-          value={draft.browscreenProject}
-          placeholder="例如 /Users/你的名字/Projects/Browscreen"
-          onChange={(event) => edit({ browscreenProject: event.target.value })}
-        />
-        <p className="dsh-test-setting-hint">
-          填包含 pyproject.toml 和 .venv
-          的文件夹；不是其中某个文件。首次使用需按指南准备依赖。
-        </p>
+        <details className="dsh-test-command-advanced">
+          <summary>高级设置：Browscreen 命令路径</summary>
+          <label htmlFor="dsh-test-browscreen-executable">
+            Browscreen 可执行文件
+          </label>
+          <input
+            id="dsh-test-browscreen-executable"
+            type="text"
+            value={draft.browscreenExecutable}
+            placeholder="browscreen 或完整可执行文件路径"
+            onChange={(event) =>
+              edit({ browscreenExecutable: event.target.value })
+            }
+          />
+          <p className="dsh-test-setting-hint">
+            终端能运行但检测找不到时，执行 uv tool dir --bin，将该目录中的
+            browscreen 完整路径填在这里；不是项目文件夹，也不填写额外参数。
+          </p>
+        </details>
         <label htmlFor="dsh-test-browscreen-port">采集服务端口</label>
         <input
           id="dsh-test-browscreen-port"
@@ -217,7 +318,7 @@ function PreferencesForm({
         MCP，请勿与其他会话共享操作该浏览器。
       </p>
       <div className="dsh-test-setting-actions">
-        <button type="submit" disabled={!dirty || saving}>
+        <button type="submit" disabled={!dirty || saving || checking}>
           {saving ? "正在保存…" : "保存设置"}
         </button>
         <button

@@ -11,6 +11,7 @@ import { NativeTests } from "./native-test.js";
 import type { PluginConfig } from "./config.js";
 import type {} from "@deepseek-ai/dsh-settings";
 import { PreviewSetup } from "./preview-setup.js";
+import { PreviewSettingsAccess } from "./preview-settings-access.js";
 import { reportPrefix } from "./report-access.js";
 import { ProgressAccess, progressPrefix } from "./progress-access.js";
 import { atomicJson, rebuild } from "./recorder.js";
@@ -50,6 +51,8 @@ export function apply(ctx: Context, config: PluginConfig = {}): void {
   );
   ctx.provide("nativeTests", tests);
   ctx.inject(["webServer", "connection"], (web) => {
+    const previewSettings = new PreviewSettingsAccess(() => setup.describe());
+    web.effect(() => () => previewSettings.dispose());
     tests.reports.origin = () => `http://127.0.0.1:${web.webServer.port}`;
     web.effect(() => () => {
       tests.reports.origin = undefined;
@@ -82,16 +85,10 @@ export function apply(ctx: Context, config: PluginConfig = {}): void {
         path: "/test-preview-settings",
         handler: (req, res) => {
           if (!web.connection.authorizeIndex(req, res)) return;
-          if (req.method !== "GET") {
-            res.writeHead(405);
+          void previewSettings.serve(req, res).catch(() => {
+            if (!res.headersSent) res.writeHead(503);
             res.end();
-            return;
-          }
-          res.writeHead(200, {
-            "Content-Type": "application/json; charset=utf-8",
-            "Cache-Control": "no-store",
           });
-          res.end(JSON.stringify(setup.describe()));
         },
       }),
     );

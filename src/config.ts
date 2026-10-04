@@ -9,7 +9,7 @@ import {
 export interface PreviewConfig {
   workDir: string;
   browscreenUrl: string;
-  browscreenProject?: string;
+  browscreenExecutable?: string;
 }
 export interface TestConfig {
   workspace: string;
@@ -35,11 +35,15 @@ export interface PluginConfig extends Partial<TestConfig> {
 const PreviewSchema = z.object({
   workDir: z.string().required(),
   browscreenUrl: z.string().required(),
-  browscreenProject: z.string(),
+  browscreenExecutable: z
+    .string()
+    .default(previewPreferenceDefaults.browscreenExecutable),
 });
 const PreferencesSchema = z.object({
   enabled: z.boolean().default(false),
-  browscreenProject: z.string().default(""),
+  browscreenExecutable: z
+    .string()
+    .default(previewPreferenceDefaults.browscreenExecutable),
   port: z
     .number()
     .step(1)
