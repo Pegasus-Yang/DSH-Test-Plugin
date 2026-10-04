@@ -10,6 +10,7 @@ The English guides describe the current implementation. Historical design and ac
 
 ## 当前版本
 
+- [版本变更记录](../changelog.md)：各版本功能、修复和文档变化，以及尚未打新标签的主分支更新。
 - [执行步骤与进度显示](user-guide/执行步骤与进度显示.md)：0.8.3 当前步骤焦点、完整列表、折叠、长文字及多实例编号。
 - [步骤进度界面验收](project/步骤进度界面验收.md)：0.8.3 所选稿对照、100步模拟列表、长文字、窄窗口与真实安装的验证范围。
 - [常见问题速查与处理](deployment/常见问题速查与处理.md)：按现象定位环境残留、释放失败、预览、配置、构建、安装和报告问题，附处理步骤与恢复标准。

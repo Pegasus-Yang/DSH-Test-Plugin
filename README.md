@@ -4,7 +4,7 @@
 
 简体中文 · [English](README.en.md)
 
-[版本 v0.8.3](https://github.com/Pegasus-Yang/DSH-Test-Plugin/tree/v0.8.3) · [MIT 许可证](LICENSE) · [文档](doc/README.md) · [问题反馈](https://github.com/Pegasus-Yang/DSH-Test-Plugin/issues)
+[版本 v0.8.3](https://github.com/Pegasus-Yang/DSH-Test-Plugin/tree/v0.8.3) · [更新日志](changelog.md) · [MIT 许可证](LICENSE) · [文档](doc/README.md) · [问题反馈](https://github.com/Pegasus-Yang/DSH-Test-Plugin/issues)
 
 DSH Test Plugin 是 DeepSeek Harness（DSH）的原生 TypeScript 插件，支持网页和 GET JSON 接口测试。它复用当前对话的模型、工具、审批及会话记录，通过可信观察与确定性比较给出断言结果，并生成可离线查看的 HTML 报告。
 
