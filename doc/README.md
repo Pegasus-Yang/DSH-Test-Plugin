@@ -10,6 +10,10 @@ The English guides describe the current implementation. Historical design and ac
 
 ## 当前版本
 
+- [浏览器实时预览一步一步配置](user-guide/浏览器实时预览一步一步配置.md)：0.8.0 设置入口、首次准备、逐项填写、运行命令、关闭与排错。
+- [预览设置与自动接入验收](project/预览设置与自动接入验收.md)：0.8.0 设置持久化、MCP 接入、直接 /test、API 无浮窗及安装包验证。
+
+- [执行进度与实时预览验收](project/执行进度与实时预览验收.md)：0.7.0 步骤图、实际耗时、CDP/首帧门禁、原生浮窗和独立安装包验证。
 - [文本用例与参数化验收](project/文本用例与参数化验收.md)：0.6.0 TXT、Markdown、CSV、原生审核及多实例报告的实际结果。
 - [文字规划与中文对话验收](project/文字规划与中文对话验收.md)：0.5.0 文字步骤、运行时定义、原文与拆分思路、中文通报及验证边界。
 - [计划审核与接口测试验收](project/计划审核与接口测试验收.md)：0.4.0 原生 plan 审核、修改及真实 HTTP 报告核验。
@@ -20,6 +24,7 @@ The English guides describe the current implementation. Historical design and ac
 
 ## 设计与实施
 
+- [执行进度与浏览器实时预览方案](design/执行进度与浏览器实时预览方案.md)及[实施方案](design/执行进度与实时预览实施方案.md)：步骤图、实际耗时、DSH 原生浮窗和仅在 CDP 与首帧就绪时启用的 Browscreen 接入。
 - [文本用例与 CSV 参数化方案](design/文本用例与CSV参数化方案.md)及[实施方案](design/文本用例与CSV参数化实施方案.md)：0.6.0 文件用例、参数预览和原生审核的改造依据。
 
 [原生对话增强改造](design/原生对话增强改造.md) 是 0.2.0 的当前接入决策；下列独立执行/清理 Agent 的早期方案作为历史保留。

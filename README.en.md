@@ -4,7 +4,7 @@
 
 A TypeScript plugin that adds test planning, UI/API execution, evidence capture, deterministic assertions, and static HTML reports to **the current DeepSeek Harness (DSH) conversation**. Describe a task in natural language or run a prepared JSON test suite. The plugin uses DSH's normal model loop, tools, approvals, and conversation persistence; it does not create a separate execution agent or modify the host core.
 
-Current version: **0.6.0 (development release)**. Browser tests, API tests, plan review, and reports have been exercised against a local DSH installation. See the [development and acceptance record (Chinese)](doc/project/开发进度.md) for the verified scope and remaining limitations.
+Current version: **0.8.0 (development release)**. Configure Browscreen in DSH Settings, then use the normal test commands to prepare preview on the next run. The step diagram, elapsed time, and CDP/first-frame gate remain. See the [step-by-step setup guide (Chinese)](doc/user-guide/浏览器实时预览一步一步配置.md) and [development and acceptance record (Chinese)](doc/project/开发进度.md).
 
 ## Features
 
@@ -130,6 +130,8 @@ Run these examples separately. Paths resolve against the plugin's `workspace`; c
 User-facing explanations follow DSH's explicit language preference. Without one, tasks containing Chinese use Chinese; other tasks fall back to English. Completed tool calls may be collapsed by DSH; expand them or open the trace view. See the [user guide](doc/user-guide/使用说明.en.md) for details.
 
 ## Reports and evidence
+
+The conversation's input area shows the current test's steps and elapsed wall time, including waits. “查看步骤” opens details. With [optional Browscreen configuration (Chinese)](doc/deployment/安装与运维.md#浏览器实时预览可选), “实时画面” opens a read-only native floating panel. API-only tasks and tasks without usable CDP never open an empty preview. The first release supports one active page and does not add an App test adapter.
 
 The final response includes a **report link and full save location**; you do not need to find the run ID yourself. HTTP links use the DSH server and its authentication. The report is static HTML and can also be opened offline without a separate report server.
 
