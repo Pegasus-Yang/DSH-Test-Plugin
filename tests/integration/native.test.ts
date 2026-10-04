@@ -165,6 +165,15 @@ function setup(value = 3) {
     await new Promise((resolve) => setTimeout(resolve, 0));
   };
   const call = (name: string, args = {}) => execute({ name, arguments: args });
+  const announce = (text: string, sessionId = "origin") =>
+    emit(
+      "session/event",
+      { id: sessionId },
+      {
+        type: "assistant/message",
+        data: { message: { content: [{ type: "text", text }] } },
+      },
+    );
   const step = async () => {
     expect((await call("test_capture")).isError).toBe(false);
     expect((await call("test_finish_step")).isError).toBe(false);
@@ -188,6 +197,7 @@ function setup(value = 3) {
     root,
     end,
     call,
+    announce,
     step,
     emit,
   };
@@ -752,6 +762,31 @@ it("test入口提交后直接执行，不进入原生审核", async () => {
   expect(t.planMode.set).not.toHaveBeenCalled();
 });
 
+it("直接执行先观察本会话完整计划通报，不以工具结果或其他会话消息代替", async () => {
+  const t = setup();
+  await t.manager.start(t.agent, "点赞不为0");
+  const submitted = await t.call("test_submit_plan", reviewPlan());
+  const args = {
+    capability: "browser",
+    allowed_targets: ["https://example.test"],
+    reason: "执行当前步骤",
+  };
+  expect((await t.call("test_define_step", args)).isError).toBe(true);
+  await t.announce("计划已批准，开始执行");
+  expect((await t.call("test_define_step", args)).isError).toBe(true);
+  await t.announce(submitted.value.plan_summary, "other");
+  expect((await t.call("test_define_step", args)).isError).toBe(true);
+  expect(t.dispatched.filter((name) => name.includes("playwright"))).toEqual(
+    [],
+  );
+  await t.announce(submitted.value.plan_summary);
+  expect((await t.call("test_define_step", args)).isError).toBe(false);
+  const run = t.manager.sessions.get("origin")!;
+  expect(
+    readFileSync(join(run.recorder.directory, "events.jsonl"), "utf8"),
+  ).toContain('"plan_announced"');
+});
+
 it.each([
   [200, "PASS"],
   [201, "FAIL"],
@@ -843,7 +878,9 @@ it("计划只输出文字时提醒原生提交，审核拒绝后不催促用户�
 it("文字计划只冻结短句，运行时按采集方式登记输出；缺少检查不能通过", async () => {
   const t = setup();
   await t.manager.start(t.agent, "打开帖子检查点赞不为0");
-  await t.call("test_submit_plan", reviewPlan());
+  await t.announce(
+    (await t.call("test_submit_plan", reviewPlan())).value.plan_summary,
+  );
   const run = t.manager.sessions.get("origin")!;
   const frozen = structuredClone(run.run.plan);
   expect(frozen.cases[0].steps[0]).toMatchObject({
@@ -914,13 +951,14 @@ it("纯接口文字步骤运行时确定响应结构，下一步只核对已采�
   );
   try {
     await t.manager.start(t.agent, "发送请求并验证状态码");
-    await t.call("test_submit_plan", {
+    const submitted = await t.call("test_submit_plan", {
       name: "接口检查",
       steps: [
         { description: "请求httpbin接口" },
         { description: "检查响应", checks: ["状态码为200", "关键字为agent"] },
       ],
     });
+    await t.announce(submitted.value.plan_summary);
     const run = t.manager.sessions.get("origin")!;
     await t.call("test_define_step", {
       capability: "api",

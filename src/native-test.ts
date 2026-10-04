@@ -282,6 +282,7 @@ export class NativeTest {
   private reviewCall?: string;
   private reviewDismissed = false;
   private previousPlanMode?: boolean;
+  private announcement?: { summary: string; required: string[]; text: string };
   constructor(
     private owner: NativeTests,
     agent: Agent,
@@ -865,6 +866,21 @@ export class NativeTest {
           session_id: this.id,
           type: event.type,
         });
+        if (event.type === "assistant/message" && this.announcement) {
+          this.announcement.text += event.data.message.content
+            .filter((block) => block.type === "text")
+            .map((block) => (block as { text: string }).text)
+            .join("\n");
+          const compact = (text: string) => text.replace(/[\s#*>`_]/g, "");
+          if (
+            this.announcement.required.every((part) =>
+              compact(this.announcement!.text).includes(compact(part)),
+            )
+          ) {
+            this.announcement = undefined;
+            this.recorder.event("plan_announced", { session_id: this.id });
+          }
+        }
         if (event.type === "tool/call") {
           try {
             this.bind(
@@ -971,6 +987,17 @@ export class NativeTest {
           ].includes(exec.name)
         )
           return "规划阶段禁止执行：请仅根据用户描述提交业务计划，运行后再识别页面并调整操作";
+        if (
+          this.announcement &&
+          !this.cancelled &&
+          !["test_current", "ask_user_question", "todo_write"].includes(
+            exec.name,
+          )
+        )
+          return (
+            "执行前必须先在正常对话中完整通报以下计划（无需用户确认），不要只说计划已批准：\n" +
+            this.announcement.summary
+          );
         if (this.review && !this.planned && exec.name === "exit_plan_mode") {
           if (!this.draft) return "请先test_submit_plan保存待审核草案";
           if (
@@ -1075,13 +1102,32 @@ export class NativeTest {
       return this.state();
     }
     this.freeze(plan);
+    const summary = textReview(
+      plan,
+      false,
+      testLanguage(this.owner.ctx, this.task),
+    );
+    if (!trustedFile) {
+      const zh = testLanguage(this.owner.ctx, this.task).startsWith("zh");
+      this.announcement = {
+        summary,
+        text: "",
+        required: [
+          ...(zh
+            ? ["原始任务", "拆分思路", "步骤清单"]
+            : ["Original task", "Approach", "Steps"]),
+          plan.planning!.original_task,
+          plan.planning!.rationale,
+          ...plan.cases[0]!.steps.flatMap((step) => [
+            step.description,
+            ...(step.checks ?? []),
+          ]),
+        ],
+      };
+    }
     return {
       ...this.state(),
-      plan_summary: textReview(
-        plan,
-        false,
-        testLanguage(this.owner.ctx, this.task),
-      ),
+      plan_summary: summary,
     };
   }
   private validateEffective(instance: CaseRun, steps: Step[]): void {
@@ -1282,6 +1328,13 @@ export class NativeTest {
             : "planning",
       ...(this.review && !this.planned && this.draft
         ? { review_markdown: this.reviewMarkdown() }
+        : {}),
+      ...(this.announcement
+        ? {
+            plan_summary: this.announcement.summary,
+            announcement_required:
+              "先在正常对话完整输出plan_summary，再调用执行工具；无需用户确认",
+          }
         : {}),
       current: c
         ? {
