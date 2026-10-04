@@ -4,7 +4,7 @@
 
 在 **DeepSeek Harness（DSH）的当前对话** 中完成测试规划、UI/API 操作、证据采集、确定性断言和报告生成的 TypeScript 插件。用自然语言描述任务即可开始，也可以执行预先编写的 JSON 测试集合。插件复用 DSH 的模型循环、工具、审批和会话保存机制，不创建独立执行 Agent，也不修改宿主核心。
 
-当前版本：**0.5.0（开发版本）**。已在本地 DSH 验证浏览器测试、纯接口测试、计划审核和报告链路；完整验证范围及历史问题见 [开发与验收记录](doc/project/开发进度.md)。
+当前版本：**0.6.0（开发版本）**。已在本地 DSH 验证浏览器测试、纯接口测试、计划审核和报告链路；完整验证范围及历史问题见 [开发与验收记录](doc/project/开发进度.md)。
 
 ## 能做什么
 
@@ -20,6 +20,7 @@
 | 静态报告 | 步骤、断言、实际/预期、工具调用、附件和筛选；最终回复提供查看链接和保存位置 |
 | 停止与清理 | 停止业务后等待在途结算，再在同一会话执行预授权清理；无法确认释放时隔离环境 |
 | JSON 集合 | 多用例、多数据行、依赖、准备及清理步骤；保留原始计划和运行账本 |
+| 文件用例与参数化 | TXT 每个非空行、Markdown 每个顶层列表项一条用例；CSV 首行参数名，其余记录逐行展开并审核 |
 
 ## 安装到本地 DSH
 
@@ -73,6 +74,25 @@ pnpm dsh web --patch /绝对路径/DeepseekHarnessTestPlugin/.local/dsh-test.pat
 
 以下是 **DSH 对话输入框中的命令**，不是终端命令。
 
+不需要手写 JSON 即可运行多条用例：
+
+```text
+/test-run examples/httpbin-cases.txt
+/test-run examples/httpbin-cases.md
+/test-plan --file examples/httpbin-cases.md
+```
+
+TXT 按非空行拆分；Markdown 按最外层有序或无序列表项拆分，项内段落、子列表和代码块整体保留。前两种入口通报全部文字计划后直接执行，第三种先审核。
+
+参数化入口始终先审核，可使用任务模板或用例文件：
+
+```text
+/test-data examples/httpbin-parameters.csv 请求https://httpbin.org/get?keyword=${keyword}，验证状态码为200，返回keyword为${keyword}
+/test-data examples/httpbin-parameters.csv --file examples/httpbin-parameterized.md
+```
+
+CSV 首行为参数名，后续每条数据记录是一组值。每条用例使用全部数据行，例如 2 条用例 × 2 行数据 = 4 个执行实例。原生 plan 卡片会展示来源、原文、所有参数值、展开后的任务、数量及各实例步骤，批准后执行。值保留 `001`、空字符串等原意，`${参数名}` 只作一次文字替换。输入使用读取时快照，修改文件后需取消当前草案并重新提交。
+
 直接规划并执行浏览器测试：
 
 ```text
@@ -94,7 +114,7 @@ pnpm dsh web --patch /绝对路径/DeepseekHarnessTestPlugin/.local/dsh-test.pat
 /test-run examples/httpbin-get.json
 ```
 
-逐条执行示例，不要同时共享同一浏览器环境。路径相对于插件配置的 `workspace`；使用其他工作区时，先将示例复制到该工作区。`/test-run` 只接受 JSON 路径，自然语言任务使用 `/test` 或 `/test-plan`。
+逐条执行示例，不要同时共享同一浏览器环境。路径相对于插件配置的 `workspace`；使用其他工作区时，先将示例复制到该工作区。`/test-run` 接受 TXT、Markdown 或 JSON 路径；直接输入自然语言任务使用 `/test` 或 `/test-plan`。含空格的路径可以整体加引号。
 
 | 命令 | 用途 |
 | --- | --- |

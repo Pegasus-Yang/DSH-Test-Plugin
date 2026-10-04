@@ -1,0 +1,2 @@
+发送GET请求到https://httpbin.org/get?keyword=agent，验证状态码为200，返回keyword为agent。
+发送GET请求到https://httpbin.org/get?client=dsh，验证状态码为200，返回client为dsh。

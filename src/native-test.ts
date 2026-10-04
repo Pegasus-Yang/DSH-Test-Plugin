@@ -323,7 +323,7 @@ export class NativeTest {
       incomplete: false,
       resource_quarantined: false,
       manifest: {
-        plugin_version: "0.5.0",
+        plugin_version: "0.6.0",
         plan_review: review,
         execution: "native-conversation",
         origin_session_id: agent.id,
@@ -371,7 +371,7 @@ export class NativeTest {
             ? "测试报告已生成。请在本轮回复中只总结test_finish返回的权威统计、逐步状态和断言。BLOCKED或缺少断言记录绝不能写成PASS；页面口头观察不能替代程序断言。给出报告链接。"
             : guide +
               (this.review && !this.planned
-                ? "\n本次为/test-plan：原生plan模式中只规划。test_submit_plan仅保存可修改草案，不会执行。提交成功后，将返回的review_markdown原样作为exit_plan_mode的plan参数展示审核。不要自行缩写或替换审核内容。用户要求修改时重新test_submit_plan再审核；同意后插件自动冻结已审草案并开始执行。关闭plan模式不代表批准。"
+                ? "\n本次为审核入口（/test-plan或/test-data）：原生plan模式中只规划。test_submit_plan仅保存可修改草案，不会执行。提交成功后，将返回的review_markdown原样作为exit_plan_mode的plan参数展示审核。不要自行缩写或替换审核内容。用户要求修改时重新test_submit_plan再审核；同意后插件自动冻结已审草案并开始执行。关闭plan模式不代表批准。"
                 : "") +
               "\n当前测试状态：" +
               JSON.stringify(this.state())),

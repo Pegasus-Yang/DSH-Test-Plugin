@@ -4,7 +4,7 @@
 
 A TypeScript plugin that adds test planning, UI/API execution, evidence capture, deterministic assertions, and static HTML reports to **the current DeepSeek Harness (DSH) conversation**. Describe a task in natural language or run a prepared JSON test suite. The plugin uses DSH's normal model loop, tools, approvals, and conversation persistence; it does not create a separate execution agent or modify the host core.
 
-Current version: **0.5.0 (development release)**. Browser tests, API tests, plan review, and reports have been exercised against a local DSH installation. See the [development and acceptance record (Chinese)](doc/project/开发进度.md) for the verified scope and remaining limitations.
+Current version: **0.6.0 (development release)**. Browser tests, API tests, plan review, and reports have been exercised against a local DSH installation. See the [development and acceptance record (Chinese)](doc/project/开发进度.md) for the verified scope and remaining limitations.
 
 ## Features
 
@@ -20,6 +20,7 @@ Current version: **0.5.0 (development release)**. Browser tests, API tests, plan
 | Static reports | Inspect steps, assertions, actual/expected values, calls, and attachments; receive a report link and save location |
 | Stop and cleanup | Stop business actions, settle in-flight work, then run preauthorized cleanup in the same conversation |
 | JSON suites | Support multiple cases and datasets, dependencies, setup, cleanup, and an event ledger |
+| Files and parameters | One case per nonblank TXT line or top-level Markdown list item; CSV headers name parameters and each data record expands into a reviewed instance |
 
 ## Install in local DSH
 
@@ -75,6 +76,25 @@ Open the address printed by DSH, enter your test workspace, and create a convers
 
 Enter the following commands in the **DSH conversation input**, not in a terminal.
 
+Run multiple cases without writing a JSON contract:
+
+```text
+/test-run examples/httpbin-cases.txt
+/test-run examples/httpbin-cases.md
+/test-plan --file examples/httpbin-cases.md
+```
+
+TXT uses nonblank lines; Markdown uses top-level ordered or unordered list items, preserving nested steps and code blocks inside each case. The first two commands announce all plans and execute; the third requires review.
+
+Parameterization always requires native plan review:
+
+```text
+/test-data examples/httpbin-parameters.csv Request https://httpbin.org/get?keyword=${keyword} and verify status 200 and returned keyword ${keyword}.
+/test-data examples/httpbin-parameters.csv --file examples/httpbin-parameterized.md
+```
+
+CSV headers are parameter names. Every source case uses every data record: 2 cases × 2 rows produces 4 instances. Review shows all parameter values, original and expanded tasks, counts, and each instance's steps. Values such as `001` and empty strings are preserved; substitution is a single text-replacement pass. Inputs use the read snapshot; cancel and resubmit after editing a source file. The included case files are Chinese examples; you can write your own TXT/Markdown cases in English.
+
 Plan and execute a browser test immediately:
 
 ```text
@@ -96,7 +116,7 @@ Run an existing JSON example inside the configured workspace:
 /test-run examples/httpbin-get.json
 ```
 
-Run these examples separately. Paths resolve against the plugin's `workspace`; copy the examples into that directory if you use another workspace. `/test-run` accepts a JSON path only; use `/test` or `/test-plan` for natural language.
+Run these examples separately. Paths resolve against the plugin's `workspace`; copy the examples into that directory if you use another workspace. `/test-run` accepts TXT, Markdown, or JSON paths; use `/test` or `/test-plan` for an inline task. Quote file paths containing spaces.
 
 | Command | Purpose |
 | --- | --- |
