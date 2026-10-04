@@ -19,6 +19,8 @@ The English guides describe the current implementation. Historical design and ac
 
 ## 设计与实施
 
+- [文本用例与 CSV 参数化方案](design/文本用例与CSV参数化方案.md)及[实施方案](design/文本用例与CSV参数化实施方案.md)：0.6.0 文件用例、参数预览和原生审核的改造依据。
+
 [原生对话增强改造](design/原生对话增强改造.md) 是 0.2.0 的当前接入决策；下列独立执行/清理 Agent 的早期方案作为历史保留。
 
 | 文档 | 用途 |
