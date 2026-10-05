@@ -10,6 +10,7 @@ The English guides describe the current implementation. Historical design and ac
 
 ## 当前版本
 
+- [带截图的功能与使用说明](user-guide/使用说明.md#用截图认识功能)：真实计划审核、当前步骤与耗时、完整列表、浏览器浮窗、设置和报告；[项目首页预览](../README.md#实际效果)提供快速展示。
 - [版本变更记录](../changelog.md)：各版本功能、修复和文档变化，以及尚未打新标签的主分支更新。
 - [GitHub安装与卸载验收](project/GitHub安装与卸载验收.md)：0.9.1 公开 SDK 构建、独立 npm 宿主、Git 安装及真实页面执行、停用和卸载验证。
 - [Browscreen命令接入验收](project/Browscreen命令接入验收.md)：0.9.0 PyPI 包、174 项回归、真实设置、接口与浏览器浮窗验证，以及部署边界。

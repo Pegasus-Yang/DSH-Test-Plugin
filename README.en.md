@@ -30,6 +30,24 @@ The plugin presents a text plan, executes each step with progress updates, and r
 | Live browser preview | Display headless browser frames through Browscreen after the current page has usable CDP and a valid first frame |
 | Reports and cleanup | Static HTML reports with steps, assertions, and attachments; stop, cleanup, and environment recovery |
 
+## Screenshots
+
+These screenshots show **real runs on version 0.9.1**, using the Chinese UI. The example visits ceshiren.com, searches for `agent`, opens the first result, and checks that the post body is not empty. Website content, generated steps, and elapsed time can vary.
+
+**See the current step and elapsed time.** The sky-blue panel shows the current action, settled count, total duration, and step duration. Expand the full list when needed.
+
+![Current-step panel while opening the first search result, with 2 of 3 steps settled and elapsed time](doc/user-guide/images/当前步骤与耗时.jpg)
+
+**Watch the headless browser.** A floating window displays live frames after the current page has usable CDP and a valid first frame. Move, resize, or close it through the host UI.
+
+![Live browser window showing the actual community post, frame number, capture time, and read-only status](doc/user-guide/images/浏览器实时画面.jpg)
+
+**Compare actual values with expectations.** The static report organizes cases, steps, assertions, and evidence, including the recorded comparison for the nonempty post body.
+
+![Actual passing test report with step results, the captured post body, the empty-string expectation, and evidence links](doc/user-guide/images/测试报告.jpg)
+
+See the [illustrated user guide](doc/user-guide/使用说明.en.md) for plan review, full steps, preview settings, and assertion details.
+
 ## Quick start
 
 ### 1. Prerequisites
@@ -148,7 +166,7 @@ pnpm test:integration
 
 See [isolated development](doc/deployment/安装与运维.en.md#isolated-development-environment) for the local host and real acceptance workflow. When reporting issues, include plugin, DSH, Node.js, and MCP versions, reproduction steps, and sanitized error details. Validate relevant changes and update affected documentation before submitting them.
 
-Keep local credentials, authenticated URLs, logs, screenshots, and run reports under `.local/` or `artifacts/`, outside public commits. Create annotated version tags using the [release guide (Chinese)](doc/deployment/版本发布与Git标签.md).
+Keep local credentials, authenticated URLs, logs, unredacted screenshots, and raw run reports under `.local/` or `artifacts/`, outside public commits. Store checked public documentation screenshots in `doc/user-guide/images/` and reference them with relative paths. Create annotated version tags using the [release guide (Chinese)](doc/deployment/版本发布与Git标签.md).
 
 ## Documentation
 
