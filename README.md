@@ -4,7 +4,7 @@
 
 简体中文 · [English](README.en.md)
 
-[版本 v0.9.2](https://github.com/Pegasus-Yang/DSH-Test-Plugin/tree/v0.9.2) · [更新日志](changelog.md) · [MIT 许可证](LICENSE) · [文档](doc/README.md) · [问题反馈](https://github.com/Pegasus-Yang/DSH-Test-Plugin/issues)
+[版本 v0.10.0](https://github.com/Pegasus-Yang/DSH-Test-Plugin/tree/v0.10.0) · [更新日志](changelog.md) · [MIT 许可证](LICENSE) · [文档](doc/README.md) · [问题反馈](https://github.com/Pegasus-Yang/DSH-Test-Plugin/issues)
 
 DSH Test Plugin 是 DeepSeek Harness（DSH）的原生 TypeScript 插件，支持网页和 GET JSON 接口测试。它复用当前对话的模型、工具、审批及会话记录，通过可信观察与确定性比较给出断言结果，并生成可离线查看的 HTML 报告。
 
@@ -64,17 +64,17 @@ DSH Test Plugin 是 DeepSeek Harness（DSH）的原生 TypeScript 插件，支�
 在 DSH 插件管理页填写下面的仓库地址，安装后启用插件：
 
 ```text
-https://github.com/Pegasus-Yang/DSH-Test-Plugin.git#v0.9.2
+https://github.com/Pegasus-Yang/DSH-Test-Plugin.git#v0.10.0
 ```
 
 也可以在 **DSH 源码目录** 使用终端安装：
 
 ```sh
-pnpm dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.9.2
+pnpm dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.10.0
 pnpm dsh web
 ```
 
-已有独立 CLI 时，使用 `dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.9.2` 和 `dsh web`。CLI 安装前正常停止原服务，随后启动同一 profile 并刷新网页。使用自定义 `DSH_HOME` 时，安装与启动须使用同一个目录。
+已有独立 CLI 时，使用 `dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.10.0` 和 `dsh web`。CLI 安装前正常停止原服务，随后启动同一 profile 并刷新网页。使用自定义 `DSH_HOME` 时，安装与启动须使用同一个目录。
 
 Git 发行版本包含 `dist`，安装不执行插件构建脚本，不需要克隆源码、`link-host` 或本机调试文件。随后按[安装与运维](doc/deployment/安装与运维.md#配置)配置 native 工具模式及专用 Playwright MCP；设置页可选启用实时预览。
 
@@ -128,7 +128,7 @@ pnpm dsh plugin --profile web add /绝对路径/DSH-Test-Plugin/artifacts/packag
 
 ## 浏览器实时预览与录像
 
-录像功能属于当前源码的未发布更新，尚不包含在上方 `v0.9.2` 标签中。本地更新安装方法见[构建与打包](doc/deployment/安装与运维.md#构建与打包)。
+0.10.0 提供独立录像开关及报告视频回放，可直接使用上方 GitHub 标签安装。已有安装先移除旧包，再安装新标签并重启同一 profile。
 
 先在 DSH 宿主安装 PyPI 的 `browscreen[video]==0.3.0`（Python ≥3.14，支持稳定版本 `>=0.3.0,<0.4.0`）。在 **设置 → 测试插件 → 浏览器预览与录像** 中启用、检测安装、选择采集端口及专用 Playwright MCP 并保存。命令默认是 `browscreen`，高级设置可填完整可执行文件路径；无需下载源码或提前启动服务。
 
@@ -138,7 +138,7 @@ pnpm dsh plugin --profile web add /绝对路径/DSH-Test-Plugin/artifacts/packag
 
 ## 常用命令与报告
 
-本节对应当前源码的未发布更新，已发布版本可查看对应标签的说明和[版本变更记录](changelog.md)。
+以下为 0.10.0 的命令与界面操作；历史变化见[版本变更记录](changelog.md)。
 
 | 命令 | 用途 |
 | --- | --- |

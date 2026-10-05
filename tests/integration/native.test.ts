@@ -218,6 +218,11 @@ it.each([
     expect(t.followups).toHaveLength(1);
     expect(t.followups[0].source.kind).toBe("user");
     const run = t.manager.sessions.get("origin")!;
+    expect(run.run.manifest.plugin_version).toBe(
+      JSON.parse(
+        readFileSync(new URL("../../package.json", import.meta.url), "utf8"),
+      ).version,
+    );
     await t.step();
     await t.step();
     await t.step();
