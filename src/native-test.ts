@@ -313,6 +313,7 @@ export class NativeTest {
   private disposers: (() => void)[] = [];
   private timer?: ReturnType<typeof setTimeout>;
   private stoppingTimer?: ReturnType<typeof setTimeout>;
+  private mediaDeadline?: number;
   private task: string;
   private readonly originalTask: string;
   private draft?: SuiteRun["plan"];
@@ -750,7 +751,7 @@ export class NativeTest {
       "test_finish_step",
       "必要观察完整后结算本步骤并计算后续断言，返回下一动作。",
       empty,
-      (_, exec) => {
+      async (_, exec) => {
         const c = this.current;
         if (!c) throw new Error("没有当前步骤");
         this.requireSettled(exec);
@@ -785,6 +786,9 @@ export class NativeTest {
         )
           throw new Error("尚无本步骤实际动作或可信观察，不能只配置后宣布完成");
         this.finishStep("SUCCEEDED");
+        this.save();
+        await this.owner.preview.drain(this.run.suite_run_id);
+        if (this.closed) throw new Error("测试已封存，录像结算不再推进步骤");
         this.advance();
         return this.state();
       },
@@ -810,10 +814,12 @@ export class NativeTest {
       "test_finish",
       "全部步骤及清理完成后生成静态报告，返回最终回复应使用的链接与保存位置。",
       empty,
-      (_, exec) => {
+      async (_, exec) => {
         this.requireSettled(exec);
         if (this.current || this.cursor < this.entries.length || !this.planned)
           throw new Error("测试尚未完成，请按test_current继续");
+        await this.owner.preview.finishRun(this.run);
+        if (this.closed) throw new Error("测试已封存，不能更改结果");
         return this.finish();
       },
     );
@@ -1316,6 +1322,10 @@ export class NativeTest {
         this.finishStep(result.assertion.status);
         continue;
       }
+      this.mediaDeadline =
+        e.phase === "cleanup"
+          ? Date.now() + this.owner.config.cleanupTimeoutMs
+          : undefined;
       this.timer = setTimeout(
         () => {
           this.recorder.event("step_timeout", {}, binding);
@@ -1732,12 +1742,47 @@ export class NativeTest {
   private save(): void {
     this.recorder.snapshot(this.run);
     try {
-      this.owner.preview.sync(this.run);
+      this.owner.preview.sync(this.run, {
+        directory: this.recorder.directory,
+        deadline: () =>
+          Math.min(
+            this.mediaDeadline ??
+              (this.current
+                ? Date.parse(this.current.result.started_at) +
+                  this.owner.config.stepTimeoutMs
+                : Infinity),
+            Date.now() + this.owner.config.cleanupTimeoutMs,
+          ),
+        emit: (event, recording, evidence) => {
+          try {
+            if (this.closed || this.reportReady) return;
+            const records = (this.run.recordings ??= []);
+            const index = records.findIndex(
+              (r) => r.recording_id === recording.recording_id,
+            );
+            if (index < 0) records.push(recording);
+            else records[index] = recording;
+            if (evidence) this.run.evidence.push(evidence);
+            this.recorder.event(event, {
+              recording,
+              ...(evidence ? { evidence } : {}),
+            });
+            this.recorder.snapshot(this.run);
+          } catch (error) {
+            this.owner.ctx.logger.warn("保存录像记录失败：%s", String(error));
+          }
+        },
+      });
     } catch (error) {
       this.owner.ctx.logger.warn("更新浏览器预览归属失败：%s", String(error));
     }
   }
   private emergency(error: unknown): void {
+    this.mediaDeadline = Date.now();
+    this.owner.preview.sealRecordings(
+      this.run.suite_run_id,
+      "测试紧急截止，视频收尾未获确认",
+    );
     this.run.incomplete = true;
     if (this.current) this.finishStep("ERROR", String(error));
     for (const i of this.run.instances) {

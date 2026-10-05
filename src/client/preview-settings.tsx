@@ -1,4 +1,4 @@
-/** 测试插件设置提供环境处置和预览偏好；MCP 接入留到下一次测试开始。 */
+/** 测试插件设置提供环境处置、预览及录像偏好；MCP 接入留到下一次测试开始。 */
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type {
   ConfigForms,
@@ -7,6 +7,7 @@ import type {
 import {
   previewPreferenceDefaults,
   browscreenVersionRange,
+  videoInstallHint,
   type BrowscreenCheck,
   type PreviewPreferences,
   type PreviewSettingsInfo,
@@ -45,9 +46,9 @@ export function PreviewSettingsPage({
       <p>测试提示环境未释放时，请先在这里处理，完成后重新执行测试命令。</p>
       <RecoveryPanel {...recovery} />
       <ReportSettings rebuildReport={rebuildReport} />
-      <h2>浏览器实时预览</h2>
+      <h2>浏览器预览与录像</h2>
       <p>
-        让你看到测试正在操作的网页。接口测试或没有浏览器画面时，不会打开浮窗。
+        实时查看测试网页，或在报告中回看操作录像。接口测试或没有浏览器画面时，不会打开浮窗。
       </p>
       {error && <p role="alert">{error}</p>}
       {info ? (
@@ -152,7 +153,7 @@ function PreferencesForm({
       setMessage("端口请填写 1 到 65535 之间的整数，例如 13390。");
       return;
     }
-    if (draft.enabled && !draft.mcpId) {
+    if ((draft.enabled || draft.recordingEnabled) && !draft.mcpId) {
       setMessage("请先选择用于测试的 Playwright 浏览器。");
       return;
     }
@@ -175,6 +176,7 @@ function PreferencesForm({
             path: ["browserPreview"],
             value: {
               enabled: draft.enabled,
+              recordingEnabled: !!draft.recordingEnabled,
               mcpId: draft.mcpId,
               browscreenExecutable: executable,
               port,
@@ -185,9 +187,7 @@ function PreferencesForm({
       );
       if (accepted) {
         setDirty(false);
-        setMessage(
-          "已保存。下一次 /test 或 /test-plan 会使用这些设置，无需重启 DSH。",
-        );
+        setMessage("已保存。下一次测试会使用这些设置，无需重启 DSH。");
       } else
         setMessage(
           "没有保存成功，可能配置已被修改或被启动 patch 覆盖。请重新读取设置后再试。",
@@ -227,9 +227,26 @@ function PreferencesForm({
       <p className="dsh-test-setting-hint">
         开启后也会等待浏览器画面就绪，不会提前打开空窗口。
       </p>
+      <label className="dsh-test-setting-switch">
+        <input
+          type="checkbox"
+          checked={!!draft.recordingEnabled}
+          disabled={saving}
+          onChange={(event) => edit({ recordingEnabled: event.target.checked })}
+        />
+        录制浏览器操作视频
+      </label>
+      <p className="dsh-test-setting-hint">
+        录像开关独立于实时预览，默认关闭。仅实际浏览器用例录制；隐藏浮窗或关闭页面后仍继续录制，结束后在测试报告查看。
+      </p>
+      {draft.recordingEnabled && (
+        <p className="dsh-test-setting-hint">
+          {videoInstallHint}“检测安装”只检查命令及版本，不能证明视频依赖已安装。
+        </p>
+      )}
       <p className="dsh-test-setting-hint">
         请先在 DSH 所在电脑安装 Browscreen（Python ≥3.14）。支持稳定版本{" "}
-        {browscreenVersionRange}，建议使用 0.2.1。 默认从宿主 PATH 查找
+        {browscreenVersionRange}，建议使用 0.3.0。 默认从宿主 PATH 查找
         browscreen，无需下载源码或提前启动服务。
       </p>
       <div className="dsh-test-setting-actions">

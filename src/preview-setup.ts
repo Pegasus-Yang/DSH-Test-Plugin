@@ -122,7 +122,7 @@ export class PreviewSetup {
   private target?: { entry: McpEntry; workDir: string };
   private detach?: () => boolean;
   private message =
-    "保存后，在下一次测试开始时接入浏览器；有画面后才打开浮窗。";
+    "保存后，在下一次测试开始时按预览和录像开关接入浏览器；仅启用预览且有画面时打开浮窗。";
   constructor(
     private readonly ctx: Context,
     private readonly preferences: () => PreviewPreferences | undefined,
@@ -201,9 +201,9 @@ export class PreviewSetup {
       await this.restore();
       return this.config.preview;
     }
-    if (!preferences.enabled) {
+    if (!preferences.enabled && !preferences.recordingEnabled) {
       await this.restore();
-      this.message = "实时预览已关闭。";
+      this.message = "实时预览和录像均已关闭。";
       return;
     }
     const executable = normalizeBrowscreenExecutable(
@@ -248,16 +248,18 @@ export class PreviewSetup {
       await entry.fiber.restart();
     }
     this.message =
-      "浏览器接入已准备；当前测试有 CDP 和有效画面时自动打开浮窗。";
+      "浏览器接入已准备；有当前页面 CDP 后按开关采集，启用预览且有有效画面时自动打开浮窗。";
     return {
       workDir,
       browscreenUrl: `http://127.0.0.1:${preferences.port}`,
       browscreenExecutable: executable,
+      previewEnabled: preferences.enabled,
+      recordingEnabled: !!preferences.recordingEnabled,
     };
   }
 
   failed(error: unknown): string {
-    this.message = `预览未启用：${error instanceof Error ? error.message : String(error)}`;
+    this.message = `浏览器预览与录像未启用：${error instanceof Error ? error.message : String(error)}`;
     return this.message;
   }
 }

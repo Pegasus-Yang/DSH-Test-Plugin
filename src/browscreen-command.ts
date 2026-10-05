@@ -50,7 +50,7 @@ function resolveExecutable(executable: string): string {
   const error = new Error(
     inaccessible
       ? "Browscreen 入口不可执行，请选择正确的命令文件或重新安装。"
-      : "未找到 Browscreen。请先安装，或在设置中填写完整命令路径并检测。",
+      : "未找到 Browscreen。请在 DSH 宿主运行 uv tool install --python 3.14 'browscreen==0.3.0' -i http://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.aliyun.com；录制请改用 'browscreen[video]==0.3.0'，也可在设置填写完整命令路径并检测。",
   ) as NodeJS.ErrnoException;
   error.code = inaccessible ? "NOT_EXECUTABLE" : "NOT_FOUND";
   throw error;
@@ -106,14 +106,14 @@ export async function checkBrowscreen(
             "INVALID_VERSION",
             "版本输出应为 browscreen X.Y.Z，请检查入口或重新安装 Browscreen。",
           );
-        const [major, minor, patch] = version.split(".").map(Number);
-        if (major !== 0 || minor !== 2 || patch! < 1)
+        const [major, minor] = version.split(".").map(Number);
+        if (major !== 0 || minor !== 3)
           return done({
             ok: false,
             executable,
             version,
             code: "UNSUPPORTED_VERSION",
-            message: `Browscreen ${version} 不受支持，需要稳定版本 ${browscreenVersionRange}，建议安装 0.2.1。`,
+            message: `Browscreen ${version} 不受支持，需要稳定版本 ${browscreenVersionRange}，建议安装 0.3.0；录制需安装 browscreen[video]。`,
           });
         done({
           ok: true,

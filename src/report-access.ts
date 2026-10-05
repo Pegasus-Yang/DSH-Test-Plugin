@@ -1,11 +1,13 @@
 /** 静态报告索引和受宿主登录保护的只读HTTP访问。 */
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { randomBytes, createHmac, timingSafeEqual } from "node:crypto";
 import {
   existsSync,
   readFileSync,
   readdirSync,
   realpathSync,
   statSync,
+  createReadStream,
 } from "node:fs";
 import { join, relative, sep, extname } from "node:path";
 import type { SuiteRun } from "./contracts.js";
@@ -14,6 +16,44 @@ import { statistics } from "./contracts.js";
 export const reportPrefix = "/test-reports";
 export class ReportAccess {
   origin?: () => string;
+  private mediaKey = randomBytes(32);
+  private videoToken(path: string, expires: number): string {
+    return createHmac("sha256", this.mediaKey)
+      .update(`${path}:${expires}`)
+      .digest("hex");
+  }
+  /** 已认证的报告签发仅限一个录像文件的只读票据，兼容 sandbox 下的严格 Cookie。 */
+  authorizeVideo(req: IncomingMessage): boolean {
+    if (!["GET", "HEAD"].includes(req.method ?? "")) return false;
+    try {
+      const url = new URL(req.url ?? "/", "http://local");
+      if (
+        !/^\/test-reports\/run-[\w-]+\/evidence\/browser-[\w-]+\.mp4$/.test(
+          url.pathname,
+        )
+      )
+        return false;
+      const token = url.searchParams.get("media")?.split(".");
+      if (
+        !token ||
+        token.length !== 2 ||
+        !/^\d+$/.test(token[0]!) ||
+        !/^[a-f0-9]{64}$/.test(token[1]!)
+      )
+        return false;
+      const expiry = Number(token[0]);
+      return (
+        expiry > Date.now() &&
+        expiry <= Date.now() + 86400000 &&
+        timingSafeEqual(
+          Buffer.from(token[1]!, "hex"),
+          Buffer.from(this.videoToken(url.pathname, expiry), "hex"),
+        )
+      );
+    } catch {
+      return false;
+    }
+  }
   private selected?: { run: SuiteRun; filename: string; settled: boolean };
   constructor(readonly outputRoot: string) {
     for (const id of readdirSync(outputRoot)
@@ -125,6 +165,7 @@ export class ReportAccess {
         ".json": "application/json; charset=utf-8",
         ".jsonl": "text/plain; charset=utf-8",
         ".png": "image/png",
+        ".mp4": "video/mp4",
       };
       res.setHeader(
         "Content-Type",
@@ -133,9 +174,65 @@ export class ReportAccess {
       if (extname(target) === ".html")
         res.setHeader(
           "Content-Security-Policy",
-          "sandbox allow-scripts allow-downloads allow-popups allow-popups-to-escape-sandbox; default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:",
+          "sandbox allow-scripts allow-downloads allow-popups allow-popups-to-escape-sandbox; default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; media-src 'self'",
         );
-      res.end(req.method === "HEAD" ? undefined : readFileSync(target));
+      if (extname(target) === ".mp4") {
+        const size = statSync(target).size;
+        if (
+          new URL(req.url!, "http://local").searchParams.get("download") === "1"
+        )
+          res.setHeader(
+            "Content-Disposition",
+            `attachment; filename="${suffix.split("/").at(-1)}"`,
+          );
+        res.setHeader("Accept-Ranges", "bytes");
+        let start = 0,
+          end = size - 1;
+        const range = req.headers?.range;
+        if (range && req.method !== "HEAD") {
+          const match = /^bytes=(\d*)-(\d*)$/.exec(range);
+          if (match && (match[1] || match[2])) {
+            if (match[1]) {
+              start = Number(match[1]);
+              if (match[2]) end = Math.min(end, Number(match[2]));
+            } else start = Math.max(0, size - Number(match[2]));
+            if (
+              !Number.isSafeInteger(start) ||
+              !Number.isSafeInteger(end) ||
+              start > end ||
+              start >= size ||
+              (Number(match[2]) === 0 && !match[1])
+            ) {
+              res.writeHead(416, { "Content-Range": `bytes */${size}` });
+              res.end();
+              return;
+            }
+            res.setHeader("Content-Range", `bytes ${start}-${end}/${size}`);
+            res.statusCode = 206;
+          }
+        }
+        res.setHeader("Content-Length", Math.max(0, end - start + 1));
+        if (req.method === "HEAD" || !size) res.end();
+        else {
+          const stream = createReadStream(target, { start, end });
+          res.once("close", () => stream.destroy());
+          stream.on("error", () => res.destroy());
+          stream.pipe(res);
+        }
+        return;
+      }
+      if (req.method === "HEAD") res.end();
+      else if (extname(target) === ".html") {
+        const base = pathname.slice(0, pathname.lastIndexOf("/") + 1);
+        const html = readFileSync(target, "utf8").replace(
+          /(src|href)="(evidence\/browser-[\w-]+\.mp4)(\?download=1)?"/g,
+          (_match, attribute, file: string, download: string) => {
+            const expires = Date.now() + 86400000;
+            return `${attribute}="${file}?${download ? "download=1&amp;" : ""}media=${expires}.${this.videoToken(base + file, expires)}"`;
+          },
+        );
+        res.end(html);
+      } else res.end(readFileSync(target));
     } catch {
       res.writeHead(404);
       res.end("报告或附件不存在");

@@ -10,6 +10,8 @@ export interface PreviewConfig {
   workDir: string;
   browscreenUrl: string;
   browscreenExecutable?: string;
+  previewEnabled?: boolean;
+  recordingEnabled?: boolean;
 }
 export interface TestConfig {
   workspace: string;
@@ -38,9 +40,12 @@ const PreviewSchema = z.object({
   browscreenExecutable: z
     .string()
     .default(previewPreferenceDefaults.browscreenExecutable),
+  previewEnabled: z.boolean().default(true),
+  recordingEnabled: z.boolean().default(false),
 });
 const PreferencesSchema = z.object({
   enabled: z.boolean().default(false),
+  recordingEnabled: z.boolean().default(false),
   browscreenExecutable: z
     .string()
     .default(previewPreferenceDefaults.browscreenExecutable),

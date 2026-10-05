@@ -150,3 +150,100 @@ it("附件预览与下载自包含，不发起会丢失宿主登录态的请求"
   expect(html).toContain('download="events.jsonl.gz"');
   expect(html).toContain('download="results.json"');
 });
+
+it("只有持有真实录像的实例显示录像入口；接口实例不显示媒体区域", () => {
+  const html = render((run, dir) => {
+    mkdirSync(join(dir, "evidence"));
+    const video = readFileSync(
+      new URL("../fixtures/minimal.mp4", import.meta.url),
+    );
+    writeFileSync(join(dir, "evidence/browser-one.mp4"), video);
+    const ui = run.instances[0];
+    const api = structuredClone(ui);
+    api.case_run_id = "api-instance";
+    api.case_id = "api";
+    run.instances.push(api);
+    run.evidence.push({
+      evidence_id: "video",
+      relative_path: "evidence/browser-one.mp4",
+      media_type: "video/mp4",
+      sha256: "fixture",
+      redacted: false,
+    });
+    run.recordings = [
+      {
+        recording_id: "one",
+        case_run_id: ui.case_run_id,
+        target_id: "page-one",
+        status: "COMPLETE",
+        started_at: run.created_at,
+        finished_at: run.finished_at,
+        evidence_id: "video",
+        relative_path: "evidence/browser-one.mp4",
+        bytes: video.length,
+        duration_ms: 1000,
+      },
+    ];
+  });
+  const articles = html.match(/<article class="case"[\s\S]*?<\/article>/g)!;
+  expect(articles[0]).toContain('data-tab="recordings"');
+  expect(articles[0]).toContain(
+    '<video controls preload="metadata" src="evidence/browser-one.mp4"',
+  );
+  expect(articles[1]).not.toContain('data-tab="recordings"');
+  expect(articles[1]).not.toContain("<video");
+  expect(articles[1]).not.toContain("录像提示");
+  expect(html).not.toContain('<dialog id="image-dialog"');
+  expect(html).not.toContain("data:video/");
+});
+it("纯接口、录像关闭或没有已归档视频时没有空播放器或截图对话框", () => {
+  const html = render(() => {});
+  expect(html).not.toContain("<video");
+  expect(html).not.toContain('data-tab="recordings"');
+  expect(html).not.toContain('<dialog id="image-dialog"');
+});
+it("已取消与部分录像、录像失败原因保持原样且不冒充完整视频", () => {
+  const html = render((run, dir) => {
+    mkdirSync(join(dir, "evidence"));
+    const bytes = readFileSync(
+      new URL("../fixtures/minimal.mp4", import.meta.url),
+    );
+    writeFileSync(join(dir, "evidence/browser-one.mp4"), bytes);
+    run.instances[0].cancelled = true;
+    run.instances[0].status = "CANCELLED";
+    run.evidence.push({
+      evidence_id: "video",
+      relative_path: "evidence/browser-one.mp4",
+      media_type: "video/mp4",
+      sha256: "fixture",
+      redacted: false,
+    });
+    run.recordings = [
+      {
+        recording_id: "one",
+        case_run_id: run.instances[0].case_run_id,
+        target_id: "one",
+        status: "PARTIAL",
+        started_at: run.created_at,
+        finished_at: run.finished_at,
+        evidence_id: "video",
+        relative_path: "evidence/browser-one.mp4",
+        bytes: bytes.length,
+        reason: "连接超时",
+      },
+      {
+        recording_id: "two",
+        case_run_id: run.instances[0].case_run_id,
+        target_id: "two",
+        status: "FAILED",
+        started_at: run.created_at,
+        first_frame_at: run.created_at,
+        reason: "依赖缺失",
+      },
+    ];
+  });
+  expect(html).toContain("部分录制");
+  expect(html).toContain("本次测试已取消");
+  expect(html).toContain("依赖缺失");
+  expect(html.match(/<video /g) ?? []).toHaveLength(1);
+});

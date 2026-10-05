@@ -28,6 +28,7 @@ The plugin presents a text plan, executes each step with progress updates, and r
 | Files and parameters | Import TXT, Markdown, or JSON cases; expand CSV data and review before running |
 | Execution progress | Show the current step, settled count, and elapsed time; expand the bounded list for long text and continuous batch numbering |
 | Live browser preview | Display headless browser frames through Browscreen after the current page has usable CDP and a valid first frame |
+| Browser recordings | Independent toggle, off by default; per-instance MP4 playback, seeking and download; no media UI for API instances |
 | Reports and cleanup | Static HTML reports with steps, assertions, and attachments; stop, cleanup, and environment recovery |
 
 ## Screenshots
@@ -125,9 +126,13 @@ Enter these commands in the **DSH input**, not a terminal. Run them separately:
 
 File paths resolve against the plugin's configured `workspace`. Copy [examples](examples) into that workspace if needed. The included case files are Chinese examples; you can write your own in English. See the [user guide](doc/user-guide/使用说明.en.md) for input formats, approval, and parameter rules.
 
-## Live browser preview
+## Live browser preview and recording
 
-Install `browscreen` from PyPI on the DSH host first (Python ≥3.14; stable versions `>=0.2.1,<0.3.0`). In **Settings → 测试插件 → 浏览器实时预览**, enable preview, click 检测安装, select the capture port and dedicated Playwright MCP, and save. The command defaults to `browscreen`; advanced settings accept its absolute executable path. No source checkout or separate service startup is required.
+Recording is an unreleased source update and is not included in the `v0.9.2` tag above. Use the local build and archive-install procedure to try this update.
+
+Install `browscreen[video]==0.3.0` from PyPI on the DSH host first (Python ≥3.14; stable versions `>=0.3.0,<0.4.0`). In **Settings → 测试插件 → 浏览器预览与录像**, enable preview, click 检测安装, select the capture port and dedicated Playwright MCP, and save. The command defaults to `browscreen`; advanced settings accept its absolute executable path. No source checkout or separate service startup is required.
+
+Enable 录制浏览器操作视频 to record independently of preview. The default is off. Closing the floating window or DSH page does not stop server-side recording; keep the host running. Each browser instance archives its own MP4 and offers an 操作录像 tab with playback, seeking, and download. API-only and mixed-suite API instances show no media area. Missing video dependencies produce an installation hint; see the [recording guide (Chinese)](doc/user-guide/浏览器录像与报告.md).
 
 The floating preview waits for the current page's CDP and a valid first frame. API-only tests and unavailable browser frames show no empty preview. Follow the [step-by-step setup guide (Chinese)](doc/user-guide/浏览器实时预览一步一步配置.md) for dependencies and editable MCP registration.
 

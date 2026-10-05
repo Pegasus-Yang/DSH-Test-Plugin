@@ -47,6 +47,7 @@ export interface PreviewState {
   frame_id?: string;
   captured_at?: string;
   src?: string;
+  recording_notice?: string;
 }
 export interface ProgressSnapshot {
   session_id: string;

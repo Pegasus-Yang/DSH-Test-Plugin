@@ -22,7 +22,7 @@ afterEach(() => {
     rmSync(folder, { recursive: true, force: true });
 });
 function command(
-  program = 'console.log("browscreen 0.2.1")',
+  program = 'console.log("browscreen 0.3.0")',
   name = "browscreen",
   mode = 0o755,
 ) {
@@ -35,12 +35,12 @@ function command(
 
 it("默认命令按宿主 PATH 解析，同一入口执行 version", async () => {
   const entry = command(
-    'if (process.argv[2] !== "version" || process.argv.length !== 3) process.exit(2); console.log("browscreen 0.2.1")',
+    'if (process.argv[2] !== "version" || process.argv.length !== 3) process.exit(2); console.log("browscreen 0.3.0")',
   );
   vi.stubEnv("PATH", entry.folder);
   expect(await checkBrowscreen()).toMatchObject({
     ok: true,
-    version: "0.2.1",
+    version: "0.3.0",
     executable: realpathSync(entry.executable),
   });
   expect(normalizeBrowscreenExecutable("  ")).toBe("browscreen");
@@ -78,7 +78,7 @@ it("不存在、目录和不可执行文件分别给出明确原因", async () =
     code: "NOT_EXECUTABLE",
   });
 });
-it.each(["0.1.0", "0.2.0", "0.3.0", "1.0.0"])(
+it.each(["0.1.0", "0.2.1", "0.4.0", "1.0.0"])(
   "稳定版本 %s 不在允许范围内",
   async (version) => {
     const entry = command(`console.log("browscreen ${version}")`);
@@ -89,16 +89,16 @@ it.each(["0.1.0", "0.2.0", "0.3.0", "1.0.0"])(
     });
   },
 );
-it("允许 0.2 补丁，拒绝预发布版、错误输出和非零退出", async () => {
+it("允许 0.3 补丁，拒绝预发布版、错误输出和非零退出", async () => {
   expect(
     await checkBrowscreen(
-      command('console.log("browscreen 0.2.2")').executable,
+      command('console.log("browscreen 0.3.1")').executable,
     ),
-  ).toMatchObject({ ok: true, version: "0.2.2" });
+  ).toMatchObject({ ok: true, version: "0.3.1" });
   for (const output of [
-    "browscreen 0.2.1rc1",
-    "other-tool 0.2.1",
-    "browscreen 0.2.1\nstarted",
+    "browscreen 0.3.0rc1",
+    "other-tool 0.3.0",
+    "browscreen 0.3.0\nstarted",
   ])
     expect(
       await checkBrowscreen(

@@ -16,9 +16,12 @@ const PreviewSchema = z.object({
     browscreenExecutable: z
         .string()
         .default(previewPreferenceDefaults.browscreenExecutable),
+    previewEnabled: z.boolean().default(true),
+    recordingEnabled: z.boolean().default(false),
 });
 const PreferencesSchema = z.object({
     enabled: z.boolean().default(false),
+    recordingEnabled: z.boolean().default(false),
     browscreenExecutable: z
         .string()
         .default(previewPreferenceDefaults.browscreenExecutable),

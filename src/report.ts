@@ -6,6 +6,7 @@ import { atomicWrite, redact, safePath } from "./recorder.js";
 import { reportStyle } from "./report-style.js";
 import { reportInteractions } from "./report-client.js";
 import { reportIcons } from "./report-icons.js";
+import { recordingMedia } from "./report-media.js";
 const escape = (value: unknown): string =>
   String(value ?? "").replace(
     /[&<>"']/g,
@@ -92,6 +93,7 @@ export function writeReport(
   const caseKey = (caseId: string) => sourceOf(caseId)?.template_id ?? caseId;
   const cases = run.instances
     .map((i, index) => {
+      const media = recordingMedia(directory, run, i);
       const caseMs = i.steps.reduce((n, s) => n + s.duration_ms, 0);
       const ids = [
         ...new Set(
@@ -126,10 +128,11 @@ export function writeReport(
         (s) =>
           s.assertion || i.effective_required_assertion_ids.includes(s.step_id),
       );
-      return `<article class="case" id="case-${index}" data-case="${escape(caseKey(i.case_id))}" data-data="${escape(i.data_id)}" data-status="${escape(i.status)}" data-search="${escape([i.name, i.case_id, i.data_id, i.status].join(" ").toLocaleLowerCase())}"${index ? " hidden" : ""}><header class="case-head"><div class="case-heading">${i.status === "PASS" ? icon("circle-check", "status-icon") : ""}<h2>${escape(i.name)}</h2>${badge(i.status)}</div><div class="case-meta"><span>用例标识<b>${escape(i.case_id)}</b></span><span>数据集<b>${escape(i.data_id)}</b></span><span>步骤耗时<b>${duration(caseMs)}</b></span></div></header>${i.issues.length ? `<aside class="issue">${i.issues.map(escape).join("<br>")}</aside>` : ""}${i.unsettled_call_ids.length ? `<aside class="issue danger">尚有 ${i.unsettled_call_ids.length} 次未结算调用；外部执行可能仍未停止。</aside>` : ""}${sourceInfo}${textPlan}<div class="tabs" role="tablist" aria-label="用例详情">${[
+      return `<article class="case" id="case-${index}" data-case="${escape(caseKey(i.case_id))}" data-data="${escape(i.data_id)}" data-status="${escape(i.status)}" data-search="${escape([i.name, i.case_id, i.data_id, i.status].join(" ").toLocaleLowerCase())}"${index ? " hidden" : ""}><header class="case-head"><div class="case-heading">${i.status === "PASS" ? icon("circle-check", "status-icon") : ""}<h2>${escape(i.name)}</h2>${badge(i.status)}</div><div class="case-meta"><span>用例标识<b>${escape(i.case_id)}</b></span><span>数据集<b>${escape(i.data_id)}</b></span><span>步骤耗时<b>${duration(caseMs)}</b></span></div></header>${i.issues.length ? `<aside class="issue">${i.issues.map(escape).join("<br>")}</aside>` : ""}${i.unsettled_call_ids.length ? `<aside class="issue danger">尚有 ${i.unsettled_call_ids.length} 次未结算调用；外部执行可能仍未停止。</aside>` : ""}${sourceInfo}${textPlan}${media.notice}<div class="tabs" role="tablist" aria-label="用例详情">${[
         ["steps", "步骤"],
         ["assertions", "断言"],
         ["attachments", "附件"],
+        ...(media.videos ? [["recordings", "操作录像"]] : []),
       ]
         .map(
           ([key, label]) =>
@@ -137,7 +140,7 @@ export function writeReport(
         )
         .join(
           "",
-        )}</div><div class="panel" id="panel-${index}-steps" role="tabpanel" aria-labelledby="tab-${index}-steps" data-panel="steps">${steps || '<p class="empty">尚未执行任何步骤</p>'}</div><div class="panel" id="panel-${index}-assertions" role="tabpanel" aria-labelledby="tab-${index}-assertions" data-panel="assertions" hidden>${assertions.map((s) => `<section class="assertion-item"><h3>${escape(s.description)} ${badge(s.status)}</h3>${s.assertion ? compare(s, index) : `<p class="reason">${escape(s.reason ?? "此断言未执行，没有实际值与比较结果。")}</p>`}</section>`).join("") || '<p class="empty">尚无已执行的断言；不能据此判定通过。</p>'}<details class="inspect"><summary>输入数据与冻结预期</summary><pre>${json(i.data)}</pre></details>${i.revision_history?.length ? `<details class="inspect"><summary>动态检查来源与事后标记</summary><pre>${json(i.revision_history)}</pre></details>` : ""}</div><div class="panel attachments" id="panel-${index}-attachments" role="tabpanel" aria-labelledby="tab-${index}-attachments" data-panel="attachments" hidden>${ids.map((id) => attachment(id, index)).join("") || '<p class="empty">本用例没有采集附件</p>'}</div></article>`;
+        )}</div><div class="panel" id="panel-${index}-steps" role="tabpanel" aria-labelledby="tab-${index}-steps" data-panel="steps">${steps || '<p class="empty">尚未执行任何步骤</p>'}</div><div class="panel" id="panel-${index}-assertions" role="tabpanel" aria-labelledby="tab-${index}-assertions" data-panel="assertions" hidden>${assertions.map((s) => `<section class="assertion-item"><h3>${escape(s.description)} ${badge(s.status)}</h3>${s.assertion ? compare(s, index) : `<p class="reason">${escape(s.reason ?? "此断言未执行，没有实际值与比较结果。")}</p>`}</section>`).join("") || '<p class="empty">尚无已执行的断言；不能据此判定通过。</p>'}<details class="inspect"><summary>输入数据与冻结预期</summary><pre>${json(i.data)}</pre></details>${i.revision_history?.length ? `<details class="inspect"><summary>动态检查来源与事后标记</summary><pre>${json(i.revision_history)}</pre></details>` : ""}</div><div class="panel attachments" id="panel-${index}-attachments" role="tabpanel" aria-labelledby="tab-${index}-attachments" data-panel="attachments" hidden>${ids.map((id) => attachment(id, index)).join("") || '<p class="empty">本用例没有采集附件</p>'}</div>${media.videos ? `<div class="panel recordings" id="panel-${index}-recordings" role="tabpanel" aria-labelledby="tab-${index}-recordings" data-panel="recordings" hidden>${media.videos}</div>` : ""}</article>`;
     })
     .join("");
   const options = (key: "case_id" | "data_id" | "status") =>
@@ -184,6 +187,6 @@ export function writeReport(
     )
     .join(
       "",
-    )}</div><h2>测试套件与用例</h2><div class="table-wrap"><table><thead><tr><th>用例名称</th><th>数据集</th><th>状态</th><th>断言通过 / 已执行</th><th>步骤耗时</th></tr></thead><tbody>${run.instances.map((i, index) => `<tr><td><button class="case-link" data-open-case="case-${index}">${escape(i.name)}</button></td><td>${escape(i.data_id)}</td><td>${badge(i.status)}</td><td>${i.steps.filter((s) => s.assertion?.status === "PASS").length} / ${i.steps.filter((s) => s.assertion).length}</td><td>${duration(i.steps.reduce((n, s) => n + s.duration_ms, 0))}</td></tr>`).join("")}</tbody></table></div><p class="note">通过率以全部用例实例为分母。取消、阻塞和未确定不会计为通过。断言统计仅计入真实比较记录；未执行的断言可在用例详情中查看。</p>${links}</section><section class="run-info" data-view="info" hidden><h2>运行信息</h2><dl><dt>运行 ID</dt><dd>${escape(run.suite_run_id)}</dd><dt>开始时间</dt><dd>${escape(time(run.created_at))}</dd><dt>结束时间</dt><dd>${escape(time(run.finished_at))}</dd><dt>执行模式</dt><dd>${escape(run.manifest.execution ?? run.manifest.tools_mode ?? "未记录")}</dd><dt>发起会话</dt><dd>${escape(run.manifest.origin_session_id ?? "未记录")}</dd><dt>插件版本</dt><dd>${escape(run.manifest.plugin_version ?? "未记录")}</dd></dl><details class="inspect"><summary>完整运行配置与预算</summary><pre>${json(run.manifest)}</pre></details><p>本报告依据冻结计划、绑定的实际观察和确定性比较结果生成。采集定位的运行时调整保存在对应步骤中，原始预期保持不变。</p>${links}</section></main><dialog id="image-dialog" aria-label="页面截图预览"><button id="close-image" class="text-button">关闭预览</button><img id="full-image" alt="实际页面截图完整预览"></dialog><script>(${reportInteractions.toString()})();</script></body></html>`;
+    )}</div><h2>测试套件与用例</h2><div class="table-wrap"><table><thead><tr><th>用例名称</th><th>数据集</th><th>状态</th><th>断言通过 / 已执行</th><th>步骤耗时</th></tr></thead><tbody>${run.instances.map((i, index) => `<tr><td><button class="case-link" data-open-case="case-${index}">${escape(i.name)}</button></td><td>${escape(i.data_id)}</td><td>${badge(i.status)}</td><td>${i.steps.filter((s) => s.assertion?.status === "PASS").length} / ${i.steps.filter((s) => s.assertion).length}</td><td>${duration(i.steps.reduce((n, s) => n + s.duration_ms, 0))}</td></tr>`).join("")}</tbody></table></div><p class="note">通过率以全部用例实例为分母。取消、阻塞和未确定不会计为通过。断言统计仅计入真实比较记录；未执行的断言可在用例详情中查看。</p>${links}</section><section class="run-info" data-view="info" hidden><h2>运行信息</h2><dl><dt>运行 ID</dt><dd>${escape(run.suite_run_id)}</dd><dt>开始时间</dt><dd>${escape(time(run.created_at))}</dd><dt>结束时间</dt><dd>${escape(time(run.finished_at))}</dd><dt>执行模式</dt><dd>${escape(run.manifest.execution ?? run.manifest.tools_mode ?? "未记录")}</dd><dt>发起会话</dt><dd>${escape(run.manifest.origin_session_id ?? "未记录")}</dd><dt>插件版本</dt><dd>${escape(run.manifest.plugin_version ?? "未记录")}</dd></dl><details class="inspect"><summary>完整运行配置与预算</summary><pre>${json(run.manifest)}</pre></details><p>本报告依据冻结计划、绑定的实际观察和确定性比较结果生成。采集定位的运行时调整保存在对应步骤中，原始预期保持不变。</p>${links}</section></main>${run.evidence.some((e) => e.media_type.startsWith("image/")) ? '<dialog id="image-dialog" aria-label="页面截图预览"><button id="close-image" class="text-button">关闭预览</button><img id="full-image" alt="实际页面截图完整预览"></dialog>' : ""}<script>(${reportInteractions.toString()})();</script></body></html>`;
   atomicWrite(safePath(directory, filename), html);
 }

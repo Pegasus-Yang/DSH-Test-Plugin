@@ -4,6 +4,7 @@ import { join, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { createServer } from "node:net";
 import { atomicJson } from "./recorder.js";
+import { RecordingSession } from "./recording.js";
 import { checkBrowscreen, normalizeBrowscreenExecutable, } from "./browscreen-command.js";
 function localUrl(value, protocols) {
     const url = new URL(value);
@@ -31,6 +32,10 @@ export class PreviewManager {
     startupDeadline;
     cleanup = Promise.resolve();
     serviceUrl;
+    recordingContext;
+    polling;
+    recordingNotice;
+    captures = new Map();
     config;
     constructor(config) {
         this.initialize(config);
@@ -71,7 +76,7 @@ export class PreviewManager {
         this.setupError = reason;
     }
     /** 只有当前运行实际持有浏览器上下文时才交付页面归属。 */
-    sync(run) {
+    sync(run, recordingContext) {
         const instance = run.lifecycle !== "FINISHED" && !run.resource_quarantined
             ? run.instances.find((entry) => entry.resources.browser_context?.state === "exists")
             : undefined;
@@ -81,6 +86,10 @@ export class PreviewManager {
         if (next?.run_id === this.owner?.run_id &&
             next?.case_run_id === this.owner?.case_run_id)
             return;
+        clearTimeout(this.polling);
+        this.polling = undefined;
+        this.recordingContext = next ? recordingContext : undefined;
+        this.recordingNotice = undefined;
         this.owner = next;
         this.generation++;
         this.cancelStartup();
@@ -102,24 +111,74 @@ export class PreviewManager {
         this.child = undefined;
         this.childReady = false;
         this.cleanup = this.cleanup.then(() => this.stopChild(previous));
+        if (next && this.config?.recordingEnabled)
+            this.pollRecording(this.generation);
+    }
+    pollRecording(generation) {
+        const poll = async () => {
+            if (generation !== this.generation || !this.owner)
+                return;
+            await this.readCapture();
+            if (generation === this.generation && this.owner && !this.failure) {
+                this.polling = setTimeout(poll, 300);
+                this.polling.unref();
+            }
+        };
+        this.polling = setTimeout(poll, 0);
+        this.polling.unref();
+    }
+    sealRecordings(runId, reason) {
+        for (const [child, capture] of this.captures)
+            if (capture.runId === runId && capture.recording) {
+                capture.recording.seal(reason);
+                if (capture.stopping &&
+                    child.exitCode === null &&
+                    child.signalCode === null) {
+                    capture.forced = true;
+                    child.kill("SIGKILL");
+                }
+            }
+    }
+    async finishRun(run) {
+        if (this.owner?.run_id === run.suite_run_id)
+            this.sync({ ...run, lifecycle: "FINISHED" });
+        await this.drain(run.suite_run_id);
+    }
+    async drain(runId) {
+        await this.cleanup;
+        await Promise.all([...this.captures.values()]
+            .filter((c) => c.runId === runId && c.stopping)
+            .map((c) => c.stopping));
     }
     async stopChild(child) {
-        if (!child?.pid || child.exitCode !== null || child.signalCode !== null)
+        if (!child)
             return;
-        await new Promise((done) => {
+        const capture = this.captures.get(child);
+        if (capture?.stopping)
+            return capture.stopping;
+        if (!capture)
+            return;
+        const operation = (async () => {
+            const wait = capture.recording
+                ? Math.max(0, capture.recording.deadline() - Date.now())
+                : 1500;
             const timeout = setTimeout(() => {
-                child.kill("SIGKILL");
-            }, 1500);
-            const finished = () => {
+                capture.forced = true;
+                capture.recording?.seal("录制收尾超过清理期限，视频不可确认");
+                if (child.exitCode === null && child.signalCode === null)
+                    child.kill("SIGKILL");
+            }, wait);
+            if (child.pid && child.exitCode === null && child.signalCode === null)
+                child.kill("SIGTERM");
+            try {
+                await capture.closed;
+            }
+            finally {
                 clearTimeout(timeout);
-                child.off("exit", finished);
-                child.off("error", finished);
-                done();
-            };
-            child.once("exit", finished);
-            child.once("error", finished);
-            child.kill("SIGTERM");
-        });
+            }
+        })();
+        capture.stopping = operation;
+        return operation;
     }
     cancelStartup() {
         this.commandAbort?.abort();
@@ -218,8 +277,21 @@ export class PreviewManager {
         }
         if (!this.current(metadata, generation) || this.failure)
             return;
+        let recording;
+        if (config.recordingEnabled && this.recordingContext) {
+            try {
+                recording = new RecordingSession(this.recordingContext, metadata.case_run_id, metadata.target_id);
+            }
+            catch (error) {
+                this.recordingNotice = `无法准备录像文件：${String(error)}`;
+            }
+        }
+        await this.launch(metadata, generation, detected.executable, recording);
+    }
+    async launch(metadata, generation, executable, recording) {
+        const config = this.config;
         const url = this.serviceUrl;
-        const child = spawn(detected.executable, [
+        const child = spawn(executable, [
             "--work-dir",
             config.workDir,
             "--host",
@@ -228,26 +300,64 @@ export class PreviewManager {
             url.port || "80",
             "--connect-wait-timeout-s",
             "60",
+            ...(recording ? ["--record", "--record-output", recording.path] : []),
         ], {
             shell: false,
             stdio: ["ignore", "ignore", "pipe"],
         });
         this.child = child;
+        let closed;
+        const capture = {
+            runId: metadata.run_id,
+            recording,
+            forced: false,
+            closed: new Promise((done) => {
+                closed = done;
+            }),
+        };
+        this.captures.set(child, capture);
         let diagnostic = "";
         child.stderr?.on("data", (data) => {
+            recording?.data(data);
+            if (recording?.notice && this.current(metadata, generation))
+                this.recordingNotice = recording.notice;
             diagnostic = (diagnostic + data.toString()).slice(-4000);
             if (this.child === child && diagnostic.includes("Uvicorn running on"))
                 this.childReady = true;
         });
         child.once("error", (error) => {
+            recording?.seal(`Browscreen 启动失败：${error.message}`);
             if (this.child !== child)
                 return;
             this.fail(`Browscreen 启动失败：${error.message}`, generation);
         });
-        child.once("exit", (code, signal) => {
-            if (this.child !== child)
-                return;
-            this.fail(`Browscreen 进程已退出（${signal ?? code}）：${diagnostic.trim().slice(-500) || "请进入设置检测命令后重新执行测试。"}`, generation);
+        child.once("close", () => {
+            void (async () => {
+                try {
+                    await recording?.finish(capture.forced);
+                }
+                catch (error) {
+                    this.recordingNotice = `录像归档失败：${String(error)}`;
+                }
+                finally {
+                    this.captures.delete(child);
+                    closed();
+                }
+                if (this.child !== child)
+                    return;
+                // 仅已识别的录制准备失败允许一次去掉录像参数，运行中不反复重启。
+                if (recording &&
+                    !this.childReady &&
+                    recording.notice &&
+                    this.config?.previewEnabled !== false &&
+                    this.current(metadata, generation)) {
+                    this.recordingNotice = recording.notice;
+                    this.child = undefined;
+                    await this.launch(metadata, generation, executable);
+                    return;
+                }
+                this.fail(`Browscreen 进程已退出：${recording?.notice ?? (diagnostic.trim().slice(-500) || "请进入设置检测安装。")}`, generation);
+            })();
         });
     }
     async refresh() {
@@ -306,6 +416,8 @@ export class PreviewManager {
             if (!this.current(metadata, generation) || this.failure)
                 return;
             this.frame = { bytes, id, capturedAt };
+            if (this.child)
+                this.captures.get(this.child)?.recording?.frame(capturedAt);
             this.reason = "";
             clearTimeout(this.startupTimer);
             this.startupTimer = undefined;
@@ -323,13 +435,7 @@ export class PreviewManager {
                         : "浏览器连接或画面暂不可用");
         }
     }
-    async state(runId) {
-        if (this.owner?.run_id !== runId)
-            return { ready: false };
-        if (!this.config)
-            return this.setupError
-                ? { ready: false, failed: true, reason: this.setupError }
-                : { ready: false };
+    async readCapture() {
         if (!this.pending && Date.now() - this.checkedAt >= 300) {
             this.pending = this.refresh().finally(() => {
                 this.checkedAt = Date.now();
@@ -337,24 +443,46 @@ export class PreviewManager {
             });
         }
         await this.pending;
+    }
+    async state(runId) {
         if (this.owner?.run_id !== runId)
             return { ready: false };
+        if (!this.config)
+            return this.setupError
+                ? { ready: false, failed: true, reason: this.setupError }
+                : { ready: false };
+        await this.readCapture();
+        if (this.owner?.run_id !== runId)
+            return { ready: false };
+        const notice = this.recordingNotice
+            ? { recording_notice: this.recordingNotice }
+            : {};
+        if (this.config.previewEnabled === false)
+            return {
+                ready: false,
+                ...notice,
+                ...(this.failure ? { recording_notice: this.failure } : {}),
+            };
         if (!this.frame)
             return {
                 ready: false,
                 reason: this.reason,
                 ...(this.failure ? { failed: true } : {}),
+                ...notice,
             };
         return {
             ready: true,
             frame_id: this.frame.id,
             captured_at: this.frame.capturedAt,
+            ...notice,
         };
     }
     async screenshot(runId) {
         return (await this.state(runId)).ready ? this.frame : undefined;
     }
     async shutdown() {
+        clearTimeout(this.polling);
+        this.polling = undefined;
         this.owner = undefined;
         this.generation++;
         this.frame = undefined;

@@ -5,6 +5,8 @@ export interface PreviewConfig {
     workDir: string;
     browscreenUrl: string;
     browscreenExecutable?: string;
+    previewEnabled?: boolean;
+    recordingEnabled?: boolean;
 }
 export interface TestConfig {
     workspace: string;

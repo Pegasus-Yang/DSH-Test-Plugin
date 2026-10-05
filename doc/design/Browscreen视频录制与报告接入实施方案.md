@@ -1,8 +1,8 @@
 # Browscreen 视频录制与报告接入实施方案
 
-方案日期：2026-10-05，Asia/Shanghai。状态：**参数与正式发行包已核实；录制开关行为已由用户确认；实施方案待审核**。
+方案日期：2026-10-05，Asia/Shanghai。状态：**用户已批准实施；当前实现及验证结果见[录像验收记录](../project/浏览器录像与报告验收.md)**。
 
-插件设计基线：本地提交 `21eedae`，包版本 `0.9.2`。Browscreen 接入基线：正式 PyPI `0.3.0`。本文说明拟议实现，不表示插件已经具备录像功能。
+插件设计基线：本地提交 `21eedae`，包版本 `0.9.2`。Browscreen 接入基线：正式 PyPI `0.3.0`。本文保留批准时的设计和调研范围；当前实现事实见[当前架构](../architecture/当前实现.md)与验收记录。
 
 ## 1. 目标与已确认行为
 
@@ -210,3 +210,9 @@ HTML 中使用相对视频路径，例如 `evidence/browser-xxx.mp4`，不把整
 本轮尚未执行插件录制、报告视频播放或上述改造回归；没有升级本机默认命令，没有修改两项目的运行代码，没有启动或更换用户 DSH。原始核对数据保存在忽略的 `.local/video-recording-research/`。
 
 参数及实现来源：正式 0.3.0 wheel 中的 `browscreen/main.py`、`models.py`、`recording.py`、`capture.py`、`app.py`；插件基线中的 `src/preview.ts`、`preview-setup.ts`、`native-test.ts`、`report.ts`、`report-client.ts` 与 `report-access.ts`。公开发行信息见[PyPI 0.3.0](https://pypi.org/project/browscreen/0.3.0/)和[发行元数据](https://pypi.org/pypi/browscreen/0.3.0/json)。
+
+## 9. 实施中的必要补充
+
+真实报告保留原有 opaque sandbox。宿主登录 Cookie 使用 `SameSite=Strict`，无法依赖它为这种页面中的媒体请求认证。为保证实际播放，同时保持隔离，只在已认证 HTML 的响应中签发该 MP4 的 HMAC 只读票据；限文件路径及 GET/HEAD，24 小时过期，重启失效。票据不写入离线 HTML，不开放其他附件或业务接口。
+
+同一隔离策略下，浏览器可能忽略跨来源的 `download` 属性。视频下载链接增加专用下载参数，由服务返回 `Content-Disposition: attachment`；播放器仍使用流式 MP4 和单段 Range。上述调整以真实播放与下载验证为依据，业务断言及执行链路保持原设计。

@@ -186,6 +186,20 @@ export interface CaseRun {
     unsettled_call_ids: string[];
     resource_quarantined: boolean;
 }
+export interface BrowserRecording {
+    recording_id: string;
+    case_run_id: string;
+    target_id: string;
+    status: "RECORDING" | "COMPLETE" | "PARTIAL" | "FAILED" | "EMPTY";
+    started_at: string;
+    first_frame_at?: string;
+    finished_at?: string;
+    relative_path?: string;
+    evidence_id?: string;
+    bytes?: number;
+    duration_ms?: number;
+    reason?: string;
+}
 export interface SuiteRun {
     schema_version: "1";
     suite_run_id: string;
@@ -196,6 +210,7 @@ export interface SuiteRun {
     plan: TestSuite;
     instances: CaseRun[];
     evidence: Evidence[];
+    recordings?: BrowserRecording[];
     incomplete: boolean;
     resource_quarantined: boolean;
     manifest: Record<string, Json>;

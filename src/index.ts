@@ -123,7 +123,10 @@ export function apply(ctx: Context, config: PluginConfig = {}): void {
         kind: "prefix",
         path: reportPrefix,
         handler: (req, res) => {
-          if (web.connection.authorizeIndex(req, res))
+          if (
+            tests.reports.authorizeVideo(req) ||
+            web.connection.authorizeIndex(req, res)
+          )
             tests.reports.serve(req, res);
         },
       }),

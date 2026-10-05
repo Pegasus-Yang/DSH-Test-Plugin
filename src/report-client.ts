@@ -22,7 +22,17 @@ export function reportInteractions(): void {
     }
   };
   const showTab = (value: string) => {
+    const active = cases.find((item) => item.id === selected);
+    if (
+      active &&
+      ![...active.querySelectorAll<HTMLElement>("[data-tab]")].some(
+        (button) => button.dataset.tab === value,
+      )
+    )
+      value = "steps";
     tab = value;
+    for (const video of document.querySelectorAll<HTMLVideoElement>("video"))
+      video.pause();
     for (const button of document.querySelectorAll<HTMLElement>("[data-tab]"))
       button.setAttribute(
         "aria-selected",
@@ -133,7 +143,8 @@ export function reportInteractions(): void {
         button.querySelector("img")!.src;
       dialog.showModal();
     };
-  document.getElementById("close-image")!.onclick = () => dialog.close();
+  const closeImage = document.getElementById("close-image");
+  if (closeImage) closeImage.onclick = () => dialog.close();
   update();
   navigate("cases");
 }

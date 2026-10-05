@@ -1,6 +1,7 @@
 import type { PreviewConfig } from "./config.js";
 import type { SuiteRun } from "./contracts.js";
 import type { PreviewState } from "./progress-model.js";
+import { type RecordingContext } from "./recording.js";
 interface Frame {
     bytes: Buffer;
     id: string;
@@ -23,6 +24,10 @@ export declare class PreviewManager {
     private startupDeadline?;
     private cleanup;
     private serviceUrl?;
+    private recordingContext?;
+    private polling?;
+    private recordingNotice?;
+    private captures;
     config?: PreviewConfig;
     constructor(config?: PreviewConfig);
     private initialize;
@@ -30,7 +35,11 @@ export declare class PreviewManager {
     configure(config?: PreviewConfig): Promise<void>;
     unavailable(reason: string): void;
     /** 只有当前运行实际持有浏览器上下文时才交付页面归属。 */
-    sync(run: SuiteRun): void;
+    sync(run: SuiteRun, recordingContext?: RecordingContext): void;
+    private pollRecording;
+    sealRecordings(runId: string, reason: string): void;
+    finishRun(run: SuiteRun): Promise<void>;
+    drain(runId: string): Promise<void>;
     private stopChild;
     private cancelStartup;
     private fail;
@@ -38,7 +47,9 @@ export declare class PreviewManager {
     private checkPort;
     private metadata;
     private ensureService;
+    private launch;
     private refresh;
+    private readCapture;
     state(runId: string): Promise<PreviewState>;
     screenshot(runId: string): Promise<Frame | undefined>;
     shutdown(): Promise<void>;

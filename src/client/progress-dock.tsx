@@ -287,6 +287,20 @@ export function ProgressCard({
               </span>
             </p>
           )}
+        {snapshot.preview.recording_notice &&
+          !failed &&
+          snapshot.phase !== "finished" && (
+            <p
+              className="dsh-test-preview-note"
+              data-test-recording-error
+              role="status"
+            >
+              {snapshot.preview.recording_notice}
+              <span>
+                录像异常不改变业务断言；请在“设置 → 测试插件”检查安装和配置。
+              </span>
+            </p>
+          )}
         {expanded && (
           <div
             className="dsh-test-step-list"

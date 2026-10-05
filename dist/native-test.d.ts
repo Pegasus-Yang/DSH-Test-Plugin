@@ -60,6 +60,7 @@ export declare class NativeTest {
     private disposers;
     private timer?;
     private stoppingTimer?;
+    private mediaDeadline?;
     private task;
     private readonly originalTask;
     private draft?;

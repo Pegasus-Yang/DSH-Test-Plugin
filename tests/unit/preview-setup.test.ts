@@ -81,6 +81,10 @@ it("设置与运行配置默认使用本机命令，非法端口在保存前拒�
   });
   expect(config.browserPreview?.get()).toBeUndefined();
   expect(config.preview?.browscreenExecutable).toBe("browscreen");
+  expect(config.preview?.recordingEnabled).toBe(false);
+  expect(
+    Config({ browserPreview: {} }).browserPreview?.get()?.recordingEnabled,
+  ).toBe(false);
   expect(
     Config({ browserPreview: { enabled: false } }).browserPreview?.get()
       ?.browscreenExecutable,
@@ -205,9 +209,59 @@ it("接入只改变 MCP 运行配置；端口修改复用连接，关闭后恢�
   expect(entry.fiber.config).toEqual(raw);
   expect(setup.describe()).toMatchObject({
     namespace: "custom-test",
-    message: "实时预览已关闭。",
+    message: "实时预览和录像均已关闭。",
   });
 });
+
+it.each([
+  [false, false],
+  [true, false],
+  [false, true],
+  [true, true],
+])(
+  "预览 %s 与录制 %s 独立决定接入，两者均关闭才恢复浏览器",
+  async (enabled, recordingEnabled) => {
+    const root = folder();
+    const initializer = join(root, "cdp-publisher.cjs");
+    writeFileSync(initializer, "module.exports = async () => {};\n");
+    const entry: any = {
+      options: {
+        id: "selected",
+        name: "@deepseek-ai/dsh-mcp-client",
+        config: {
+          serverName: "playwright",
+          transport: "stdio",
+          args: ["@playwright/mcp@0.0.68"],
+        },
+      },
+    };
+    const { ctx } = runtime([entry]);
+    const setup = new PreviewSetup(
+      ctx,
+      () => ({
+        enabled,
+        recordingEnabled,
+        browscreenExecutable: "browscreen",
+        port: 13390,
+        mcpId: "selected",
+      }),
+      { outputRoot: root },
+      initializer,
+    );
+    const prepared = await setup.prepare();
+    if (enabled || recordingEnabled) {
+      expect(prepared).toMatchObject({
+        previewEnabled: enabled,
+        recordingEnabled,
+      });
+      expect(entry.fiber.restart).toHaveBeenCalledOnce();
+    } else {
+      expect(prepared).toBeUndefined();
+      expect(entry.fiber.restart).not.toHaveBeenCalled();
+    }
+    await setup.dispose();
+  },
+);
 
 it("不存在或不支持的 MCP 不会被修改，错误原因可展示", async () => {
   const root = folder();

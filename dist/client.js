@@ -33,11 +33,13 @@ var import_react3 = require("react");
 // src/preview-preferences.ts
 var previewPreferenceDefaults = {
   enabled: false,
+  recordingEnabled: false,
   browscreenExecutable: "browscreen",
   port: 13390,
   mcpId: ""
 };
-var browscreenVersionRange = ">=0.2.1,<0.3.0";
+var browscreenVersionRange = ">=0.3.0,<0.4.0";
+var videoInstallHint = "\u8BF7\u5728 DSH \u5BBF\u4E3B\u5B89\u88C5\u5F55\u5236\u4F9D\u8D56\uFF1Auv tool install --force --python 3.14 'browscreen[video]==0.3.0' -i http://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.aliyun.com\u3002\u5B89\u88C5\u540E\u91CD\u65B0\u6267\u884C\u6D4B\u8BD5\u3002";
 
 // src/client/recovery-panel.tsx
 var import_react = require("react");
@@ -353,8 +355,8 @@ function PreviewSettingsPage({
     /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { children: "\u6D4B\u8BD5\u63D0\u793A\u73AF\u5883\u672A\u91CA\u653E\u65F6\uFF0C\u8BF7\u5148\u5728\u8FD9\u91CC\u5904\u7406\uFF0C\u5B8C\u6210\u540E\u91CD\u65B0\u6267\u884C\u6D4B\u8BD5\u547D\u4EE4\u3002" }),
     /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(RecoveryPanel, { ...recovery }),
     /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(ReportSettings, { rebuildReport }),
-    /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("h2", { children: "\u6D4F\u89C8\u5668\u5B9E\u65F6\u9884\u89C8" }),
-    /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { children: "\u8BA9\u4F60\u770B\u5230\u6D4B\u8BD5\u6B63\u5728\u64CD\u4F5C\u7684\u7F51\u9875\u3002\u63A5\u53E3\u6D4B\u8BD5\u6216\u6CA1\u6709\u6D4F\u89C8\u5668\u753B\u9762\u65F6\uFF0C\u4E0D\u4F1A\u6253\u5F00\u6D6E\u7A97\u3002" }),
+    /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("h2", { children: "\u6D4F\u89C8\u5668\u9884\u89C8\u4E0E\u5F55\u50CF" }),
+    /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { children: "\u5B9E\u65F6\u67E5\u770B\u6D4B\u8BD5\u7F51\u9875\uFF0C\u6216\u5728\u62A5\u544A\u4E2D\u56DE\u770B\u64CD\u4F5C\u5F55\u50CF\u3002\u63A5\u53E3\u6D4B\u8BD5\u6216\u6CA1\u6709\u6D4F\u89C8\u5668\u753B\u9762\u65F6\uFF0C\u4E0D\u4F1A\u6253\u5F00\u6D6E\u7A97\u3002" }),
     error && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { role: "alert", children: error }),
     info ? /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(PreferencesForm, { info, form: forms.get(info.namespace) }) : !error && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { children: "\u6B63\u5728\u8BFB\u53D6\u8BBE\u7F6E\u2026" })
   ] });
@@ -448,7 +450,7 @@ function PreferencesForm({
       setMessage("\u7AEF\u53E3\u8BF7\u586B\u5199 1 \u5230 65535 \u4E4B\u95F4\u7684\u6574\u6570\uFF0C\u4F8B\u5982 13390\u3002");
       return;
     }
-    if (draft.enabled && !draft.mcpId) {
+    if ((draft.enabled || draft.recordingEnabled) && !draft.mcpId) {
       setMessage("\u8BF7\u5148\u9009\u62E9\u7528\u4E8E\u6D4B\u8BD5\u7684 Playwright \u6D4F\u89C8\u5668\u3002");
       return;
     }
@@ -468,6 +470,7 @@ function PreferencesForm({
             path: ["browserPreview"],
             value: {
               enabled: draft.enabled,
+              recordingEnabled: !!draft.recordingEnabled,
               mcpId: draft.mcpId,
               browscreenExecutable: executable,
               port
@@ -478,9 +481,7 @@ function PreferencesForm({
       );
       if (accepted) {
         setDirty(false);
-        setMessage(
-          "\u5DF2\u4FDD\u5B58\u3002\u4E0B\u4E00\u6B21 /test \u6216 /test-plan \u4F1A\u4F7F\u7528\u8FD9\u4E9B\u8BBE\u7F6E\uFF0C\u65E0\u9700\u91CD\u542F DSH\u3002"
-        );
+        setMessage("\u5DF2\u4FDD\u5B58\u3002\u4E0B\u4E00\u6B21\u6D4B\u8BD5\u4F1A\u4F7F\u7528\u8FD9\u4E9B\u8BBE\u7F6E\uFF0C\u65E0\u9700\u91CD\u542F DSH\u3002");
       } else
         setMessage(
           "\u6CA1\u6709\u4FDD\u5B58\u6210\u529F\uFF0C\u53EF\u80FD\u914D\u7F6E\u5DF2\u88AB\u4FEE\u6539\u6216\u88AB\u542F\u52A8 patch \u8986\u76D6\u3002\u8BF7\u91CD\u65B0\u8BFB\u53D6\u8BBE\u7F6E\u540E\u518D\u8BD5\u3002"
@@ -517,11 +518,28 @@ function PreferencesForm({
           "\u542F\u7528\u6D4F\u89C8\u5668\u5B9E\u65F6\u9884\u89C8"
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { className: "dsh-test-setting-hint", children: "\u5F00\u542F\u540E\u4E5F\u4F1A\u7B49\u5F85\u6D4F\u89C8\u5668\u753B\u9762\u5C31\u7EEA\uFF0C\u4E0D\u4F1A\u63D0\u524D\u6253\u5F00\u7A7A\u7A97\u53E3\u3002" }),
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("label", { className: "dsh-test-setting-switch", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(
+            "input",
+            {
+              type: "checkbox",
+              checked: !!draft.recordingEnabled,
+              disabled: saving,
+              onChange: (event) => edit({ recordingEnabled: event.target.checked })
+            }
+          ),
+          "\u5F55\u5236\u6D4F\u89C8\u5668\u64CD\u4F5C\u89C6\u9891"
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { className: "dsh-test-setting-hint", children: "\u5F55\u50CF\u5F00\u5173\u72EC\u7ACB\u4E8E\u5B9E\u65F6\u9884\u89C8\uFF0C\u9ED8\u8BA4\u5173\u95ED\u3002\u4EC5\u5B9E\u9645\u6D4F\u89C8\u5668\u7528\u4F8B\u5F55\u5236\uFF1B\u9690\u85CF\u6D6E\u7A97\u6216\u5173\u95ED\u9875\u9762\u540E\u4ECD\u7EE7\u7EED\u5F55\u5236\uFF0C\u7ED3\u675F\u540E\u5728\u6D4B\u8BD5\u62A5\u544A\u67E5\u770B\u3002" }),
+        draft.recordingEnabled && /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("p", { className: "dsh-test-setting-hint", children: [
+          videoInstallHint,
+          "\u201C\u68C0\u6D4B\u5B89\u88C5\u201D\u53EA\u68C0\u67E5\u547D\u4EE4\u53CA\u7248\u672C\uFF0C\u4E0D\u80FD\u8BC1\u660E\u89C6\u9891\u4F9D\u8D56\u5DF2\u5B89\u88C5\u3002"
+        ] }),
         /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("p", { className: "dsh-test-setting-hint", children: [
           "\u8BF7\u5148\u5728 DSH \u6240\u5728\u7535\u8111\u5B89\u88C5 Browscreen\uFF08Python \u22653.14\uFF09\u3002\u652F\u6301\u7A33\u5B9A\u7248\u672C",
           " ",
           browscreenVersionRange,
-          "\uFF0C\u5EFA\u8BAE\u4F7F\u7528 0.2.1\u3002 \u9ED8\u8BA4\u4ECE\u5BBF\u4E3B PATH \u67E5\u627E browscreen\uFF0C\u65E0\u9700\u4E0B\u8F7D\u6E90\u7801\u6216\u63D0\u524D\u542F\u52A8\u670D\u52A1\u3002"
+          "\uFF0C\u5EFA\u8BAE\u4F7F\u7528 0.3.0\u3002 \u9ED8\u8BA4\u4ECE\u5BBF\u4E3B PATH \u67E5\u627E browscreen\uFF0C\u65E0\u9700\u4E0B\u8F7D\u6E90\u7801\u6216\u63D0\u524D\u542F\u52A8\u670D\u52A1\u3002"
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("div", { className: "dsh-test-setting-actions", children: /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(
           "button",
@@ -999,6 +1017,18 @@ function ProgressCard({
                 "\u5B9E\u65F6\u753B\u9762\u672A\u542F\u7528\uFF1A",
                 snapshot.preview.reason,
                 /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { children: "\u8BF7\u8FDB\u5165\u201C\u8BBE\u7F6E \u2192 \u6D4B\u8BD5\u63D2\u4EF6 \u2192 \u6D4F\u89C8\u5668\u5B9E\u65F6\u9884\u89C8\u201D\u68C0\u6D4B\u5B89\u88C5\u6216\u8C03\u6574\u914D\u7F6E\uFF1B\u4E1A\u52A1\u6D4B\u8BD5\u7EE7\u7EED\u6267\u884C\u3002" })
+              ]
+            }
+          ),
+          snapshot.preview.recording_notice && !failed && snapshot.phase !== "finished" && /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
+            "p",
+            {
+              className: "dsh-test-preview-note",
+              "data-test-recording-error": true,
+              role: "status",
+              children: [
+                snapshot.preview.recording_notice,
+                /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { children: "\u5F55\u50CF\u5F02\u5E38\u4E0D\u6539\u53D8\u4E1A\u52A1\u65AD\u8A00\uFF1B\u8BF7\u5728\u201C\u8BBE\u7F6E \u2192 \u6D4B\u8BD5\u63D2\u4EF6\u201D\u68C0\u67E5\u5B89\u88C5\u548C\u914D\u7F6E\u3002" })
               ]
             }
           ),
