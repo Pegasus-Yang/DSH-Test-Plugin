@@ -60,9 +60,9 @@ export class RecoveryManager {
             : this.active()
                 ? "当前测试尚未结束，请先停止测试并等待收尾。"
                 : !validTime || !validId
-                    ? "隔离记录或时间异常，请核实后使用 /test-release 提交处置证据。"
+                    ? "隔离记录或时间异常，请核实后在设置页提交处置证据。"
                     : !browser
-                        ? "未能确认浏览器资源归属，请核实外部环境后使用 /test-release 提交处置证据。"
+                        ? "未能确认浏览器资源归属，请核实外部环境后在设置页提交处置证据。"
                         : undefined;
         return {
             quarantine: {
@@ -113,7 +113,7 @@ export class RecoveryManager {
         unlinkSync(this.path);
         this.lastError = undefined;
     }
-    release(evidenceFile) {
+    release(evidenceFile, token) {
         this.ensureIdle();
         const proof = JSON.parse(readFileSync(evidenceFile, "utf8"));
         if (proof.external_stopped !== true ||
@@ -126,7 +126,7 @@ export class RecoveryManager {
         if (!current)
             throw new Error("当前没有需要解除的隔离");
         JSON.parse(current.raw);
-        this.commit(this.token(current.raw), proof);
+        this.commit(token ?? this.token(current.raw), proof);
     }
     async recover(agent, token, signal) {
         this.ensureIdle();
@@ -141,7 +141,7 @@ export class RecoveryManager {
             throw new Error("释放已取消，隔离仍保留");
         const name = "mcp__playwright__browser_close";
         if (!agent.ctx.tools.get(name, agent))
-            throw new Error("当前没有可用的 Playwright 关闭工具，请恢复 MCP 连接后重试，或使用 /test-release 提交实际处置证据");
+            throw new Error("当前没有可用的 Playwright 关闭工具，请恢复 MCP 连接后重试，或在设置页提交实际处置证据");
         this.busy = true;
         this.lastError = undefined;
         const controller = new AbortController();
@@ -177,7 +177,7 @@ export class RecoveryManager {
             if (controller.signal.aborted)
                 throw new Error("释放未在期限内确认，隔离仍保留");
             this.commit(token, {
-                operator: "DSH 页面或命令确认的操作者",
+                operator: "DSH 页面确认的操作者",
                 external_stopped: true,
                 environment_reset: true,
                 details: "用户确认旧测试及外部操作已停止；原生工具关闭测试专用浏览器，并停止本插件预览。旧测试结果保持原样。",

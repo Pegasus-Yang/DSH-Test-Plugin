@@ -1,4 +1,6 @@
-import { it, expect, afterEach } from "vitest";
+import { it, expect, afterEach, vi } from "vitest";
+import { EventEmitter } from "node:events";
+import { PassThrough } from "node:stream";
 import {
   mkdtempSync,
   rmSync,
@@ -23,6 +25,10 @@ function setup(authorized = true) {
   type Definition = Parameters<Context["commands"]["register"]>[0];
   const commands = new Map<string, Definition>();
   const routes = new Map<string, any>();
+  const agents = new Map<string, unknown>();
+  const withInitiator = vi.fn((_agent: unknown, operation: () => unknown) =>
+    operation(),
+  );
   let runner!: NativeTests;
   apply(
     {
@@ -34,6 +40,7 @@ function setup(authorized = true) {
           effect({
             effect: (fn: () => unknown) => fn(),
             connection: { authorizeIndex: () => authorized },
+            agents: { get: (id: string) => agents.get(id), withInitiator },
             webServer: {
               port: 3080,
               register: (route: any) => {
@@ -54,15 +61,73 @@ function setup(authorized = true) {
     { workspace: root, outputRoot: join(root, "runs") },
   );
   const execute = (name: string, rawInput: string, agent?: unknown) =>
-    commands
-      .get(name)!
-      .handler({
-        rawInput,
-        agent,
-        signal: new AbortController().signal,
-      } as never);
-  return { root, commands, execute, runner, routes };
+    commands.get(name)!.handler({
+      rawInput,
+      agent,
+      signal: new AbortController().signal,
+    } as never);
+  return { root, commands, execute, runner, routes, agents, withInitiator };
 }
+
+function uiRequest(t: ReturnType<typeof setup>, action: string, body: object) {
+  const req = Object.assign(new PassThrough(), {
+    method: "POST",
+    url: `/test-ui/${action}`,
+  });
+  const res: any = new EventEmitter();
+  res.setHeader = () => {};
+  res.writeHead = () => {};
+  return new Promise<any>((done) => {
+    res.end = (value: string) => done(JSON.parse(value));
+    t.routes.get("/test-ui")(req, res);
+    req.end(JSON.stringify(body));
+  });
+}
+
+it("设置恢复复用所选对话的已有 Agent 和原生发起者上下文，不创建执行会话", async () => {
+  const t = setup();
+  const agent = { id: "origin", status: "idle" };
+  t.agents.set("origin", agent);
+  const recover = vi
+    .spyOn(t.runner.recovery, "recover")
+    .mockResolvedValue("已释放");
+  const token = "a".repeat(64);
+  expect(
+    await uiRequest(t, "recover", { session_id: "origin", token }),
+  ).toEqual({ ok: true, value: "已释放" });
+  expect(t.withInitiator).toHaveBeenCalledWith(agent, expect.any(Function));
+  expect(recover).toHaveBeenCalledWith(agent, token, expect.any(AbortSignal));
+  expect(
+    (await uiRequest(t, "recover", { session_id: "missing", token })).ok,
+  ).toBe(false);
+  expect(recover).toHaveBeenCalledTimes(1);
+});
+
+it("界面操作沿用宿主认证，未授权不能读取参数或触发写入", () => {
+  const t = setup(false);
+  const touched = vi.fn();
+  t.routes.get("/test-ui")(
+    { method: "POST", url: "/test-ui/release", on: touched, once: touched },
+    { setHeader: touched, end: touched },
+  );
+  expect(touched).not.toHaveBeenCalled();
+});
+
+it("界面证据文件保持工作区边界，不能通过符号链接引用外部文件", async () => {
+  const t = setup();
+  symlinkSync(tmpdir(), join(t.root, "outside"));
+  const release = vi.spyOn(t.runner.recovery, "release");
+  expect(
+    await uiRequest(t, "release", {
+      evidence_file: "outside",
+      token: "a".repeat(64),
+    }),
+  ).toMatchObject({
+    ok: false,
+    message: expect.stringContaining("输入文件必须位于项目工作区"),
+  });
+  expect(release).not.toHaveBeenCalled();
+});
 
 it("安装检测路由继承宿主认证，未授权请求不能触发探测", () => {
   const t = setup(false);
@@ -125,9 +190,6 @@ it("新会话没有运行记录时也能读取隔离；启动错误明确说明�
     text: expect.stringContaining("设置 → 测试插件 → 测试环境"),
   });
   expect(t.runner.sessions.size).toBe(0);
-  expect(
-    await t.execute("test-recover", "", { id: "new", status: "idle" }),
-  ).toMatchObject({ kind: "error", text: expect.stringContaining("确认") });
 });
 
 it("隔离读取路由不能以POST请求直接释放", () => {
@@ -142,10 +204,14 @@ it("隔离读取路由不能以POST请求直接释放", () => {
 
 it("向网页声明参数输入，菜单选择后等待参数，带参数提交仍属于命令", () => {
   const { commands } = setup();
-  for (const name of ["test", "test-plan", "test-run", "test-report"])
+  expect([...commands.keys()]).toEqual([
+    "test",
+    "test-plan",
+    "test-run",
+    "test-data",
+  ]);
+  for (const name of commands.keys())
     expect(commands.get(name)?.input?.hint).toBeTruthy();
-  for (const name of ["test-status", "test-stop"])
-    expect(commands.get(name)?.input).toBeUndefined();
 });
 
 it.each([

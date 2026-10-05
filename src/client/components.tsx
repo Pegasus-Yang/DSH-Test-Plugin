@@ -18,12 +18,13 @@ import {
   tone,
 } from "./progress-view.js";
 import { ProgressCard } from "./progress-dock.js";
+import { RebuildReport, type ReportActions } from "./report-controls.js";
 import {
   IconCheckOutlineRegular,
   IconWarningOutlineRegular,
 } from "@deepseek-ai/dsh-client-ui-primitives";
 
-export interface ProgressActions {
+export interface ProgressActions extends ReportActions {
   notice: {
     getSnapshot: () => string;
     subscribe: (listener: () => void) => () => void;
@@ -31,6 +32,10 @@ export interface ProgressActions {
   };
   read: (signal: AbortSignal) => Promise<ProgressSnapshot | null>;
   openDetails: () => void;
+  previewVisible: {
+    getSnapshot: () => boolean;
+    subscribe: (listener: () => void) => () => void;
+  };
   openPreview: (state: ProgressSnapshot) => void;
   followPreview: (state: ProgressSnapshot) => void;
 }
@@ -245,6 +250,10 @@ export function ProgressDetails(
   const info = props.useTabInfo();
   const { snapshot, failed, now } = useProgress(props, info.tab.visible);
   const [selected, setSelected] = useState<string>();
+  const previewVisible = useSyncExternalStore(
+    props.previewVisible.subscribe,
+    props.previewVisible.getSnapshot,
+  );
   useEffect(() => setSelected(undefined), [snapshot?.run_id]);
   if (!snapshot)
     return <p className="dsh-test-preview-message">当前会话还没有测试计划</p>;
@@ -295,15 +304,25 @@ export function ProgressDetails(
         </>
       )}
       <div className="dsh-test-actions">
-        {snapshot.preview.ready && (
-          <button type="button" onClick={() => props.openPreview(snapshot)}>
-            查看实时画面
+        {snapshot.preview.ready && !failed && snapshot.phase !== "finished" && (
+          <button
+            type="button"
+            aria-pressed={previewVisible}
+            onClick={() => props.openPreview(snapshot)}
+          >
+            {previewVisible ? "隐藏实时画面" : "显示实时画面"}
           </button>
         )}
         {snapshot.report_url && (
           <a href={snapshot.report_url} target="_blank" rel="noreferrer">
             查看测试报告
           </a>
+        )}
+        {snapshot.phase === "finished" && (
+          <RebuildReport
+            rebuildReport={props.rebuildReport}
+            runId={snapshot.run_id}
+          />
         )}
         <small>时间包含等待</small>
       </div>

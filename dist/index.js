@@ -1,13 +1,12 @@
-import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
-import { extname, join, relative, resolve, sep } from "node:path";
+import { readFileSync, realpathSync, statSync } from "node:fs";
+import { extname, relative, resolve, sep } from "node:path";
 import { fileArgument, loadDataInput, loadTextInput } from "./case-input.js";
 import { NativeTests } from "./native-test.js";
 import { PreviewSetup } from "./preview-setup.js";
 import { PreviewSettingsAccess } from "./preview-settings-access.js";
 import { reportPrefix } from "./report-access.js";
 import { ProgressAccess, progressPrefix } from "./progress-access.js";
-import { atomicJson, rebuild } from "./recorder.js";
-import { writeReport } from "./report.js";
+import { TestUiAccess } from "./test-ui-access.js";
 export { parsePlan } from "./contracts.js";
 export { Config } from "./config.js";
 export const name = "harness-test";
@@ -29,9 +28,29 @@ export function apply(ctx, config = {}) {
     });
     const progress = new ProgressAccess((sessionId) => tests.presentation(sessionId), tests.preview);
     ctx.provide("nativeTests", tests);
-    ctx.inject(["webServer", "connection"], (web) => {
+    ctx.inject(["webServer", "connection", "agents"], (web) => {
         const previewSettings = new PreviewSettingsAccess(() => setup.describe());
         web.effect(() => () => previewSettings.dispose());
+        const interfaceActions = new TestUiAccess(tests, inputPath, async (sessionId, token, signal) => {
+            const agent = web.agents.get(sessionId);
+            if (!agent)
+                throw new Error("当前对话尚未加载，请打开对话后再进入设置释放环境。");
+            return web.agents.withInitiator(agent, () => tests.recovery.recover(agent, token, signal));
+        });
+        web.effect(() => () => interfaceActions.dispose());
+        web.effect(() => web.webServer.register({
+            kind: "prefix",
+            path: "/test-ui",
+            handler: (req, res) => {
+                if (!web.connection.authorizeIndex(req, res))
+                    return;
+                void interfaceActions.serve(req, res).catch(() => {
+                    if (!res.headersSent)
+                        res.writeHead(503);
+                    res.end();
+                });
+            },
+        }));
         tests.reports.origin = () => `http://127.0.0.1:${web.webServer.port}`;
         web.effect(() => () => {
             tests.reports.origin = undefined;
@@ -89,13 +108,13 @@ export function apply(ctx, config = {}) {
             },
         }));
     });
-    const inputPath = (input) => {
+    function inputPath(input) {
         const full = realpathSync(resolve(tests.config.workspace, input.trim()));
         const rel = relative(realpathSync(tests.config.workspace), full);
         if (rel === ".." || rel.startsWith(".." + sep))
             throw new Error("输入文件必须位于项目工作区");
         return full;
-    };
+    }
     const register = (name, description, handler, hint) => ctx.effect(() => ctx.commands.register({
         name,
         description,
@@ -143,47 +162,6 @@ export function apply(ctx, config = {}) {
         return tests.start(agent, `执行测试集合 ${rawInput.trim()}。请在当前对话逐步说明执行情况，按test_current指引使用原生工具完成采集、断言及清理，最后提供报告链接。`, plan);
     }, "TXT、Markdown或JSON文件路径；自然语言请使用 /test");
     register("test-data", "读取CSV参数与任务模板，先审核每个实例的参数和文字步骤，再执行", ({ agent, rawInput }) => tests.start(agent, rawInput.trim(), undefined, true, loadDataInput(tests.config.workspace, rawInput)), "data.csv <包含${参数名}的任务> 或 data.csv --file cases.md");
-    register("test-status", "查看当前对话的测试状态", ({ agent }) => {
-        const recovery = tests.recovery.status();
-        if (recovery.quarantine)
-            return JSON.stringify({ recovery }, null, 2);
-        const test = tests.sessions.get(agent.id);
-        return test
-            ? JSON.stringify({ ...test.state(), directory: test.recorder.directory }, null, 2)
-            : "当前对话没有测试任务。";
-    });
-    register("test-stop", "停止当前对话测试业务，结算后在同一会话执行预授权清理", ({ agent }) => {
-        const test = tests.sessions.get(agent.id);
-        if (!test || test.closed)
-            return "当前对话没有活动测试。";
-        test.stop();
-        return "已请求停止；当前会话将在在途操作结算后执行预授权清理，并给出最终报告。";
-    });
-    register("test-report", "重建指定报告；省略ID仅查看当前对话的报告", ({ agent, rawInput }) => {
-        const runId = rawInput.trim() || tests.reportId(agent.id);
-        if (!runId || !/^run-[\w-]+$/.test(runId))
-            throw new Error("当前对话没有报告，请提供合法运行ID。");
-        if (tests.sessions.get(agent.id)?.run.suite_run_id === runId &&
-            !tests.sessions.get(agent.id)?.closed)
-            throw new Error("当前测试尚未结束。");
-        const directory = join(tests.config.outputRoot, runId);
-        if (!existsSync(directory))
-            throw new Error("运行记录不存在");
-        const run = rebuild(directory);
-        atomicJson(join(directory, "results-rebuilt.json"), run);
-        writeReport(directory, run, "report-rebuilt.html");
-        return `报告为静态HTML，可离线打开。\n保存位置：${join(directory, "report-rebuilt.html")}\n查看测试报告：${tests.reports.url(runId, "report-rebuilt.html")}`;
-    }, "运行ID（可留空，查看当前对话报告）");
-    register("test-recover", "确认旧操作已停止，关闭测试专用浏览器并解除当前隔离", ({ agent, rawInput, signal }) => {
-        const confirmation = /^--confirm ([a-f0-9]{64})$/.exec(rawInput.trim());
-        if (!confirmation)
-            throw new Error("请进入“设置 → 测试插件 → 测试环境”，点击处理并释放，阅读说明并确认旧测试及外部操作已停止；也可使用 /test-release 提交实际处置证据。");
-        return tests.recovery.recover(agent, confirmation[1], signal);
-    }, "通过测试插件设置确认释放；命令形式为 --confirm 当前隔离编号");
-    register("test-release", "确认外部已停止并重置后，用工作区证据文件解除共享环境隔离", ({ rawInput }) => {
-        tests.release(inputPath(rawInput));
-        return "已记录处置证据并解除隔离。";
-    }, "工作区内的处置证据JSON路径");
     ctx.effect(() => async () => {
         await tests.shutdown();
         await setup.dispose();

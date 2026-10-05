@@ -34,6 +34,6 @@ export declare class RecoveryManager {
     private ensureIdle;
     cancel(): void;
     private commit;
-    release(evidenceFile: string): void;
+    release(evidenceFile: string, token?: string): void;
     recover(agent: Agent, token: string, signal: AbortSignal): Promise<string>;
 }

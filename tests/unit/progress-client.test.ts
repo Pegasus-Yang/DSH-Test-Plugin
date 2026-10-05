@@ -4,7 +4,7 @@ import * as clientPlugin from "../../src/client/index.js";
 import { Context } from "@deepseek-ai/cordis";
 import type { ProgressSnapshot } from "../../src/progress-model.js";
 
-// 插槽与会话测试不渲染图标；真实图标由浏览器端宿主提供并在 Web 验收中核对。
+// 此处验证会话与布局操作；真实图标和点击结果由 Web 验收覆盖。
 vi.mock("@deepseek-ai/dsh-client-ui-primitives", () =>
   Object.fromEntries(
     [
@@ -21,19 +21,25 @@ vi.mock("@deepseek-ai/dsh-client-ui-primitives", () =>
     ].map((name) => [name, () => null]),
   ),
 );
-
 afterEach(() => vi.unstubAllGlobals());
-
-it("在真实 Cordis 依赖边界下可调用原生恢复命令，不能依赖普通对象替身掩盖漏注入", async () => {
+function documentStub() {
   vi.stubGlobal("document", {
-    createElement: () => ({ dataset: {}, remove: () => {} }),
-    head: { append: () => {} },
+    createElement: () => ({ dataset: {}, remove: vi.fn() }),
+    head: { append: vi.fn() },
   });
-  const entries = new Map<string, any>();
-  const execute = vi.fn(async () => ({
+}
+function mockFetch() {
+  const fetcher = vi.fn(async (_url: string, _options?: any) => ({
     ok: true,
-    value: { result: { kind: "success", text: "已释放" } },
+    json: async () => ({ ok: true, value: "测试环境已释放" }),
   }));
+  vi.stubGlobal("fetch", fetcher);
+  return fetcher;
+}
+it("真实 Cordis 依赖边界下设置覆盖对话也能调用恢复接口，不依赖已删除的命令服务", async () => {
+  documentStub();
+  const entries = new Map<string, any>();
+  const fetcher = mockFetch();
   const ctx = new Context();
   ctx.provide("slots", {
     inject: (_name: string, fn: Function) => fn(),
@@ -44,223 +50,320 @@ it("在真实 Cordis 依赖边界下可调用原生恢复命令，不能依赖�
   } as never);
   ctx.provide("sidebarRightTabs", { register: () => () => {} } as never);
   ctx.provide("sidebarRight", {
-    mounted: { getSnapshot: () => "one" },
+    mounted: { getSnapshot: () => undefined },
+  } as never);
+  ctx.provide("uiSession", {
+    adapter: { current: { getSnapshot: () => ({ key: "one" }) } },
   } as never);
   ctx.provide("configForms", {} as never);
-  ctx.provide("remote", { commands: { execute } } as never);
-  ctx.provide("remote.commands", { execute } as never);
+  ctx.provide("remote", {} as never);
   ctx.plugin(clientPlugin);
   try {
     await vi.waitFor(() => expect(entries.has("harness-test")).toBe(true));
-    const actions = entries.get("harness-test").inject();
-    await expect(actions.recover("a".repeat(64))).resolves.toBe("已释放");
-    expect(execute).toHaveBeenCalledWith(
-      "one",
-      `/test-recover --confirm ${"a".repeat(64)}`,
-      [],
+    await expect(
+      entries.get("harness-test").inject().recover("a".repeat(64)),
+    ).resolves.toContain("已释放");
+    expect(fetcher).toHaveBeenCalledWith(
+      "/test-ui/recover",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ session_id: "one", token: "a".repeat(64) }),
+      }),
     );
   } finally {
     await ctx.fiber.dispose();
   }
 });
 function setup() {
-  vi.stubGlobal("document", {
-    createElement: () => ({ dataset: {}, remove: vi.fn() }),
-    head: { append: vi.fn() },
-  });
+  documentStub();
+  const fetcher = mockFetch();
   const entries = new Map<string, any>();
   const events = new Map<string, Function>();
-  const execute = vi.fn(async () => ({
-    ok: true,
-    value: { result: { kind: "success", text: "测试环境已释放" } },
-  }));
-  let expanded = false;
-  let currentSession = "one";
-  let tab: any;
+  const tabs = new Map<string, any>();
+  const subscribers = new Set<() => void>();
+  let expanded = false,
+    currentSession = "one",
+    settingsOpen = false;
+  let activeId: string | undefined;
+  let serial = 0;
+  const notify = () => subscribers.forEach((fn) => fn());
   const sidebar = {
-    mounted: { getSnapshot: () => currentSession },
+    mounted: { getSnapshot: () => (settingsOpen ? undefined : currentSession) },
+    openTabs: {
+      getSnapshot: () => [...tabs.values()],
+      subscribe: (fn: () => void) => {
+        subscribers.add(fn);
+        return () => subscribers.delete(fn);
+      },
+    },
     isExpanded: () => expanded,
     toggleExpanded: vi.fn(() => {
       expanded = !expanded;
     }),
-    openTab: vi.fn((kind) => {
-      tab = { id: "tab-one", kind };
+    openTab: vi.fn((kind: string) => {
+      activeId = `tab-${++serial}`;
+      tabs.set(activeId, { tabId: activeId, sessionId: currentSession, kind });
       expanded = true;
+      notify();
     }),
-    active: () => tab,
+    active: () => {
+      const tab = tabs.get(activeId!);
+      return tab && { id: tab.tabId, kind: tab.kind };
+    },
+    focus: vi.fn((id: string) => {
+      activeId = id;
+    }),
     float: vi.fn(),
-    close: vi.fn(() => {
-      tab = undefined;
+    close: vi.fn((id = activeId) => {
+      tabs.delete(id!);
+      if (activeId === id) activeId = undefined;
+      notify();
     }),
   };
   const ctx = {
     inject: (_names: string[], callback: Function) => callback(ctx),
     on: (name: string, listener: Function) => events.set(name, listener),
     configForms: {},
-    remote: { commands: { execute } },
-    effect: (effect: Function) => effect(),
+    remote: {},
+    uiSession: {
+      adapter: {
+        current: { getSnapshot: () => ({ key: currentSession || undefined }) },
+      },
+    },
+    effect: (fn: Function) => fn(),
     sidebarRight: sidebar,
     sidebarRightTabs: { register: () => () => {} },
     slots: {
-      inject: (_name: string, effect: Function) => effect(),
-      register: (entry: any) => {
-        entries.set(entry.name + "/" + (entry.id ?? entry.key), entry);
-      },
+      inject: (_name: string, fn: Function) => fn(),
+      register: (entry: any) =>
+        entries.set(entry.name + "/" + (entry.id ?? entry.key), entry),
     },
   };
   apply(ctx as never);
-  const actions = entries
-    .get("conversation.input.dock/harness-test-progress")
-    .inject("one");
-  const state = {
-    session_id: "one",
-    run_id: "run-one",
-    phase: "executing",
-    preview: { ready: false },
-  } as ProgressSnapshot;
+  const sessionActions = (id: string) =>
+    entries.get("conversation.input.dock/harness-test-progress").inject(id);
   return {
-    actions,
+    actions: sessionActions("one"),
+    sessionActions,
     settings: entries.get("settings.section/harness-test").inject(),
-    sessionActions: (id: string) =>
-      entries.get("conversation.input.dock/harness-test-progress").inject(id),
-    executed: (sessionId: string, name: string, result: object) =>
-      events.get("command/executed")!(sessionId, name, result),
-    state,
+    executed: (sid: string, name: string, result: object) =>
+      events.get("command/executed")!(sid, name, result),
+    state: {
+      session_id: "one",
+      run_id: "run-one",
+      phase: "executing",
+      preview: { ready: false },
+    } as ProgressSnapshot,
     sidebar,
-    execute,
-    switchSession: (sessionId = "other") => {
-      currentSession = sessionId;
+    tabs,
+    fetcher,
+    switchSession: (id = "other") => {
+      currentSession = id;
+    },
+    openSettings: () => {
+      settingsOpen = true;
     },
   };
 }
-it("无CDP或首帧的状态不创建浮窗；后台会话也不抢占当前界面", () => {
-  const { actions, state, sidebar, switchSession } = setup();
-  actions.followPreview(state);
-  actions.openPreview(state);
-  expect(sidebar.openTab).not.toHaveBeenCalled();
-  switchSession();
-  actions.followPreview({ ...state, preview: { ready: true } });
-  expect(sidebar.openTab).not.toHaveBeenCalled();
-});
-
-it("读取隔离不调用释放；确认操作走当前会话的原生命令，失败不会显示为成功", async () => {
+it("无CDP、首帧未就绪或采集失败不创建浮窗；后台会话不抢占界面", () => {
   const t = setup();
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async () => ({
-      ok: true,
-      json: async () => ({ quarantine: null, recovering: false }),
-    })),
-  );
+  t.actions.followPreview(t.state);
+  t.actions.openPreview(t.state);
+  t.actions.openPreview({ ...t.state, preview: { ready: true, failed: true } });
+  t.switchSession();
+  t.actions.followPreview({ ...t.state, preview: { ready: true } });
+  expect(t.sidebar.openTab).not.toHaveBeenCalled();
+});
+it("读取隔离不调用释放；恢复发送所选会话与确认编号，失败不显示成功", async () => {
+  const t = setup();
+  t.fetcher.mockResolvedValueOnce({
+    ok: true,
+    json: async () => ({ quarantine: null, recovering: false }),
+  } as never);
   await expect(
     t.settings.readRecovery(new AbortController().signal),
   ).resolves.toMatchObject({ quarantine: null });
-  expect(t.execute).not.toHaveBeenCalled();
+  expect(t.fetcher).toHaveBeenCalledTimes(1);
   t.switchSession();
-  expect(await t.settings.recover("a".repeat(64))).toContain("已释放");
-  expect(t.execute).toHaveBeenCalledWith(
-    "other",
-    `/test-recover --confirm ${"a".repeat(64)}`,
-    [],
+  t.openSettings();
+  await expect(t.settings.recover("a".repeat(64))).resolves.toContain("已释放");
+  expect(t.fetcher).toHaveBeenLastCalledWith(
+    "/test-ui/recover",
+    expect.objectContaining({
+      body: JSON.stringify({ session_id: "other", token: "a".repeat(64) }),
+    }),
   );
-  t.execute.mockResolvedValue({
-    ok: true,
-    value: { result: { kind: "error", text: "关闭失败，隔离仍保留" } },
+  t.fetcher.mockResolvedValueOnce({
+    ok: false,
+    json: async () => ({ ok: false, message: "关闭失败，隔离仍保留" }),
   });
   await expect(t.settings.recover("a".repeat(64))).rejects.toThrow(
     "隔离仍保留",
   );
 });
-it("普通对话不提供隔离查询或释放入口，未执行测试命令时没有提示", () => {
+it("普通对话没有隔离查询或释放入口，未使用测试命令时没有提示", () => {
   const t = setup();
   expect(t.actions).not.toHaveProperty("readRecovery");
   expect(t.actions).not.toHaveProperty("recover");
   expect(t.actions.notice.getSnapshot()).toBe("");
   expect(t.sessionActions("other").notice.getSnapshot()).toBe("");
-  expect(t.execute).not.toHaveBeenCalled();
+  expect(t.fetcher).not.toHaveBeenCalled();
 });
-it("只有本插件命令失败才向发起对话提示，不影响其他对话；关闭提示不会释放环境", () => {
+it("只有保留的四个测试命令失败才提示发起会话；关闭提示不释放环境", () => {
   const t = setup();
   const changed = vi.fn();
   const unsubscribe = t.actions.notice.subscribe(changed);
-  t.executed("one", "help", { kind: "error", text: "其他命令失败" });
-  t.executed("one", "test-other-plugin", {
-    kind: "error",
-    text: "其他插件失败",
-  });
+  for (const name of [
+    "help",
+    "test-other-plugin",
+    "test-status",
+    "test-recover",
+    "test-stop",
+    "test-report",
+    "test-release",
+  ])
+    t.executed("one", name, { kind: "error", text: "其他命令失败" });
   expect(t.actions.notice.getSnapshot()).toBe("");
   t.executed("one", "test", {
     kind: "error",
     text: "Error: 请进入设置释放环境",
   });
   expect(t.actions.notice.getSnapshot()).toBe("请进入设置释放环境");
-  expect(t.sessionActions("other").notice.getSnapshot()).toBe("");
   expect(changed).toHaveBeenCalledTimes(1);
-  t.executed("one", "help", { kind: "success" });
-  expect(t.actions.notice.getSnapshot()).toContain("设置");
+  expect(t.sessionActions("other").notice.getSnapshot()).toBe("");
   t.actions.notice.dismiss();
   expect(t.actions.notice.getSnapshot()).toBe("");
-  expect(t.execute).not.toHaveBeenCalled();
+  expect(t.fetcher).not.toHaveBeenCalled();
   unsubscribe();
   t.executed("one", "test-run", { kind: "error", text: "文件不存在" });
   expect(changed).toHaveBeenCalledTimes(2);
   t.executed("one", "test-run", { kind: "success" });
   expect(t.actions.notice.getSnapshot()).toBe("");
 });
-it("设置释放失败保留已有提示，成功后清除；没有当前对话时不会发送原生命令", async () => {
+it("设置释放失败保留提示、成功清除；无所选对话时不发送恢复请求", async () => {
   const t = setup();
   t.executed("one", "test-plan", { kind: "error", text: "请进入设置释放" });
-  t.execute.mockResolvedValueOnce({
-    ok: true,
-    value: { result: { kind: "error", text: "关闭失败" } },
+  t.fetcher.mockResolvedValueOnce({
+    ok: false,
+    json: async () => ({ ok: false, message: "关闭失败" }),
   });
   await expect(t.settings.recover("a".repeat(64))).rejects.toThrow("关闭失败");
   expect(t.actions.notice.getSnapshot()).toContain("设置");
   await t.settings.recover("a".repeat(64));
   expect(t.actions.notice.getSnapshot()).toBe("");
   t.switchSession("");
-  t.execute.mockClear();
+  t.fetcher.mockClear();
   await expect(t.settings.recover("a".repeat(64))).rejects.toThrow(
     "打开一个对话",
   );
-  expect(t.execute).not.toHaveBeenCalled();
+  expect(t.fetcher).not.toHaveBeenCalled();
 });
-it("首帧自动打开一次，用户关闭后不反复弹出；手动重开只调用布局操作", () => {
-  const { actions, state, sidebar } = setup();
-  const ready = { ...state, preview: { ready: true } };
-  actions.followPreview(ready);
-  expect(sidebar.float).toHaveBeenCalledTimes(1);
-  expect(sidebar.isExpanded()).toBe(false);
-  sidebar.close();
-  actions.followPreview(ready);
-  expect(sidebar.openTab).toHaveBeenCalledTimes(1);
-  actions.openPreview(ready);
-  expect(sidebar.openTab).toHaveBeenCalledTimes(2);
+it("界面能提交处置文件与当前编号；报告入口准确绑定会话并支持指定历史运行", async () => {
+  const t = setup();
+  await t.settings.releaseEvidence("处置/proof.json", "b".repeat(64));
+  expect(t.fetcher).toHaveBeenLastCalledWith(
+    "/test-ui/release",
+    expect.objectContaining({
+      body: JSON.stringify({
+        evidence_file: "处置/proof.json",
+        token: "b".repeat(64),
+      }),
+    }),
+  );
+  t.switchSession("other");
+  t.openSettings();
+  await t.settings.rebuildReport();
+  expect(t.fetcher).toHaveBeenLastCalledWith(
+    "/test-ui/report",
+    expect.objectContaining({ body: JSON.stringify({ session_id: "other" }) }),
+  );
+  await t.actions.rebuildReport("run-history");
+  expect(t.fetcher).toHaveBeenLastCalledWith(
+    "/test-ui/report",
+    expect.objectContaining({
+      body: JSON.stringify({ session_id: "one", run_id: "run-history" }),
+    }),
+  );
 });
-it("结束或切换运行时关闭旧浮窗，不把上一运行的画面留给新任务", () => {
-  const { actions, state, sidebar } = setup();
-  actions.followPreview({ ...state, preview: { ready: true } });
-  actions.followPreview({
-    ...state,
-    phase: "finished",
-    preview: { ready: false },
+it("首帧只自动打开一次，原生关闭后不反复弹出，手动重开只操作布局", () => {
+  const t = setup();
+  const ready = { ...t.state, preview: { ready: true } };
+  t.actions.followPreview(ready);
+  expect(t.sidebar.float).toHaveBeenCalledTimes(1);
+  expect(t.sidebar.isExpanded()).toBe(false);
+  t.sidebar.close();
+  t.actions.followPreview(ready);
+  expect(t.sidebar.openTab).toHaveBeenCalledTimes(1);
+  t.actions.openPreview(ready);
+  expect(t.tabs.size).toBe(1);
+  expect(t.fetcher).not.toHaveBeenCalled();
+});
+it("连续点击实时画面在零个和一个浮窗之间切换，轮询不会重新弹出隐藏画面", () => {
+  const t = setup();
+  const ready = { ...t.state, preview: { ready: true } };
+  const changed = vi.fn();
+  t.actions.previewVisible.subscribe(changed);
+  t.actions.followPreview(ready);
+  for (let i = 0; i < 10; i++) {
+    t.actions.openPreview(ready);
+    expect(t.tabs.size).toBe(i % 2 ? 1 : 0);
+    expect(t.actions.previewVisible.getSnapshot()).toBe(i % 2 === 1);
+    t.actions.followPreview(ready);
+    expect(t.tabs.size).toBe(i % 2 ? 1 : 0);
+  }
+  expect(changed).toHaveBeenCalledTimes(11);
+});
+it("刷新后复用已有浮窗并移除历史重复，只影响所属会话", () => {
+  const t = setup();
+  for (const id of ["old-a", "old-b"])
+    t.tabs.set(id, {
+      tabId: id,
+      sessionId: "one",
+      kind: "harness-test-preview",
+    });
+  t.tabs.set("other-tab", {
+    tabId: "other-tab",
+    sessionId: "other",
+    kind: "harness-test-preview",
   });
-  expect(sidebar.close).toHaveBeenCalledTimes(1);
-  actions.followPreview({
-    ...state,
+  t.actions.followPreview({ ...t.state, preview: { ready: true } });
+  expect(t.sidebar.openTab).not.toHaveBeenCalled();
+  expect(t.sidebar.focus).toHaveBeenCalledWith("old-a");
+  expect([...t.tabs.keys()]).toEqual(["old-a", "other-tab"]);
+  t.actions.openPreview({ ...t.state, preview: { ready: true } });
+  expect([...t.tabs.keys()]).toEqual(["other-tab"]);
+});
+it("结束或新运行时关闭旧画面；新运行也要等待真实首帧", () => {
+  const t = setup();
+  t.actions.followPreview({ ...t.state, preview: { ready: true } });
+  t.actions.followPreview({
+    ...t.state,
     run_id: "run-next",
     preview: { ready: false },
   });
-  expect(sidebar.openTab).toHaveBeenCalledTimes(1);
+  expect(t.tabs.size).toBe(0);
+  t.actions.followPreview({
+    ...t.state,
+    run_id: "run-next",
+    preview: { ready: true },
+  });
+  expect(t.tabs.size).toBe(1);
+  t.actions.followPreview({
+    ...t.state,
+    run_id: "run-next",
+    phase: "finished",
+    preview: { ready: false },
+  });
+  expect(t.tabs.size).toBe(0);
 });
-it("采集终止后关闭已有浮窗，不为失败状态重新打开窗口", () => {
-  const { actions, state, sidebar } = setup();
-  actions.followPreview({ ...state, preview: { ready: true } });
-  actions.followPreview({
-    ...state,
+it("采集终止关闭已有浮窗，不为失败状态重开窗口", () => {
+  const t = setup();
+  t.actions.followPreview({ ...t.state, preview: { ready: true } });
+  t.actions.followPreview({
+    ...t.state,
     preview: { ready: false, failed: true, reason: "采集已退出" },
   });
-  expect(sidebar.close).toHaveBeenCalledTimes(1);
-  expect(sidebar.openTab).toHaveBeenCalledTimes(1);
-  expect(actions.notice.getSnapshot()).toBe("");
+  expect(t.tabs.size).toBe(0);
+  expect(t.sidebar.openTab).toHaveBeenCalledTimes(1);
+  expect(t.actions.notice.getSnapshot()).toBe("");
 });

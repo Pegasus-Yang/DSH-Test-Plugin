@@ -7,6 +7,8 @@ const { url } = JSON.parse(
     "utf8",
   ),
 );
+if (!process.argv[2])
+  throw new Error('请传入测试命令，例如 /test "任务描述"。');
 const browser = await chromium.launch({ channel: "chrome", headless: true });
 const page = await browser.newPage();
 await page.goto(url);
@@ -34,7 +36,7 @@ try {
   });
   const result = await rpc("commands/execute", {
     agentId: created.result.value.sessionId,
-    line: process.argv[2] ?? "/test-status",
+    line: process.argv[2],
     submittedAttachments: [],
   });
   await mkdir("artifacts/validation/commands", { recursive: true });

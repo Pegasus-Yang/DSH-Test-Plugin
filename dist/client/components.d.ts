@@ -1,6 +1,7 @@
 import type { InjectFace, PropsRuntime } from "@deepseek-ai/dsh-client-ui-slots";
 import type { ProgressSnapshot } from "../progress-model.js";
-export interface ProgressActions {
+import { type ReportActions } from "./report-controls.js";
+export interface ProgressActions extends ReportActions {
     notice: {
         getSnapshot: () => string;
         subscribe: (listener: () => void) => () => void;
@@ -8,6 +9,10 @@ export interface ProgressActions {
     };
     read: (signal: AbortSignal) => Promise<ProgressSnapshot | null>;
     openDetails: () => void;
+    previewVisible: {
+        getSnapshot: () => boolean;
+        subscribe: (listener: () => void) => () => void;
+    };
     openPreview: (state: ProgressSnapshot) => void;
     followPreview: (state: ProgressSnapshot) => void;
 }

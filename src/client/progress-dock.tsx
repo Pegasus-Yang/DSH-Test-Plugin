@@ -1,5 +1,11 @@
 /** 当前步骤优先的底部面板；完整业务步骤只在用户展开时渲染。 */
-import { useEffect, useId, useRef, useState } from "react";
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import {
   IconBrowseOutlineRegular,
   IconCheckCircleOutlineRegular,
@@ -13,6 +19,7 @@ import {
 } from "@deepseek-ai/dsh-client-ui-primitives";
 import type { ProgressSnapshot } from "../progress-model.js";
 import type { ProgressActions } from "./components.js";
+import { RebuildReport } from "./report-controls.js";
 import {
   duration,
   elapsed,
@@ -40,6 +47,11 @@ export function ProgressCard({
   const [inspection, setInspection] = useState<string>();
   const [textExpanded, setTextExpanded] = useState(false);
   const [clipped, setClipped] = useState(false);
+  const previewVisible = useSyncExternalStore(
+    actions.previewVisible.subscribe,
+    actions.previewVisible.getSnapshot,
+    actions.previewVisible.getSnapshot,
+  );
   const description = useRef<HTMLParagraphElement>(null);
   const list = useRef<HTMLDivElement>(null);
   const bodyId = useId();
@@ -136,9 +148,9 @@ export function ProgressCard({
           onClick={() => setCollapsed(!collapsed)}
         >
           {collapsed ? (
-            <IconChevronDownOutlineRegular size={18} />
-          ) : (
             <IconChevronUpOutlineRegular size={18} />
+          ) : (
+            <IconChevronDownOutlineRegular size={18} />
           )}
         </button>
       </div>
@@ -239,10 +251,11 @@ export function ProgressCard({
             snapshot.phase !== "finished" && (
               <button
                 type="button"
+                aria-pressed={previewVisible}
                 onClick={() => actions.openPreview(snapshot)}
               >
                 <IconBrowseOutlineRegular size={17} />
-                实时画面
+                {previewVisible ? "隐藏实时画面" : "显示实时画面"}
               </button>
             )}
           {snapshot.report_url && (
@@ -250,6 +263,12 @@ export function ProgressCard({
               <IconFlatListOutlineRegular size={17} />
               测试报告
             </a>
+          )}
+          {snapshot.phase === "finished" && (
+            <RebuildReport
+              rebuildReport={actions.rebuildReport}
+              runId={snapshot.run_id}
+            />
           )}
           <small>时间包含等待</small>
         </div>

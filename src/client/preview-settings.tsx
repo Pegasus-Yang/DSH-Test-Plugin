@@ -12,13 +12,15 @@ import {
   type PreviewSettingsInfo,
 } from "../preview-preferences.js";
 import { RecoveryPanel, type RecoveryActions } from "./recovery-panel.js";
+import { ReportSettings, type ReportActions } from "./report-controls.js";
 
 type Fields = { browserPreview?: PreviewPreferences };
 
 export function PreviewSettingsPage({
   forms,
+  rebuildReport,
   ...recovery
-}: { forms: ConfigForms } & RecoveryActions) {
+}: { forms: ConfigForms } & RecoveryActions & ReportActions) {
   const [info, setInfo] = useState<PreviewSettingsInfo>();
   const [error, setError] = useState("");
   useEffect(() => {
@@ -42,6 +44,7 @@ export function PreviewSettingsPage({
       <h2>测试环境</h2>
       <p>测试提示环境未释放时，请先在这里处理，完成后重新执行测试命令。</p>
       <RecoveryPanel {...recovery} />
+      <ReportSettings rebuildReport={rebuildReport} />
       <h2>浏览器实时预览</h2>
       <p>
         让你看到测试正在操作的网页。接口测试或没有浏览器画面时，不会打开浮窗。

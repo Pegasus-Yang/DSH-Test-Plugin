@@ -28,7 +28,7 @@ __export(index_exports, {
 module.exports = __toCommonJS(index_exports);
 
 // src/client/preview-settings.tsx
-var import_react2 = require("react");
+var import_react3 = require("react");
 
 // src/preview-preferences.ts
 var previewPreferenceDefaults = {
@@ -49,7 +49,11 @@ function elapsed(milliseconds) {
   if (minutes < 60) return `${minutes} \u5206 ${seconds % 60} \u79D2`;
   return `${Math.floor(minutes / 60)} \u5C0F\u65F6 ${minutes % 60} \u5206`;
 }
-function RecoveryPanel({ readRecovery, recover }) {
+function RecoveryPanel({
+  readRecovery,
+  recover,
+  releaseEvidence
+}) {
   const [state, setState] = (0, import_react.useState)();
   const [failed, setFailed] = (0, import_react.useState)(false);
   const [confirmation, setConfirmation] = (0, import_react.useState)();
@@ -57,6 +61,8 @@ function RecoveryPanel({ readRecovery, recover }) {
   const [pending, setPending] = (0, import_react.useState)(false);
   const [message, setMessage] = (0, import_react.useState)("");
   const [error, setError] = (0, import_react.useState)(false);
+  const [evidenceFile, setEvidenceFile] = (0, import_react.useState)("");
+  const [evidenceConfirmation, setEvidenceConfirmation] = (0, import_react.useState)();
   (0, import_react.useEffect)(() => {
     const controller = new AbortController();
     let timer;
@@ -81,13 +87,20 @@ function RecoveryPanel({ readRecovery, recover }) {
   }, [readRecovery]);
   const quarantine = state?.quarantine;
   (0, import_react.useEffect)(() => {
+    if (quarantine?.token) {
+      setMessage("");
+      setError(false);
+    }
+  }, [quarantine?.token]);
+  (0, import_react.useEffect)(() => {
     if (confirmation !== quarantine?.token) {
       setConfirmation(void 0);
       setChecked(false);
     }
   }, [quarantine?.token, confirmation]);
   const release = async () => {
-    if (!checked || !quarantine?.can_recover || pending || failed) return;
+    if (!checked || !quarantine?.can_recover || confirmation !== quarantine.token || pending || failed)
+      return;
     setPending(true);
     setMessage("\u6B63\u5728\u5173\u95ED\u6D4B\u8BD5\u4E13\u7528\u6D4F\u89C8\u5668\u5E76\u505C\u6B62\u9884\u89C8\uFF0C\u8BF7\u7559\u610F\u5BBF\u4E3B\u7684\u5DE5\u5177\u5BA1\u6279\u3002");
     setError(false);
@@ -95,6 +108,22 @@ function RecoveryPanel({ readRecovery, recover }) {
       setMessage(await recover(quarantine.token));
       setConfirmation(void 0);
       setChecked(false);
+    } catch (error2) {
+      setMessage(error2 instanceof Error ? error2.message : String(error2));
+      setError(true);
+    } finally {
+      setPending(false);
+    }
+  };
+  const submitEvidence = async () => {
+    if (!quarantine || evidenceConfirmation !== quarantine.token || !evidenceFile.trim() || pending || failed || state?.recovering)
+      return;
+    setPending(true);
+    setMessage("");
+    setError(false);
+    try {
+      setMessage(await releaseEvidence(evidenceFile.trim(), quarantine.token));
+      setEvidenceConfirmation(void 0);
     } catch (error2) {
       setMessage(error2 instanceof Error ? error2.message : String(error2));
       setError(true);
@@ -178,7 +207,7 @@ function RecoveryPanel({ readRecovery, recover }) {
             "button",
             {
               type: "button",
-              disabled: failed || !quarantine.can_recover,
+              disabled: pending || failed || !quarantine.can_recover,
               onClick: () => {
                 setConfirmation(quarantine.token);
                 setChecked(false);
@@ -186,7 +215,48 @@ function RecoveryPanel({ readRecovery, recover }) {
               },
               children: "\u5904\u7406\u5E76\u91CA\u653E"
             }
-          ) })
+          ) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("details", { className: "dsh-test-command-advanced", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("summary", { children: "\u9AD8\u7EA7\u5904\u7F6E\uFF1A\u63D0\u4EA4\u5B9E\u9645\u5904\u7F6E\u8BC1\u636E" }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: "\u65E0\u6CD5\u81EA\u52A8\u5173\u95ED\u6D4F\u89C8\u5668\u65F6\uFF0C\u5148\u5728\u5916\u90E8\u505C\u6B62\u65E7\u4EFB\u52A1\u5E76\u91CD\u7F6E\u5BF9\u5E94\u73AF\u5883\uFF0C\u518D\u6309\u6545\u969C\u6392\u67E5\u6307\u5357\u51C6\u5907\u8BC1\u636E\u6587\u4EF6\u3002\u63D0\u4EA4\u53EA\u8BB0\u5F55\u4F60\u7684\u5904\u7F6E\u7ED3\u679C\uFF0C\u4E0D\u4F1A\u66FF\u4F60\u5173\u95ED\u7A0B\u5E8F\u3002" }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("label", { htmlFor: "dsh-test-release-file", children: "\u5DE5\u4F5C\u533A\u5185\u7684\u5904\u7F6E\u8BC1\u636E JSON \u6587\u4EF6" }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              "input",
+              {
+                id: "dsh-test-release-file",
+                value: evidenceFile,
+                disabled: pending,
+                placeholder: "\u4F8B\u5982 recovery-evidence.json",
+                onChange: (event) => {
+                  setEvidenceFile(event.target.value);
+                  setEvidenceConfirmation(void 0);
+                }
+              }
+            ),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { className: "dsh-test-setting-switch", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                "input",
+                {
+                  type: "checkbox",
+                  checked: evidenceConfirmation === quarantine.token,
+                  disabled: pending || failed || state?.recovering,
+                  onChange: (event) => setEvidenceConfirmation(
+                    event.target.checked ? quarantine.token : void 0
+                  )
+                }
+              ),
+              "\u6211\u5DF2\u505C\u6B62\u65E7\u4EFB\u52A1\u3001\u91CD\u7F6E\u5916\u90E8\u73AF\u5883\uFF0C\u5E76\u586B\u5199\u5B9E\u9645\u5904\u7F6E\u8BC1\u636E\u3002"
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "dsh-test-setting-actions", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              "button",
+              {
+                type: "button",
+                disabled: evidenceConfirmation !== quarantine.token || !evidenceFile.trim() || pending || failed || state?.recovering,
+                onClick: () => void submitEvidence(),
+                children: pending ? "\u6B63\u5728\u5904\u7406\u2026" : "\u63D0\u4EA4\u8BC1\u636E\u5E76\u89E3\u9664\u9694\u79BB"
+              }
+            ) })
+          ] })
         ] }),
         message && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { role: error ? "alert" : "status", children: message })
       ]
@@ -194,15 +264,77 @@ function RecoveryPanel({ readRecovery, recover }) {
   );
 }
 
-// src/client/preview-settings.tsx
+// src/client/report-controls.tsx
+var import_react2 = require("react");
 var import_jsx_runtime2 = require("react/jsx-runtime");
-function PreviewSettingsPage({
-  forms,
-  ...recovery
+function RebuildReport({
+  rebuildReport,
+  runId
 }) {
-  const [info, setInfo] = (0, import_react2.useState)();
+  const [pending, setPending] = (0, import_react2.useState)(false);
+  const [result, setResult] = (0, import_react2.useState)();
   const [error, setError] = (0, import_react2.useState)("");
   (0, import_react2.useEffect)(() => {
+    setResult(void 0);
+    setError("");
+  }, [runId]);
+  const rebuild = async () => {
+    setPending(true);
+    setError("");
+    setResult(void 0);
+    try {
+      setResult(await rebuildReport(runId));
+    } catch (error2) {
+      setError(error2 instanceof Error ? error2.message : String(error2));
+    } finally {
+      setPending(false);
+    }
+  };
+  return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("span", { className: "dsh-test-report-control", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { type: "button", disabled: pending, onClick: () => void rebuild(), children: pending ? "\u6B63\u5728\u91CD\u5EFA\u2026" : "\u91CD\u5EFA\u62A5\u544A" }),
+    result && /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+      "a",
+      {
+        href: result.url,
+        target: "_blank",
+        rel: "noreferrer",
+        title: result.path,
+        children: "\u67E5\u770B\u91CD\u5EFA\u62A5\u544A"
+      }
+    ),
+    error && /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { role: "alert", children: error })
+  ] });
+}
+function ReportSettings(actions) {
+  const [runId, setRunId] = (0, import_react2.useState)("");
+  return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("section", { "data-test-report-settings": true, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("h2", { children: "\u6D4B\u8BD5\u62A5\u544A" }),
+    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { children: "\u62A5\u544A\u7F3A\u5931\u6216\u9700\u8981\u91CD\u65B0\u751F\u6210\u65F6\uFF0C\u53EF\u6839\u636E\u5DF2\u7ED3\u675F\u6216\u4E2D\u65AD\u6D4B\u8BD5\u7684\u539F\u59CB\u8BB0\u5F55\u91CD\u5EFA\uFF0C\u4E0D\u4F1A\u91CD\u65B0\u6267\u884C\u7528\u4F8B\u3002" }),
+    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("label", { htmlFor: "dsh-test-report-run", children: "\u8FD0\u884C ID\uFF08\u53EF\u9009\uFF09" }),
+    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+      "input",
+      {
+        id: "dsh-test-report-run",
+        value: runId,
+        placeholder: "run-\u2026\uFF1B\u7559\u7A7A\u4F7F\u7528\u5F53\u524D\u5BF9\u8BDD\u7684\u62A5\u544A",
+        onChange: (event) => setRunId(event.target.value)
+      }
+    ),
+    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "dsh-test-setting-hint", children: "\u8FD0\u884C ID \u53EF\u5728\u6D4B\u8BD5\u62A5\u544A\u6216\u7ED3\u679C\u76EE\u5F55\u4E2D\u627E\u5230\u3002\u4ECD\u5728\u6267\u884C\u7684\u6D4B\u8BD5\u4E0D\u80FD\u91CD\u5EFA\uFF1B\u4E2D\u65AD\u8BB0\u5F55\u4F1A\u660E\u786E\u6807\u8BB0\u7ED3\u679C\u4E0D\u5B8C\u6574\u3002" }),
+    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "dsh-test-setting-actions", children: /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(RebuildReport, { ...actions, runId: runId.trim() }) })
+  ] });
+}
+
+// src/client/preview-settings.tsx
+var import_jsx_runtime3 = require("react/jsx-runtime");
+function PreviewSettingsPage({
+  forms,
+  rebuildReport,
+  ...recovery
+}) {
+  const [info, setInfo] = (0, import_react3.useState)();
+  const [error, setError] = (0, import_react3.useState)("");
+  (0, import_react3.useEffect)(() => {
     const controller = new AbortController();
     void fetch("/test-preview-settings", {
       signal: controller.signal,
@@ -216,43 +348,44 @@ function PreviewSettingsPage({
     });
     return () => controller.abort();
   }, []);
-  return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("section", { className: "dsh-test-settings", "data-test-preview-settings": true, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("h2", { children: "\u6D4B\u8BD5\u73AF\u5883" }),
-    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { children: "\u6D4B\u8BD5\u63D0\u793A\u73AF\u5883\u672A\u91CA\u653E\u65F6\uFF0C\u8BF7\u5148\u5728\u8FD9\u91CC\u5904\u7406\uFF0C\u5B8C\u6210\u540E\u91CD\u65B0\u6267\u884C\u6D4B\u8BD5\u547D\u4EE4\u3002" }),
-    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(RecoveryPanel, { ...recovery }),
-    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("h2", { children: "\u6D4F\u89C8\u5668\u5B9E\u65F6\u9884\u89C8" }),
-    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { children: "\u8BA9\u4F60\u770B\u5230\u6D4B\u8BD5\u6B63\u5728\u64CD\u4F5C\u7684\u7F51\u9875\u3002\u63A5\u53E3\u6D4B\u8BD5\u6216\u6CA1\u6709\u6D4F\u89C8\u5668\u753B\u9762\u65F6\uFF0C\u4E0D\u4F1A\u6253\u5F00\u6D6E\u7A97\u3002" }),
-    error && /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { role: "alert", children: error }),
-    info ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(PreferencesForm, { info, form: forms.get(info.namespace) }) : !error && /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { children: "\u6B63\u5728\u8BFB\u53D6\u8BBE\u7F6E\u2026" })
+  return /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("section", { className: "dsh-test-settings", "data-test-preview-settings": true, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("h2", { children: "\u6D4B\u8BD5\u73AF\u5883" }),
+    /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { children: "\u6D4B\u8BD5\u63D0\u793A\u73AF\u5883\u672A\u91CA\u653E\u65F6\uFF0C\u8BF7\u5148\u5728\u8FD9\u91CC\u5904\u7406\uFF0C\u5B8C\u6210\u540E\u91CD\u65B0\u6267\u884C\u6D4B\u8BD5\u547D\u4EE4\u3002" }),
+    /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(RecoveryPanel, { ...recovery }),
+    /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(ReportSettings, { rebuildReport }),
+    /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("h2", { children: "\u6D4F\u89C8\u5668\u5B9E\u65F6\u9884\u89C8" }),
+    /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { children: "\u8BA9\u4F60\u770B\u5230\u6D4B\u8BD5\u6B63\u5728\u64CD\u4F5C\u7684\u7F51\u9875\u3002\u63A5\u53E3\u6D4B\u8BD5\u6216\u6CA1\u6709\u6D4F\u89C8\u5668\u753B\u9762\u65F6\uFF0C\u4E0D\u4F1A\u6253\u5F00\u6D6E\u7A97\u3002" }),
+    error && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { role: "alert", children: error }),
+    info ? /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(PreferencesForm, { info, form: forms.get(info.namespace) }) : !error && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { children: "\u6B63\u5728\u8BFB\u53D6\u8BBE\u7F6E\u2026" })
   ] });
 }
 function PreferencesForm({
   info,
   form
 }) {
-  const state = (0, import_react2.useSyncExternalStore)(
+  const state = (0, import_react3.useSyncExternalStore)(
     form.subscribe.bind(form),
     form.getSnapshot.bind(form)
   );
-  const [draft, setDraft] = (0, import_react2.useState)(previewPreferenceDefaults);
-  const [portText, setPortText] = (0, import_react2.useState)(
+  const [draft, setDraft] = (0, import_react3.useState)(previewPreferenceDefaults);
+  const [portText, setPortText] = (0, import_react3.useState)(
     String(previewPreferenceDefaults.port)
   );
-  const [dirty, setDirty] = (0, import_react2.useState)(false);
-  const [saving, setSaving] = (0, import_react2.useState)(false);
-  const [message, setMessage] = (0, import_react2.useState)("");
-  const [editRevision, setEditRevision] = (0, import_react2.useState)();
-  const [checking, setChecking] = (0, import_react2.useState)(false);
-  const [detected, setDetected] = (0, import_react2.useState)();
-  const checker = (0, import_react2.useRef)();
-  (0, import_react2.useEffect)(
+  const [dirty, setDirty] = (0, import_react3.useState)(false);
+  const [saving, setSaving] = (0, import_react3.useState)(false);
+  const [message, setMessage] = (0, import_react3.useState)("");
+  const [editRevision, setEditRevision] = (0, import_react3.useState)();
+  const [checking, setChecking] = (0, import_react3.useState)(false);
+  const [detected, setDetected] = (0, import_react3.useState)();
+  const checker = (0, import_react3.useRef)();
+  (0, import_react3.useEffect)(
     () => () => {
       checker.current?.abort();
       checker.current = void 0;
     },
     []
   );
-  (0, import_react2.useEffect)(() => {
+  (0, import_react3.useEffect)(() => {
     if (dirty || state.status !== "ready") return;
     const value = {
       ...previewPreferenceDefaults,
@@ -360,10 +493,10 @@ function PreferencesForm({
       setSaving(false);
     }
   };
-  if (state.status === "loading") return /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { children: "\u6B63\u5728\u8BFB\u53D6\u4FDD\u5B58\u7684\u914D\u7F6E\u2026" });
+  if (state.status === "loading") return /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { children: "\u6B63\u5728\u8BFB\u53D6\u4FDD\u5B58\u7684\u914D\u7F6E\u2026" });
   if (!state.writable || state.status === "unavailable")
-    return /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { role: "alert", children: "\u5F53\u524D\u8FDE\u63A5\u4E0D\u80FD\u4FDD\u5B58\u5BBF\u4E3B\u8BBE\u7F6E\u3002\u8BF7\u4ECE\u672C\u673A DSH \u9875\u9762\u6253\u5F00\uFF1B\u81EA\u5B9A\u4E49\u90E8\u7F72\u9700\u63D0\u4F9B settings \u548C config-editor \u670D\u52A1\u3002" });
-  return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { role: "alert", children: "\u5F53\u524D\u8FDE\u63A5\u4E0D\u80FD\u4FDD\u5B58\u5BBF\u4E3B\u8BBE\u7F6E\u3002\u8BF7\u4ECE\u672C\u673A DSH \u9875\u9762\u6253\u5F00\uFF1B\u81EA\u5B9A\u4E49\u90E8\u7F72\u9700\u63D0\u4F9B settings \u548C config-editor \u670D\u52A1\u3002" });
+  return /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)(
     "form",
     {
       onSubmit: (event) => {
@@ -371,8 +504,8 @@ function PreferencesForm({
         void save();
       },
       children: [
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("label", { className: "dsh-test-setting-switch", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("label", { className: "dsh-test-setting-switch", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(
             "input",
             {
               type: "checkbox",
@@ -383,14 +516,14 @@ function PreferencesForm({
           ),
           "\u542F\u7528\u6D4F\u89C8\u5668\u5B9E\u65F6\u9884\u89C8"
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "dsh-test-setting-hint", children: "\u5F00\u542F\u540E\u4E5F\u4F1A\u7B49\u5F85\u6D4F\u89C8\u5668\u753B\u9762\u5C31\u7EEA\uFF0C\u4E0D\u4F1A\u63D0\u524D\u6253\u5F00\u7A7A\u7A97\u53E3\u3002" }),
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("p", { className: "dsh-test-setting-hint", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { className: "dsh-test-setting-hint", children: "\u5F00\u542F\u540E\u4E5F\u4F1A\u7B49\u5F85\u6D4F\u89C8\u5668\u753B\u9762\u5C31\u7EEA\uFF0C\u4E0D\u4F1A\u63D0\u524D\u6253\u5F00\u7A7A\u7A97\u53E3\u3002" }),
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("p", { className: "dsh-test-setting-hint", children: [
           "\u8BF7\u5148\u5728 DSH \u6240\u5728\u7535\u8111\u5B89\u88C5 Browscreen\uFF08Python \u22653.14\uFF09\u3002\u652F\u6301\u7A33\u5B9A\u7248\u672C",
           " ",
           browscreenVersionRange,
           "\uFF0C\u5EFA\u8BAE\u4F7F\u7528 0.2.1\u3002 \u9ED8\u8BA4\u4ECE\u5BBF\u4E3B PATH \u67E5\u627E browscreen\uFF0C\u65E0\u9700\u4E0B\u8F7D\u6E90\u7801\u6216\u63D0\u524D\u542F\u52A8\u670D\u52A1\u3002"
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "dsh-test-setting-actions", children: /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("div", { className: "dsh-test-setting-actions", children: /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(
           "button",
           {
             type: "button",
@@ -399,30 +532,30 @@ function PreferencesForm({
             children: checking ? "\u6B63\u5728\u68C0\u6D4B\u2026" : "\u68C0\u6D4B\u5B89\u88C5"
           }
         ) }),
-        detected && /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
+        detected && /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)(
           "div",
           {
             className: "dsh-test-command-check",
             "data-test-browscreen-check": true,
             role: detected.ok ? "status" : "alert",
             children: [
-              /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { children: detected.message }),
-              detected.executable && /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("p", { children: [
+              /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { children: detected.message }),
+              detected.executable && /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("p", { children: [
                 "\u547D\u4EE4\u4F4D\u7F6E\uFF1A",
-                /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("code", { children: detected.executable })
+                /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("code", { children: detected.executable })
               ] }),
-              detected.version && /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("p", { children: [
+              detected.version && /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("p", { children: [
                 "\u68C0\u6D4B\u7248\u672C\uFF1A",
                 detected.version
               ] })
             ]
           }
         ),
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("fieldset", { disabled: saving, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("details", { className: "dsh-test-command-advanced", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("summary", { children: "\u9AD8\u7EA7\u8BBE\u7F6E\uFF1ABrowscreen \u547D\u4EE4\u8DEF\u5F84" }),
-            /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("label", { htmlFor: "dsh-test-browscreen-executable", children: "Browscreen \u53EF\u6267\u884C\u6587\u4EF6" }),
-            /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("fieldset", { disabled: saving, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("details", { className: "dsh-test-command-advanced", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("summary", { children: "\u9AD8\u7EA7\u8BBE\u7F6E\uFF1ABrowscreen \u547D\u4EE4\u8DEF\u5F84" }),
+            /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("label", { htmlFor: "dsh-test-browscreen-executable", children: "Browscreen \u53EF\u6267\u884C\u6587\u4EF6" }),
+            /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(
               "input",
               {
                 id: "dsh-test-browscreen-executable",
@@ -432,10 +565,10 @@ function PreferencesForm({
                 onChange: (event) => edit({ browscreenExecutable: event.target.value })
               }
             ),
-            /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "dsh-test-setting-hint", children: "\u7EC8\u7AEF\u80FD\u8FD0\u884C\u4F46\u68C0\u6D4B\u627E\u4E0D\u5230\u65F6\uFF0C\u6267\u884C uv tool dir --bin\uFF0C\u5C06\u8BE5\u76EE\u5F55\u4E2D\u7684 browscreen \u5B8C\u6574\u8DEF\u5F84\u586B\u5728\u8FD9\u91CC\uFF1B\u4E0D\u662F\u9879\u76EE\u6587\u4EF6\u5939\uFF0C\u4E5F\u4E0D\u586B\u5199\u989D\u5916\u53C2\u6570\u3002" })
+            /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { className: "dsh-test-setting-hint", children: "\u7EC8\u7AEF\u80FD\u8FD0\u884C\u4F46\u68C0\u6D4B\u627E\u4E0D\u5230\u65F6\uFF0C\u6267\u884C uv tool dir --bin\uFF0C\u5C06\u8BE5\u76EE\u5F55\u4E2D\u7684 browscreen \u5B8C\u6574\u8DEF\u5F84\u586B\u5728\u8FD9\u91CC\uFF1B\u4E0D\u662F\u9879\u76EE\u6587\u4EF6\u5939\uFF0C\u4E5F\u4E0D\u586B\u5199\u989D\u5916\u53C2\u6570\u3002" })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("label", { htmlFor: "dsh-test-browscreen-port", children: "\u91C7\u96C6\u670D\u52A1\u7AEF\u53E3" }),
-          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("label", { htmlFor: "dsh-test-browscreen-port", children: "\u91C7\u96C6\u670D\u52A1\u7AEF\u53E3" }),
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(
             "input",
             {
               id: "dsh-test-browscreen-port",
@@ -451,17 +584,17 @@ function PreferencesForm({
               }
             }
           ),
-          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "dsh-test-setting-hint", children: "\u901A\u5E38\u4FDD\u7559 13390\u3002\u5982\u679C\u5B83\u5DF2\u88AB\u522B\u7684\u7A0B\u5E8F\u5360\u7528\uFF0C\u6362\u4E00\u4E2A\u7A7A\u95F2\u7AEF\u53E3\u3002" }),
-          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("label", { htmlFor: "dsh-test-preview-mcp", children: "Playwright \u6D4F\u89C8\u5668" }),
-          /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { className: "dsh-test-setting-hint", children: "\u901A\u5E38\u4FDD\u7559 13390\u3002\u5982\u679C\u5B83\u5DF2\u88AB\u522B\u7684\u7A0B\u5E8F\u5360\u7528\uFF0C\u6362\u4E00\u4E2A\u7A7A\u95F2\u7AEF\u53E3\u3002" }),
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("label", { htmlFor: "dsh-test-preview-mcp", children: "Playwright \u6D4F\u89C8\u5668" }),
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)(
             "select",
             {
               id: "dsh-test-preview-mcp",
               value: draft.mcpId,
               onChange: (event) => edit({ mcpId: event.target.value }),
               children: [
-                /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("option", { value: "", children: "\u8BF7\u9009\u62E9\u6D4F\u89C8\u5668" }),
-                info.mcpInstances.map((instance) => /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
+                /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("option", { value: "", children: "\u8BF7\u9009\u62E9\u6D4F\u89C8\u5668" }),
+                info.mcpInstances.map((instance) => /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)(
                   "option",
                   {
                     value: instance.id,
@@ -476,12 +609,12 @@ function PreferencesForm({
               ]
             }
           ),
-          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "dsh-test-setting-hint", children: "\u9009\u62E9\u7528\u4E8E\u672C\u63D2\u4EF6\u6D4B\u8BD5\u7684 Playwright\u3002\u6CA1\u6709\u53EF\u9009\u9879\u65F6\uFF0C\u5148\u6309\u6307\u5357\u6DFB\u52A0\u672C\u673A Playwright MCP\u3002" })
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { className: "dsh-test-setting-hint", children: "\u9009\u62E9\u7528\u4E8E\u672C\u63D2\u4EF6\u6D4B\u8BD5\u7684 Playwright\u3002\u6CA1\u6709\u53EF\u9009\u9879\u65F6\uFF0C\u5148\u6309\u6307\u5357\u6DFB\u52A0\u672C\u673A Playwright MCP\u3002" })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { children: "\u4FDD\u5B58\u540E\u4E0B\u4E00\u6B21\u6D4B\u8BD5\u751F\u6548\u3002\u9996\u6B21\u63A5\u5165\u4F1A\u91CD\u65B0\u8FDE\u63A5\u9009\u4E2D\u7684 MCP\uFF0C\u8BF7\u52FF\u4E0E\u5176\u4ED6\u4F1A\u8BDD\u5171\u4EAB\u64CD\u4F5C\u8BE5\u6D4F\u89C8\u5668\u3002" }),
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "dsh-test-setting-actions", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { type: "submit", disabled: !dirty || saving || checking, children: saving ? "\u6B63\u5728\u4FDD\u5B58\u2026" : "\u4FDD\u5B58\u8BBE\u7F6E" }),
-          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { children: "\u4FDD\u5B58\u540E\u4E0B\u4E00\u6B21\u6D4B\u8BD5\u751F\u6548\u3002\u9996\u6B21\u63A5\u5165\u4F1A\u91CD\u65B0\u8FDE\u63A5\u9009\u4E2D\u7684 MCP\uFF0C\u8BF7\u52FF\u4E0E\u5176\u4ED6\u4F1A\u8BDD\u5171\u4EAB\u64CD\u4F5C\u8BE5\u6D4F\u89C8\u5668\u3002" }),
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: "dsh-test-setting-actions", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("button", { type: "submit", disabled: !dirty || saving || checking, children: saving ? "\u6B63\u5728\u4FDD\u5B58\u2026" : "\u4FDD\u5B58\u8BBE\u7F6E" }),
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(
             "button",
             {
               type: "button",
@@ -494,15 +627,15 @@ function PreferencesForm({
             }
           )
         ] }),
-        message && /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { role: "status", children: message }),
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "dsh-test-setting-hint", children: info.message })
+        message && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { role: "status", children: message }),
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { className: "dsh-test-setting-hint", children: info.message })
       ]
     }
   );
 }
 
 // src/client/components.tsx
-var import_react4 = require("react");
+var import_react5 = require("react");
 
 // src/client/progress-view.ts
 var phaseLabels = {
@@ -635,25 +768,30 @@ function focusStep(snapshot, rows = stepRows(snapshot)) {
 }
 
 // src/client/progress-dock.tsx
-var import_react3 = require("react");
+var import_react4 = require("react");
 var import_dsh_client_ui_primitives = require("@deepseek-ai/dsh-client-ui-primitives");
-var import_jsx_runtime3 = require("react/jsx-runtime");
+var import_jsx_runtime4 = require("react/jsx-runtime");
 function ProgressCard({
   snapshot,
   now,
   failed,
   actions
 }) {
-  const [collapsed, setCollapsed] = (0, import_react3.useState)(false);
-  const [expanded, setExpanded] = (0, import_react3.useState)(false);
-  const [inspection, setInspection] = (0, import_react3.useState)();
-  const [textExpanded, setTextExpanded] = (0, import_react3.useState)(false);
-  const [clipped, setClipped] = (0, import_react3.useState)(false);
-  const description = (0, import_react3.useRef)(null);
-  const list = (0, import_react3.useRef)(null);
-  const bodyId = (0, import_react3.useId)();
-  const listId = (0, import_react3.useId)();
-  const descriptionId = (0, import_react3.useId)();
+  const [collapsed, setCollapsed] = (0, import_react4.useState)(false);
+  const [expanded, setExpanded] = (0, import_react4.useState)(false);
+  const [inspection, setInspection] = (0, import_react4.useState)();
+  const [textExpanded, setTextExpanded] = (0, import_react4.useState)(false);
+  const [clipped, setClipped] = (0, import_react4.useState)(false);
+  const previewVisible = (0, import_react4.useSyncExternalStore)(
+    actions.previewVisible.subscribe,
+    actions.previewVisible.getSnapshot,
+    actions.previewVisible.getSnapshot
+  );
+  const description = (0, import_react4.useRef)(null);
+  const list = (0, import_react4.useRef)(null);
+  const bodyId = (0, import_react4.useId)();
+  const listId = (0, import_react4.useId)();
+  const descriptionId = (0, import_react4.useId)();
   const rows = stepRows(snapshot);
   const focus = focusStep(snapshot, rows);
   const activeKey = focus.row?.key;
@@ -665,16 +803,16 @@ function ProgressCard({
     Date.parse(snapshot.finished_at ?? new Date(now).toISOString()) - Date.parse(snapshot.created_at)
   );
   const ratio = snapshot.total_steps ? Math.min(1, snapshot.settled_steps / snapshot.total_steps) : 0;
-  (0, import_react3.useEffect)(() => {
+  (0, import_react4.useEffect)(() => {
     setCollapsed(false);
     setExpanded(false);
     setInspection(void 0);
   }, [snapshot.run_id]);
-  (0, import_react3.useEffect)(() => {
+  (0, import_react4.useEffect)(() => {
     setTextExpanded(false);
     setClipped(false);
   }, [focus.description]);
-  (0, import_react3.useEffect)(() => {
+  (0, import_react4.useEffect)(() => {
     const element = description.current;
     if (!element || textExpanded || collapsed) return;
     const measure = () => setClipped(element.scrollHeight > element.clientHeight + 1);
@@ -683,7 +821,7 @@ function ProgressCard({
     observer.observe(element);
     return () => observer.disconnect();
   }, [focus.description, textExpanded, collapsed]);
-  (0, import_react3.useEffect)(() => {
+  (0, import_react4.useEffect)(() => {
     if (!expanded || inspection || !activeKey) return;
     const container = list.current;
     const target = container?.querySelector(
@@ -700,7 +838,7 @@ function ProgressCard({
     observer.observe(target);
     return () => observer.disconnect();
   }, [expanded, activeKey, inspection, snapshot.run_id]);
-  return /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
     "section",
     {
       className: `dsh-test-card dsh-test-card-${stateTone}`,
@@ -708,9 +846,9 @@ function ProgressCard({
       "data-run-id": snapshot.run_id,
       "aria-label": "\u6D4B\u8BD5\u6267\u884C\u8FDB\u5EA6",
       children: [
-        /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: "dsh-test-card-heading", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("span", { className: "dsh-test-card-phase", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "dsh-test-card-heading", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("span", { className: "dsh-test-card-phase", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
               StateIcon,
               {
                 size: 18,
@@ -719,13 +857,13 @@ function ProgressCard({
             ),
             failed ? "\u8FDE\u63A5\u6682\u4E0D\u53EF\u7528" : phaseLabels[snapshot.phase]
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("span", { className: "dsh-test-card-title", title: snapshot.title, children: snapshot.title }),
-          /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("span", { className: "dsh-test-card-time", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(import_dsh_client_ui_primitives.IconClockOutlineRegular, { size: 16 }),
+          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "dsh-test-card-title", title: snapshot.title, children: snapshot.title }),
+          /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("span", { className: "dsh-test-card-time", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_dsh_client_ui_primitives.IconClockOutlineRegular, { size: 16 }),
             "\u5DF2\u7528 ",
             duration(total)
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
             "button",
             {
               className: "dsh-test-fold",
@@ -734,11 +872,11 @@ function ProgressCard({
               "aria-expanded": !collapsed,
               "aria-controls": bodyId,
               onClick: () => setCollapsed(!collapsed),
-              children: collapsed ? /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(import_dsh_client_ui_primitives.IconChevronDownOutlineRegular, { size: 18 }) : /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(import_dsh_client_ui_primitives.IconChevronUpOutlineRegular, { size: 18 })
+              children: collapsed ? /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_dsh_client_ui_primitives.IconChevronUpOutlineRegular, { size: 18 }) : /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_dsh_client_ui_primitives.IconChevronDownOutlineRegular, { size: 18 })
             }
           )
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
           "div",
           {
             className: "dsh-test-meter",
@@ -747,20 +885,20 @@ function ProgressCard({
             "aria-valuemin": 0,
             "aria-valuemax": snapshot.total_steps || 100,
             "aria-valuenow": snapshot.total_steps ? snapshot.settled_steps : void 0,
-            children: /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("span", { style: { width: `${ratio * 100}%` } })
+            children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { style: { width: `${ratio * 100}%` } })
           }
         ),
-        /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: "dsh-test-card-count", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "dsh-test-card-count", children: [
           snapshot.total_steps ? `${snapshot.settled_steps} / ${snapshot.total_steps} \u6B65\u5DF2\u7ED3\u7B97` : "\u4E1A\u52A1\u6B65\u9AA4\u5C1A\u672A\u786E\u5B9A",
-          failed && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("span", { children: "\u8FDE\u63A5\u6062\u590D\u540E\u66F4\u65B0\u8FDB\u5EA6\u4E0E\u8017\u65F6" })
+          failed && /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { children: "\u8FDE\u63A5\u6062\u590D\u540E\u66F4\u65B0\u8FDB\u5EA6\u4E0E\u8017\u65F6" })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { id: bodyId, className: "dsh-test-card-body", hidden: collapsed, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: "dsh-test-focus", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: "dsh-test-focus-marker", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("span", { className: "dsh-test-focus-number", "aria-hidden": "true", children: focus.row ? String(focus.row.number).padStart(2, "0") : /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(StateIcon, { size: 23 }) }),
-              /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("span", { className: "dsh-test-focus-label", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { id: bodyId, className: "dsh-test-card-body", hidden: collapsed, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "dsh-test-focus", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "dsh-test-focus-marker", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "dsh-test-focus-number", "aria-hidden": "true", children: focus.row ? String(focus.row.number).padStart(2, "0") : /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(StateIcon, { size: 23 }) }),
+              /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("span", { className: "dsh-test-focus-label", children: [
                 focus.label,
-                snapshot.instances.length > 1 && currentInstance && /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("small", { children: [
+                snapshot.instances.length > 1 && currentInstance && /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("small", { children: [
                   "\u7528\u4F8B ",
                   snapshot.instances.indexOf(currentInstance) + 1,
                   " /",
@@ -769,8 +907,8 @@ function ProgressCard({
                 ] })
               ] })
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: "dsh-test-focus-content", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "dsh-test-focus-content", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
                 "p",
                 {
                   ref: description,
@@ -781,7 +919,7 @@ function ProgressCard({
                   children: focus.description
                 }
               ),
-              (clipped || textExpanded) && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(
+              (clipped || textExpanded) && /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
                 "button",
                 {
                   type: "button",
@@ -792,13 +930,13 @@ function ProgressCard({
                   children: textExpanded ? "\u6536\u8D77\u6587\u5B57" : "\u5C55\u5F00\u5B8C\u6574\u6587\u5B57"
                 }
               ),
-              /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: "dsh-test-focus-meta", children: [
-                focus.step && /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("span", { children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(import_dsh_client_ui_primitives.IconClockOutlineRegular, { size: 14 }),
+              /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "dsh-test-focus-meta", children: [
+                focus.step && /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("span", { children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_dsh_client_ui_primitives.IconClockOutlineRegular, { size: 14 }),
                   statusLabels[focus.step.status] ?? focus.step.status,
                   focus.step.started_at ? ` \xB7 \u672C\u6B65 ${duration(elapsed2(focus.step, now))}` : ""
                 ] }),
-                focus.next && /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)(
+                focus.next && /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
                   "span",
                   {
                     className: "dsh-test-focus-next",
@@ -812,8 +950,8 @@ function ProgressCard({
               ] })
             ] })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: "dsh-test-card-actions", children: [
-            rows.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)(
+          /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "dsh-test-card-actions", children: [
+            rows.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
               "button",
               {
                 type: "button",
@@ -821,29 +959,37 @@ function ProgressCard({
                 "aria-controls": listId,
                 onClick: () => setExpanded(!expanded),
                 children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(import_dsh_client_ui_primitives.IconFlatListOutlineRegular, { size: 17 }),
+                  /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_dsh_client_ui_primitives.IconFlatListOutlineRegular, { size: 17 }),
                   expanded ? "\u6536\u8D77\u5B8C\u6574\u6B65\u9AA4" : `\u67E5\u770B\u5168\u90E8\u6B65\u9AA4\uFF08${rows.length}\uFF09`
                 ]
               }
             ),
-            snapshot.preview.ready && !failed && snapshot.phase !== "finished" && /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)(
+            snapshot.preview.ready && !failed && snapshot.phase !== "finished" && /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
               "button",
               {
                 type: "button",
+                "aria-pressed": previewVisible,
                 onClick: () => actions.openPreview(snapshot),
                 children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(import_dsh_client_ui_primitives.IconBrowseOutlineRegular, { size: 17 }),
-                  "\u5B9E\u65F6\u753B\u9762"
+                  /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_dsh_client_ui_primitives.IconBrowseOutlineRegular, { size: 17 }),
+                  previewVisible ? "\u9690\u85CF\u5B9E\u65F6\u753B\u9762" : "\u663E\u793A\u5B9E\u65F6\u753B\u9762"
                 ]
               }
             ),
-            snapshot.report_url && /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("a", { href: snapshot.report_url, target: "_blank", rel: "noreferrer", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(import_dsh_client_ui_primitives.IconFlatListOutlineRegular, { size: 17 }),
+            snapshot.report_url && /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("a", { href: snapshot.report_url, target: "_blank", rel: "noreferrer", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_dsh_client_ui_primitives.IconFlatListOutlineRegular, { size: 17 }),
               "\u6D4B\u8BD5\u62A5\u544A"
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("small", { children: "\u65F6\u95F4\u5305\u542B\u7B49\u5F85" })
+            snapshot.phase === "finished" && /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+              RebuildReport,
+              {
+                rebuildReport: actions.rebuildReport,
+                runId: snapshot.run_id
+              }
+            ),
+            /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("small", { children: "\u65F6\u95F4\u5305\u542B\u7B49\u5F85" })
           ] }),
-          snapshot.preview.failed && !failed && snapshot.phase !== "finished" && /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)(
+          snapshot.preview.failed && !failed && snapshot.phase !== "finished" && /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
             "p",
             {
               className: "dsh-test-preview-note",
@@ -852,11 +998,11 @@ function ProgressCard({
               children: [
                 "\u5B9E\u65F6\u753B\u9762\u672A\u542F\u7528\uFF1A",
                 snapshot.preview.reason,
-                /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("span", { children: "\u8BF7\u8FDB\u5165\u201C\u8BBE\u7F6E \u2192 \u6D4B\u8BD5\u63D2\u4EF6 \u2192 \u6D4F\u89C8\u5668\u5B9E\u65F6\u9884\u89C8\u201D\u68C0\u6D4B\u5B89\u88C5\u6216\u8C03\u6574\u914D\u7F6E\uFF1B\u4E1A\u52A1\u6D4B\u8BD5\u7EE7\u7EED\u6267\u884C\u3002" })
+                /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { children: "\u8BF7\u8FDB\u5165\u201C\u8BBE\u7F6E \u2192 \u6D4B\u8BD5\u63D2\u4EF6 \u2192 \u6D4F\u89C8\u5668\u5B9E\u65F6\u9884\u89C8\u201D\u68C0\u6D4B\u5B89\u88C5\u6216\u8C03\u6574\u914D\u7F6E\uFF1B\u4E1A\u52A1\u6D4B\u8BD5\u7EE7\u7EED\u6267\u884C\u3002" })
               ]
             }
           ),
-          expanded && /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)(
+          expanded && /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
             "div",
             {
               className: "dsh-test-step-list",
@@ -866,17 +1012,17 @@ function ProgressCard({
               "aria-label": "\u5B8C\u6574\u4E1A\u52A1\u6B65\u9AA4",
               tabIndex: 0,
               children: [
-                /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("ol", { children: rows.map((row) => {
+                /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("ol", { children: rows.map((row) => {
                   const selected = inspection === row.key;
                   const StepIcon = tone(row.step.status) === "error" ? import_dsh_client_ui_primitives.IconWarningOutlineRegular : ["PASS", "SUCCEEDED"].includes(row.step.status) ? import_dsh_client_ui_primitives.IconCheckCircleOutlineRegular : row.step.status === "RUNNING" ? import_dsh_client_ui_primitives.IconLoadingOutlineRegular : void 0;
-                  return /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)(
+                  return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
                     "li",
                     {
                       "data-test-step": row.step.id,
                       "data-step-status": row.step.status,
                       "data-tone": tone(row.step.status),
                       children: [
-                        /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)(
+                        /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
                           "button",
                           {
                             type: "button",
@@ -885,8 +1031,8 @@ function ProgressCard({
                             "aria-expanded": selected,
                             onClick: () => setInspection(selected ? void 0 : row.key),
                             children: [
-                              /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("span", { className: "dsh-test-step-position", children: [
-                                StepIcon && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(
+                              /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("span", { className: "dsh-test-step-position", children: [
+                                StepIcon && /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
                                   StepIcon,
                                   {
                                     size: 16,
@@ -895,38 +1041,38 @@ function ProgressCard({
                                 ),
                                 row.number
                               ] }),
-                              /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("span", { className: "dsh-test-step-copy", children: [
-                                snapshot.instances.length > 1 && /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("small", { children: [
+                              /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("span", { className: "dsh-test-step-copy", children: [
+                                snapshot.instances.length > 1 && /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("small", { children: [
                                   row.instance.name,
                                   " \xB7 ",
                                   row.instance.data_id
                                 ] }),
-                                /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("span", { children: row.step.description })
+                                /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { children: row.step.description })
                               ] }),
-                              /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("span", { className: "dsh-test-step-result", children: [
+                              /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("span", { className: "dsh-test-step-result", children: [
                                 statusLabels[row.step.status] ?? row.step.status,
-                                row.step.started_at && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("small", { children: duration(elapsed2(row.step, now)) })
+                                row.step.started_at && /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("small", { children: duration(elapsed2(row.step, now)) })
                               ] })
                             ]
                           }
                         ),
-                        selected && /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: "dsh-test-step-inspection", children: [
-                          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { children: row.step.description }),
-                          row.step.reason && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { children: row.step.reason }),
-                          row.step.checks.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("ul", { children: row.step.checks.map((check, index) => /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("li", { children: [
+                        selected && /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "dsh-test-step-inspection", children: [
+                          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { children: row.step.description }),
+                          row.step.reason && /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { children: row.step.reason }),
+                          row.step.checks.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("ul", { children: row.step.checks.map((check, index) => /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("li", { children: [
                             check.text,
                             " \xB7",
                             " ",
                             statusLabels[check.status] ?? check.status,
                             check.reason && ` \xB7 ${check.reason}`
-                          ] }, index)) }) : /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { children: "\u672C\u6B65\u9AA4\u6CA1\u6709\u9644\u52A0\u68C0\u67E5\u70B9\u3002" })
+                          ] }, index)) }) : /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { children: "\u672C\u6B65\u9AA4\u6CA1\u6709\u9644\u52A0\u68C0\u67E5\u70B9\u3002" })
                         ] })
                       ]
                     },
                     row.key
                   );
                 }) }),
-                /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(
+                /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
                   "button",
                   {
                     className: "dsh-test-more-details",
@@ -946,13 +1092,13 @@ function ProgressCard({
 
 // src/client/components.tsx
 var import_dsh_client_ui_primitives2 = require("@deepseek-ai/dsh-client-ui-primitives");
-var import_jsx_runtime4 = require("react/jsx-runtime");
+var import_jsx_runtime5 = require("react/jsx-runtime");
 function useProgress(actions, visible = true) {
-  const [snapshot, setSnapshot] = (0, import_react4.useState)();
-  const [failed, setFailed] = (0, import_react4.useState)(false);
-  const [tick, setTick] = (0, import_react4.useState)(0);
-  const received = (0, import_react4.useRef)(0);
-  (0, import_react4.useEffect)(() => {
+  const [snapshot, setSnapshot] = (0, import_react5.useState)();
+  const [failed, setFailed] = (0, import_react5.useState)(false);
+  const [tick, setTick] = (0, import_react5.useState)(0);
+  const received = (0, import_react5.useRef)(0);
+  (0, import_react5.useEffect)(() => {
     if (!visible) return;
     let stopped = false;
     let timer;
@@ -990,7 +1136,7 @@ function useProgress(actions, visible = true) {
       document.removeEventListener("visibilitychange", visibility);
     };
   }, [actions.read, visible]);
-  (0, import_react4.useEffect)(() => {
+  (0, import_react5.useEffect)(() => {
     if (!visible || !snapshot || snapshot.finished_at || failed) return;
     const timer = setInterval(() => setTick((value) => value + 1), 1e3);
     return () => clearInterval(timer);
@@ -1004,7 +1150,7 @@ function StepFlow({
   now,
   details = false
 }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("ol", { className: "dsh-test-flow", "aria-label": "\u6D4B\u8BD5\u4E1A\u52A1\u6B65\u9AA4", children: steps.map((step, index) => /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("ol", { className: "dsh-test-flow", "aria-label": "\u6D4B\u8BD5\u4E1A\u52A1\u6B65\u9AA4", children: steps.map((step, index) => /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)(
     "li",
     {
       className: `dsh-test-${tone(step.status)}`,
@@ -1012,20 +1158,20 @@ function StepFlow({
       "data-step-status": step.status,
       "aria-current": step.status === "RUNNING" ? "step" : void 0,
       children: [
-        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "dsh-test-node", "aria-hidden": "true", children: ["PASS", "SUCCEEDED"].includes(step.status) ? /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_dsh_client_ui_primitives2.IconCheckOutlineRegular, { size: 16 }) : ["FAIL", "ERROR", "BLOCKED", "INCONCLUSIVE"].includes(
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "dsh-test-node", "aria-hidden": "true", children: ["PASS", "SUCCEEDED"].includes(step.status) ? /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(import_dsh_client_ui_primitives2.IconCheckOutlineRegular, { size: 16 }) : ["FAIL", "ERROR", "BLOCKED", "INCONCLUSIVE"].includes(
           step.status
-        ) ? /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_dsh_client_ui_primitives2.IconWarningOutlineRegular, { size: 16 }) : index + 1 }),
-        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "dsh-test-step-name", children: step.description }),
-        /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("span", { className: "dsh-test-step-time", children: [
+        ) ? /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(import_dsh_client_ui_primitives2.IconWarningOutlineRegular, { size: 16 }) : index + 1 }),
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "dsh-test-step-name", children: step.description }),
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("span", { className: "dsh-test-step-time", children: [
           statusLabels[step.status] ?? step.status,
           step.started_at ? ` \xB7 ${duration(elapsed2(step, now))}` : ""
         ] }),
-        details && step.checks.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("ul", { className: "dsh-test-checks", children: step.checks.map((check, i) => /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("li", { children: [
+        details && step.checks.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("ul", { className: "dsh-test-checks", children: step.checks.map((check, i) => /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("li", { children: [
           check.text,
           " \xB7 ",
           statusLabels[check.status] ?? check.status
         ] }, i)) }),
-        details && step.reason && /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("div", { className: "dsh-test-reason", children: step.reason })
+        details && step.reason && /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("div", { className: "dsh-test-reason", children: step.reason })
       ]
     },
     step.id
@@ -1040,43 +1186,43 @@ function Heading({
     0,
     Date.parse(state.finished_at ?? new Date(now).toISOString()) - Date.parse(state.created_at)
   );
-  return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "dsh-test-heading", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("strong", { className: "dsh-test-phase", children: failed ? "\u8FDE\u63A5\u6682\u4E0D\u53EF\u7528" : phaseLabels[state.phase] }),
-    /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("span", { children: [
+  return /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "dsh-test-heading", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("strong", { className: "dsh-test-phase", children: failed ? "\u8FDE\u63A5\u6682\u4E0D\u53EF\u7528" : phaseLabels[state.phase] }),
+    /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("span", { children: [
       state.settled_steps,
       " / ",
       state.total_steps,
       " \u6B65\u5DF2\u7ED3\u7B97"
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("span", { className: "dsh-test-time", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("span", { className: "dsh-test-time", children: [
       "\u5DF2\u7528 ",
       duration(total)
     ] })
   ] });
 }
 function ProgressDock(props) {
-  const notice = (0, import_react4.useSyncExternalStore)(
+  const notice = (0, import_react5.useSyncExternalStore)(
     props.notice.subscribe,
     props.notice.getSnapshot
   );
   const { snapshot, failed, now } = useProgress(props);
-  (0, import_react4.useEffect)(() => {
+  (0, import_react5.useEffect)(() => {
     if (snapshot && !failed) props.followPreview(snapshot);
   }, [snapshot, failed, props.followPreview]);
-  return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(import_jsx_runtime4.Fragment, { children: [
-    notice && /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)(import_jsx_runtime5.Fragment, { children: [
+    notice && /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)(
       "section",
       {
         className: "dsh-test-command-notice",
         "data-test-command-notice": true,
         "aria-label": "\u6D4B\u8BD5\u547D\u4EE4\u63D0\u793A",
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { role: "alert", children: notice }),
-          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("div", { className: "dsh-test-actions", children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("button", { type: "button", onClick: props.notice.dismiss, children: "\u5173\u95ED\u63D0\u793A" }) })
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { role: "alert", children: notice }),
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("div", { className: "dsh-test-actions", children: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("button", { type: "button", onClick: props.notice.dismiss, children: "\u5173\u95ED\u63D0\u793A" }) })
         ]
       }
     ),
-    snapshot && /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+    snapshot && /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
       ProgressCard,
       {
         snapshot,
@@ -1089,11 +1235,11 @@ function ProgressDock(props) {
 }
 function ProgressHeader(props) {
   const { snapshot, failed } = useProgress(props);
-  (0, import_react4.useEffect)(() => {
+  (0, import_react5.useEffect)(() => {
     if (snapshot && !failed) props.followPreview(snapshot);
   }, [snapshot, failed, props.followPreview]);
   if (!snapshot) return null;
-  return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)(
     "button",
     {
       type: "button",
@@ -1105,7 +1251,7 @@ function ProgressHeader(props) {
       children: [
         "\u6D4B\u8BD5\u8FDB\u5EA6",
         " ",
-        /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("span", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("span", { children: [
           snapshot.settled_steps,
           "/",
           snapshot.total_steps
@@ -1117,22 +1263,26 @@ function ProgressHeader(props) {
 function ProgressDetails(props) {
   const info = props.useTabInfo();
   const { snapshot, failed, now } = useProgress(props, info.tab.visible);
-  const [selected, setSelected] = (0, import_react4.useState)();
-  (0, import_react4.useEffect)(() => setSelected(void 0), [snapshot?.run_id]);
+  const [selected, setSelected] = (0, import_react5.useState)();
+  const previewVisible = (0, import_react5.useSyncExternalStore)(
+    props.previewVisible.subscribe,
+    props.previewVisible.getSnapshot
+  );
+  (0, import_react5.useEffect)(() => setSelected(void 0), [snapshot?.run_id]);
   if (!snapshot)
-    return /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { className: "dsh-test-preview-message", children: "\u5F53\u524D\u4F1A\u8BDD\u8FD8\u6CA1\u6709\u6D4B\u8BD5\u8BA1\u5212" });
+    return /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { className: "dsh-test-preview-message", children: "\u5F53\u524D\u4F1A\u8BDD\u8FD8\u6CA1\u6709\u6D4B\u8BD5\u8BA1\u5212" });
   const instance = snapshot.instances.find((entry) => entry.id === selected) ?? selectedInstance(snapshot);
-  return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("section", { className: "dsh-test-details", "aria-label": "\u6D4B\u8BD5\u6B65\u9AA4\u8BE6\u60C5", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("h2", { children: snapshot.title }),
-    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Heading, { state: snapshot, now, failed }),
-    snapshot.rationale && /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { className: "dsh-test-muted", children: snapshot.rationale }),
-    snapshot.instances.length > 1 && /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+  return /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("section", { className: "dsh-test-details", "aria-label": "\u6D4B\u8BD5\u6B65\u9AA4\u8BE6\u60C5", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("h2", { children: snapshot.title }),
+    /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(Heading, { state: snapshot, now, failed }),
+    snapshot.rationale && /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { className: "dsh-test-muted", children: snapshot.rationale }),
+    snapshot.instances.length > 1 && /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
       "select",
       {
         "aria-label": "\u67E5\u770B\u6D4B\u8BD5\u5B9E\u4F8B",
         value: instance?.id ?? "",
         onChange: (event) => setSelected(event.target.value),
-        children: snapshot.instances.map((entry, i) => /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("option", { value: entry.id, children: [
+        children: snapshot.instances.map((entry, i) => /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("option", { value: entry.id, children: [
           i + 1,
           ". ",
           entry.name,
@@ -1144,12 +1294,12 @@ function ProgressDetails(props) {
         ] }, entry.id))
       }
     ),
-    instance && /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(import_jsx_runtime4.Fragment, { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(StepFlow, { steps: instance.steps, now, details: true }),
+    instance && /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)(import_jsx_runtime5.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(StepFlow, { steps: instance.steps, now, details: true }),
       ["setup", "cleanup"].map(
-        (phase) => instance[phase].length > 0 && /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("details", { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("summary", { children: phase === "setup" ? "\u73AF\u5883\u51C6\u5907" : "\u8D44\u6E90\u6E05\u7406" }),
-          instance[phase].map((step) => /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("p", { children: [
+        (phase) => instance[phase].length > 0 && /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("details", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("summary", { children: phase === "setup" ? "\u73AF\u5883\u51C6\u5907" : "\u8D44\u6E90\u6E05\u7406" }),
+          instance[phase].map((step) => /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("p", { children: [
             step.description,
             " \xB7",
             " ",
@@ -1161,34 +1311,49 @@ function ProgressDetails(props) {
         ] }, phase)
       )
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "dsh-test-actions", children: [
-      snapshot.preview.ready && /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("button", { type: "button", onClick: () => props.openPreview(snapshot), children: "\u67E5\u770B\u5B9E\u65F6\u753B\u9762" }),
-      snapshot.report_url && /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("a", { href: snapshot.report_url, target: "_blank", rel: "noreferrer", children: "\u67E5\u770B\u6D4B\u8BD5\u62A5\u544A" }),
-      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("small", { children: "\u65F6\u95F4\u5305\u542B\u7B49\u5F85" })
+    /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "dsh-test-actions", children: [
+      snapshot.preview.ready && !failed && snapshot.phase !== "finished" && /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+        "button",
+        {
+          type: "button",
+          "aria-pressed": previewVisible,
+          onClick: () => props.openPreview(snapshot),
+          children: previewVisible ? "\u9690\u85CF\u5B9E\u65F6\u753B\u9762" : "\u663E\u793A\u5B9E\u65F6\u753B\u9762"
+        }
+      ),
+      snapshot.report_url && /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("a", { href: snapshot.report_url, target: "_blank", rel: "noreferrer", children: "\u67E5\u770B\u6D4B\u8BD5\u62A5\u544A" }),
+      snapshot.phase === "finished" && /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+        RebuildReport,
+        {
+          rebuildReport: props.rebuildReport,
+          runId: snapshot.run_id
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("small", { children: "\u65F6\u95F4\u5305\u542B\u7B49\u5F85" })
     ] })
   ] });
 }
 function PreviewPanel(props) {
   const info = props.useTabInfo();
   const { snapshot, failed } = useProgress(props, info.tab.visible);
-  (0, import_react4.useEffect)(() => {
+  (0, import_react5.useEffect)(() => {
     if (snapshot?.phase === "finished" || snapshot === null)
       info.tab.actions.close();
   }, [snapshot?.phase, snapshot === null, info.tab.actions]);
-  return /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+  return /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
     "section",
     {
       className: "dsh-test-preview",
       "data-test-browser-preview": true,
       "aria-label": "\u6D4F\u89C8\u5668\u5B9E\u65F6\u753B\u9762",
-      children: snapshot?.preview.ready && snapshot.preview.src && !failed ? /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+      children: snapshot?.preview.ready && snapshot.preview.src && !failed ? /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
         "iframe",
         {
           title: "\u6D4F\u89C8\u5668\u5B9E\u65F6\u753B\u9762",
           src: snapshot.preview.src,
           sandbox: "allow-scripts allow-same-origin"
         }
-      ) : /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { className: "dsh-test-preview-message", children: failed ? "\u753B\u9762\u8FDE\u63A5\u6682\u4E0D\u53EF\u7528" : snapshot?.preview.reason ?? "\u6B63\u5728\u8FDE\u63A5\u5F53\u524D\u6D4F\u89C8\u5668\u753B\u9762" })
+      ) : /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { className: "dsh-test-preview-message", children: failed ? "\u753B\u9762\u8FDE\u63A5\u6682\u4E0D\u53EF\u7528" : snapshot?.preview.reason ?? "\u6B63\u5728\u8FDE\u63A5\u5F53\u524D\u6D4F\u89C8\u5668\u753B\u9762" })
     }
   );
 }
@@ -1210,6 +1375,7 @@ var progressStyle = `
 .dsh-test-details{color:var(--dsw-alias-label-primary,#253041);font:inherit;font-size:12px;line-height:1.5}
 .dsh-test-header{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;font:11px system-ui,sans-serif;padding:4px 6px;border:0;border-radius:4px;background:transparent;color:var(--dsw-alias-label-secondary,#64748b);cursor:pointer}.dsh-test-header:hover{background:var(--dsw-alias-interactive-bg-hover,#edf2f8)}.dsh-test-header span{color:var(--dsw-alias-link,#3873cf);font-variant-numeric:tabular-nums}
 
+.dsh-test-report-control{display:inline-flex;flex-wrap:wrap;align-items:center;gap:8px 12px;min-width:0;font-size:13px}.dsh-test-report-control [role=alert]{overflow-wrap:anywhere;color:var(--dsw-alias-state-error-primary,#be3b45)}.dsh-test-report-control button:disabled{opacity:.5;cursor:default}.dsh-test-settings>section{margin:24px 0}.dsh-test-actions{flex-wrap:wrap}
 .dsh-test-heading{display:flex;align-items:center;gap:8px;min-width:0}.dsh-test-heading strong{font-size:12px;font-weight:600}.dsh-test-heading .dsh-test-time{margin-left:auto;white-space:nowrap;color:var(--dsw-alias-label-secondary,#64748b);font-variant-numeric:tabular-nums}
 .dsh-test-phase{color:var(--dsw-alias-link,#3873cf)}.dsh-test-actions{display:flex;gap:8px;align-items:center;margin-top:7px}.dsh-test-actions button{font:inherit;color:var(--dsw-alias-link,#3873cf);background:transparent;border:0;padding:3px 0;cursor:pointer}.dsh-test-actions button:hover{text-decoration:underline}.dsh-test-actions small{color:var(--dsw-alias-label-tertiary,#94a3b8);margin-left:auto}.dsh-test-actions a{color:var(--dsw-alias-link,#3873cf)}
 .dsh-test-flow{display:flex;gap:12px;list-style:none;padding:0;margin:0;overflow-x:auto}.dsh-test-flow>li{flex:1;min-width:100px;position:relative;padding-top:4px}.dsh-test-flow>li:not(:last-child)::after{content:'';position:absolute;height:1px;background:var(--dsw-alias-border-l1,#dde3ec);top:14px;left:28px;right:-8px}.dsh-test-node{position:relative;z-index:1;width:20px;height:20px;display:grid;place-items:center;border-radius:50%;color:var(--dsw-alias-label-secondary,#64748b);background:var(--dsw-specific-menu,#f2f5fa);border:1px solid var(--dsw-alias-border-l1,#dde3ec);font-size:10px;transition:background .2s,color .2s,border-color .2s}.dsh-test-step-name{display:block;margin-top:5px;max-width:180px;line-height:1.45}.dsh-test-step-time{display:block;color:var(--dsw-alias-label-tertiary,#94a3b8);font-size:11px;font-variant-numeric:tabular-nums;margin-top:2px}.dsh-test-running .dsh-test-node{background:var(--dsw-alias-link,#3873cf);border-color:transparent;color:white;animation:dsh-test-pulse 1.8s ease-in-out infinite}.dsh-test-pass .dsh-test-node{color:var(--dsw-alias-link,#3873cf);border-color:var(--dsw-alias-link,#3873cf)}.dsh-test-error .dsh-test-node{color:var(--dsw-alias-state-error-primary,#be3b45);border-color:currentColor}.dsh-test-muted{color:var(--dsw-alias-label-tertiary,#94a3b8)}
@@ -1226,24 +1392,29 @@ var inject = [
   "sidebarRightTabs",
   "sidebarRight",
   "remote",
-  "remote.commands"
+  "uiSession"
 ];
 var progressKind = "harness-test-progress";
 var previewKind = "harness-test-preview";
 var progressId = "dsh-test-plugin:progress";
 var previewId = "dsh-test-plugin:preview";
-var testCommands = /* @__PURE__ */ new Set([
-  "test",
-  "test-plan",
-  "test-run",
-  "test-data",
-  "test-status",
-  "test-stop",
-  "test-report",
-  "test-recover",
-  "test-release"
-]);
+var testCommands = /* @__PURE__ */ new Set(["test", "test-plan", "test-run", "test-data"]);
 function apply(ctx) {
+  const currentSession = () => ctx.uiSession.adapter.current.getSnapshot().key;
+  const post = async (action, body) => {
+    const response = await fetch(`/test-ui/${action}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    const result = await response.json();
+    if (!response.ok || !result.ok)
+      throw new Error(result.message ?? "\u64CD\u4F5C\u5931\u8D25\uFF0C\u8BF7\u68C0\u67E5\u8FDE\u63A5\u540E\u91CD\u8BD5\u3002");
+    return result.value;
+  };
+  const clearNotices = () => {
+    for (const record of faces.values()) record.setNotice("");
+  };
   const recovery = {
     readRecovery: async (signal) => {
       const response = await fetch("/test-recovery", {
@@ -1254,21 +1425,25 @@ function apply(ctx) {
       return await response.json();
     },
     recover: async (token) => {
-      const sessionId = ctx.sidebarRight.mounted.getSnapshot();
+      const sessionId = currentSession();
       if (!sessionId)
         throw new Error(
           "\u8BF7\u5148\u5173\u95ED\u8BBE\u7F6E\u5E76\u6253\u5F00\u4E00\u4E2A\u5BF9\u8BDD\uFF0C\u518D\u8FDB\u5165\u6D4B\u8BD5\u63D2\u4EF6\u8BBE\u7F6E\u91CA\u653E\u73AF\u5883\u3002"
         );
-      const result = await ctx.remote.commands.execute(
-        sessionId,
-        `/test-recover --confirm ${token}`,
-        []
-      );
-      if (!result.ok) throw new Error(result.error.message);
-      if (!result.value || result.value.result.kind === "error")
-        throw new Error(result.value?.result.text ?? "\u91CA\u653E\u547D\u4EE4\u672A\u88AB\u8BC6\u522B");
-      for (const record of faces.values()) record.setNotice("");
-      return result.value.result.text ?? "\u6D4B\u8BD5\u73AF\u5883\u5DF2\u91CA\u653E\uFF0C\u8BF7\u91CD\u65B0\u53D1\u9001\u6D4B\u8BD5\u547D\u4EE4\u3002";
+      const message = await post("recover", {
+        session_id: sessionId,
+        token
+      });
+      clearNotices();
+      return message;
+    },
+    releaseEvidence: async (file, token) => {
+      const message = await post("release", {
+        evidence_file: file,
+        token
+      });
+      clearNotices();
+      return message;
     }
   };
   ctx.inject(["configForms"], (settings) => {
@@ -1280,7 +1455,14 @@ function apply(ctx) {
           id: "harness-test",
           order: 35,
           label: () => "\u6D4B\u8BD5\u63D2\u4EF6",
-          inject: () => ({ forms: settings.configForms, ...recovery })
+          inject: () => ({
+            forms: settings.configForms,
+            ...recovery,
+            rebuildReport: (runId) => post("report", {
+              session_id: currentSession(),
+              run_id: runId
+            })
+          })
         },
         PreviewSettingsPage
       )
@@ -1315,17 +1497,33 @@ function apply(ctx) {
     let tabId;
     let previewRun;
     const foreground = () => ctx.sidebarRight.mounted.getSnapshot() === sessionId;
-    const openPreview = (state) => {
-      if (!foreground() || !state.preview.ready || state.phase === "finished")
+    const previewTabs = () => ctx.sidebarRight.openTabs.getSnapshot().filter(
+      (tab) => tab.sessionId === sessionId && tab.kind === previewKind
+    );
+    const closePreview = () => {
+      for (const tab of previewTabs()) ctx.sidebarRight.close(tab.tabId);
+      tabId = void 0;
+      previewRun = void 0;
+    };
+    const showPreview = (state) => {
+      if (!foreground() || !state.preview.ready || state.preview.failed || state.phase === "finished")
         return;
       const expanded = ctx.sidebarRight.isExpanded();
-      ctx.sidebarRight.openTab(previewKind);
-      const tab = ctx.sidebarRight.active();
-      if (tab?.kind !== previewKind) return;
-      tabId = tab.id;
+      const existing2 = previewTabs();
+      if (existing2.length) {
+        tabId = existing2[0].tabId;
+        for (const duplicate of existing2.slice(1))
+          ctx.sidebarRight.close(duplicate.tabId);
+        ctx.sidebarRight.focus(tabId);
+      } else {
+        ctx.sidebarRight.openTab(previewKind);
+        const tab = ctx.sidebarRight.active();
+        if (tab?.kind !== previewKind) return;
+        tabId = tab.id;
+      }
       previewRun = state.run_id;
       opened.add(state.run_id);
-      ctx.sidebarRight.float(tab.id);
+      ctx.sidebarRight.float(tabId);
       if (!expanded && ctx.sidebarRight.isExpanded())
         ctx.sidebarRight.toggleExpanded();
     };
@@ -1355,16 +1553,28 @@ function apply(ctx) {
         if (foreground())
           ctx.sidebarRight.openTab(progressKind, { preferNewPane: true });
       },
-      openPreview,
+      rebuildReport: (runId) => post("report", {
+        session_id: sessionId,
+        run_id: runId
+      }),
+      previewVisible: {
+        getSnapshot: () => previewTabs().length > 0,
+        subscribe: (listener) => ctx.sidebarRight.openTabs.subscribe(listener)
+      },
+      openPreview: (state) => {
+        if (!foreground() || !state.preview.ready || state.preview.failed || state.phase === "finished")
+          return;
+        opened.add(state.run_id);
+        if (previewTabs().length) closePreview();
+        else showPreview(state);
+      },
       followPreview: (state) => {
         if (!foreground()) return;
-        if (tabId && (state.run_id !== previewRun || state.phase === "finished" || state.preview.failed)) {
-          ctx.sidebarRight.close(tabId);
-          tabId = void 0;
-          previewRun = void 0;
+        if (previewRun && state.run_id !== previewRun || state.phase === "finished" || state.preview.failed) {
+          closePreview();
         }
-        if (state.preview.ready && state.phase !== "finished" && !opened.has(state.run_id))
-          openPreview(state);
+        if (state.preview.ready && !state.preview.failed && state.phase !== "finished" && !opened.has(state.run_id))
+          showPreview(state);
       }
     };
     faces.set(sessionId, { actions, setNotice });

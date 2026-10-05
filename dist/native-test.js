@@ -118,7 +118,7 @@ export class NativeTests {
             throw new Error("请等待当前对话轮次结束后再启动测试");
         const quarantine = this.recovery.status().quarantine;
         if (quarantine)
-            throw new Error(`测试环境尚未释放，已隔离：${quarantine.reason}。${quarantine.overdue ? "隔离时间已超过清理超时，可能异常卡住。" : ""}请进入“设置 → 测试插件 → 测试环境”，确认旧操作已停止后处理并释放，再重新执行测试命令；也可使用 /test-release 提交实际处置证据。`);
+            throw new Error(`测试环境尚未释放，已隔离：${quarantine.reason}。${quarantine.overdue ? "隔离时间已超过清理超时，可能异常卡住。" : ""}请进入“设置 → 测试插件 → 测试环境”，确认旧操作已停止后处理并释放，再重新执行测试命令；无法自动处理时，在同一设置页提交实际处置证据。`);
         if (this.starting ||
             this.recovery.busy ||
             [...this.sessions.values()].some((s) => !s.closed))

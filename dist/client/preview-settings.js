@@ -3,7 +3,8 @@ import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { previewPreferenceDefaults, browscreenVersionRange, } from "../preview-preferences.js";
 import { RecoveryPanel } from "./recovery-panel.js";
-export function PreviewSettingsPage({ forms, ...recovery }) {
+import { ReportSettings } from "./report-controls.js";
+export function PreviewSettingsPage({ forms, rebuildReport, ...recovery }) {
     const [info, setInfo] = useState();
     const [error, setError] = useState("");
     useEffect(() => {
@@ -23,7 +24,7 @@ export function PreviewSettingsPage({ forms, ...recovery }) {
         });
         return () => controller.abort();
     }, []);
-    return (_jsxs("section", { className: "dsh-test-settings", "data-test-preview-settings": true, children: [_jsx("h2", { children: "\u6D4B\u8BD5\u73AF\u5883" }), _jsx("p", { children: "\u6D4B\u8BD5\u63D0\u793A\u73AF\u5883\u672A\u91CA\u653E\u65F6\uFF0C\u8BF7\u5148\u5728\u8FD9\u91CC\u5904\u7406\uFF0C\u5B8C\u6210\u540E\u91CD\u65B0\u6267\u884C\u6D4B\u8BD5\u547D\u4EE4\u3002" }), _jsx(RecoveryPanel, { ...recovery }), _jsx("h2", { children: "\u6D4F\u89C8\u5668\u5B9E\u65F6\u9884\u89C8" }), _jsx("p", { children: "\u8BA9\u4F60\u770B\u5230\u6D4B\u8BD5\u6B63\u5728\u64CD\u4F5C\u7684\u7F51\u9875\u3002\u63A5\u53E3\u6D4B\u8BD5\u6216\u6CA1\u6709\u6D4F\u89C8\u5668\u753B\u9762\u65F6\uFF0C\u4E0D\u4F1A\u6253\u5F00\u6D6E\u7A97\u3002" }), error && _jsx("p", { role: "alert", children: error }), info ? (_jsx(PreferencesForm, { info: info, form: forms.get(info.namespace) })) : (!error && _jsx("p", { children: "\u6B63\u5728\u8BFB\u53D6\u8BBE\u7F6E\u2026" }))] }));
+    return (_jsxs("section", { className: "dsh-test-settings", "data-test-preview-settings": true, children: [_jsx("h2", { children: "\u6D4B\u8BD5\u73AF\u5883" }), _jsx("p", { children: "\u6D4B\u8BD5\u63D0\u793A\u73AF\u5883\u672A\u91CA\u653E\u65F6\uFF0C\u8BF7\u5148\u5728\u8FD9\u91CC\u5904\u7406\uFF0C\u5B8C\u6210\u540E\u91CD\u65B0\u6267\u884C\u6D4B\u8BD5\u547D\u4EE4\u3002" }), _jsx(RecoveryPanel, { ...recovery }), _jsx(ReportSettings, { rebuildReport: rebuildReport }), _jsx("h2", { children: "\u6D4F\u89C8\u5668\u5B9E\u65F6\u9884\u89C8" }), _jsx("p", { children: "\u8BA9\u4F60\u770B\u5230\u6D4B\u8BD5\u6B63\u5728\u64CD\u4F5C\u7684\u7F51\u9875\u3002\u63A5\u53E3\u6D4B\u8BD5\u6216\u6CA1\u6709\u6D4F\u89C8\u5668\u753B\u9762\u65F6\uFF0C\u4E0D\u4F1A\u6253\u5F00\u6D6E\u7A97\u3002" }), error && _jsx("p", { role: "alert", children: error }), info ? (_jsx(PreferencesForm, { info: info, form: forms.get(info.namespace) })) : (!error && _jsx("p", { children: "\u6B63\u5728\u8BFB\u53D6\u8BBE\u7F6E\u2026" }))] }));
 }
 function PreferencesForm({ info, form, }) {
     const state = useSyncExternalStore(form.subscribe.bind(form), form.getSnapshot.bind(form));

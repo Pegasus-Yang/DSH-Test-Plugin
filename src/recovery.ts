@@ -84,9 +84,9 @@ export class RecoveryManager {
       : this.active()
         ? "当前测试尚未结束，请先停止测试并等待收尾。"
         : !validTime || !validId
-          ? "隔离记录或时间异常，请核实后使用 /test-release 提交处置证据。"
+          ? "隔离记录或时间异常，请核实后在设置页提交处置证据。"
           : !browser
-            ? "未能确认浏览器资源归属，请核实外部环境后使用 /test-release 提交处置证据。"
+            ? "未能确认浏览器资源归属，请核实外部环境后在设置页提交处置证据。"
             : undefined;
     return {
       quarantine: {
@@ -139,7 +139,7 @@ export class RecoveryManager {
     unlinkSync(this.path);
     this.lastError = undefined;
   }
-  release(evidenceFile: string): void {
+  release(evidenceFile: string, token?: string): void {
     this.ensureIdle();
     const proof = JSON.parse(readFileSync(evidenceFile, "utf8"));
     if (
@@ -153,7 +153,7 @@ export class RecoveryManager {
     const current = this.read();
     if (!current) throw new Error("当前没有需要解除的隔离");
     JSON.parse(current.raw);
-    this.commit(this.token(current.raw), proof);
+    this.commit(token ?? this.token(current.raw), proof);
   }
 
   async recover(
@@ -172,7 +172,7 @@ export class RecoveryManager {
     const name = "mcp__playwright__browser_close";
     if (!agent.ctx.tools.get(name, agent))
       throw new Error(
-        "当前没有可用的 Playwright 关闭工具，请恢复 MCP 连接后重试，或使用 /test-release 提交实际处置证据",
+        "当前没有可用的 Playwright 关闭工具，请恢复 MCP 连接后重试，或在设置页提交实际处置证据",
       );
     this.busy = true;
     this.lastError = undefined;
@@ -215,7 +215,7 @@ export class RecoveryManager {
       if (controller.signal.aborted)
         throw new Error("释放未在期限内确认，隔离仍保留");
       this.commit(token, {
-        operator: "DSH 页面或命令确认的操作者",
+        operator: "DSH 页面确认的操作者",
         external_stopped: true,
         environment_reset: true,
         details:

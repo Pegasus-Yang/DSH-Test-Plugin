@@ -133,18 +133,20 @@ The floating preview waits for the current page's CDP and a valid first frame. A
 
 ## Commands and reports
 
+This section describes unreleased changes in the current source. For a published version, see its tag documentation and [changelog](changelog.md).
+
 | Command | Purpose |
 | --- | --- |
 | `/test <task>` | Present the plan and run immediately |
 | `/test-plan <task>` | Review the plan before running |
 | `/test-run <file>` | Run TXT, Markdown, or JSON cases |
 | `/test-data <CSV> --file <cases>` | Expand parameters, review, and execute |
-| `/test-status` / `/test-stop` | Inspect progress or stop and settle the run |
-| `/test-report [run-id]` | Rebuild a report; omit the ID for the current conversation |
 
-Steps and elapsed time appear above the composer. The final response includes a report link and save location. Reports are static HTML, available through DSH authentication or offline with the run directory. [Progress guide (Chinese)](doc/user-guide/执行步骤与进度显示.md) · [User guide](doc/user-guide/使用说明.en.md) · [Troubleshooting (Chinese)](doc/deployment/常见问题速查与处理.md)
+Only the four commands above remain. Use the native DSH Stop button to stop a run. The preview button switches between 显示实时画面 (show) and 隐藏实时画面 (hide), with at most one preview window per conversation.
 
-If the environment is quarantined, open **Settings → 测试插件 → 测试环境**, confirm old external operations have stopped, follow recovery instructions, and resubmit the case. See the [recovery guide (Chinese)](doc/user-guide/测试环境卡住怎么办.md).
+Steps and elapsed time appear above the composer. After a run ends, click 重建报告 (Rebuild report) in the dock or details. Historical runs can be rebuilt from Settings → 测试插件 → 测试报告 using an explicit run ID; leave the field blank for the selected conversation. The final response includes a report link and save location. Reports are static HTML, available through DSH authentication or offline with the run directory. [Progress guide (Chinese)](doc/user-guide/执行步骤与进度显示.md) · [User guide](doc/user-guide/使用说明.en.md) · [Troubleshooting (Chinese)](doc/deployment/常见问题速查与处理.md)
+
+If the environment is quarantined, open **Settings → 测试插件 → 测试环境**, confirm old external operations have stopped, follow recovery instructions, and resubmit the case. If automatic browser closing is unavailable, submit your workspace evidence JSON using 高级处置：提交实际处置证据 on the same settings page. See the [recovery guide (Chinese)](doc/user-guide/测试环境卡住怎么办.md).
 
 ## Current scope
 
