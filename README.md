@@ -4,7 +4,7 @@
 
 简体中文 · [English](README.en.md)
 
-[版本 v0.9.0](https://github.com/Pegasus-Yang/DSH-Test-Plugin/tree/v0.9.0) · [更新日志](changelog.md) · [MIT 许可证](LICENSE) · [文档](doc/README.md) · [问题反馈](https://github.com/Pegasus-Yang/DSH-Test-Plugin/issues)
+[版本 v0.9.1](https://github.com/Pegasus-Yang/DSH-Test-Plugin/tree/v0.9.1) · [更新日志](changelog.md) · [MIT 许可证](LICENSE) · [文档](doc/README.md) · [问题反馈](https://github.com/Pegasus-Yang/DSH-Test-Plugin/issues)
 
 DSH Test Plugin 是 DeepSeek Harness（DSH）的原生 TypeScript 插件，支持网页和 GET JSON 接口测试。它复用当前对话的模型、工具、审批及会话记录，通过可信观察与确定性比较给出断言结果，并生成可离线查看的 HTML 报告。
 
@@ -16,7 +16,7 @@ DSH Test Plugin 是 DeepSeek Harness（DSH）的原生 TypeScript 插件，支�
 
 插件会展示文字计划，逐步执行、更新进度，最后给出测试结果和报告链接。需要先确认计划时，将 `/test` 改为 `/test-plan`。
 
-> 当前为开发版本，已验证适配 DSH `0.2.1-alpha.1`。请先按下文完成构建与安装；网页内容和模型执行可能变化，最终结果以报告中的观察、断言及清理状态为准。
+> 当前为开发版本，适配 DSH `0.2.1-alpha.1`。从下方 GitHub 地址安装即可，发行版本包含构建产物。网页内容和模型执行可能变化，最终结果以报告中的观察、断言及清理状态为准。
 
 ## 功能
 
@@ -35,23 +35,51 @@ DSH Test Plugin 是 DeepSeek Harness（DSH）的原生 TypeScript 插件，支�
 ### 1. 准备环境
 
 - Node.js **22.19+**，pnpm **11.7.0**。
-- 已构建并配置可用模型的本地 DeepSeek Harness **0.2.1-alpha.1**。
+- 已安装并配置可用模型的 DeepSeek Harness **0.2.1-alpha.1**，独立 CLI 或源码安装均可。
 - 网页测试需要专用 Playwright MCP 和 Chromium；仅做接口测试可跳过浏览器安装。
 
-宿主依赖和构建先按 DSH 自身文档完成。更换宿主或 MCP 版本后需要重新验证兼容性。
+宿主安装先按 DSH 自身文档完成。更换宿主或 MCP 版本后需要重新验证兼容性。
 
-### 2. 克隆、构建并打包
+### 2. 从 GitHub 安装并启用
+
+在 DSH 插件管理页填写下面的仓库地址，安装后启用插件：
+
+```text
+https://github.com/Pegasus-Yang/DSH-Test-Plugin.git#v0.9.1
+```
+
+也可以在 **DSH 源码目录** 使用终端安装：
+
+```sh
+pnpm dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.9.1
+pnpm dsh web
+```
+
+已有独立 CLI 时，使用 `dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.9.1` 和 `dsh web`。CLI 安装前正常停止原服务，随后启动同一 profile 并刷新网页。使用自定义 `DSH_HOME` 时，安装与启动须使用同一个目录。
+
+Git 发行版本包含 `dist`，安装不执行插件构建脚本，不需要克隆源码、`link-host` 或本机调试文件。随后按[安装与运维](doc/deployment/安装与运维.md#配置)配置 native 工具模式及专用 Playwright MCP；设置页可选启用实时预览。
+
+### 3. 卸载和源码开发
+
+停用或卸载可在插件管理页进行。终端卸载时，先正常停止宿主，再执行：
+
+```sh
+pnpm dsh plugin --profile web remove dsh-test-plugin
+```
+
+0.9.1 的预览接入只影响 MCP 运行参数；停用恢复原始浏览器配置，卸载后重启不再引用插件文件。工作区报告和用户保存的偏好保留。旧版已经写入的预览覆盖，按[故障速查](doc/deployment/常见问题速查与处理.md#f15-卸载后的预览配置残留)一次恢复。
+
+需要修改源码或生成本地安装包时再执行：
 
 ```sh
 git clone https://github.com/Pegasus-Yang/DSH-Test-Plugin.git
 cd DSH-Test-Plugin
 pnpm install
-node scripts/link-host.mjs /绝对路径/deepseek-harness
 pnpm build
 pnpm pack --out artifacts/package/dsh-test-plugin.tgz
 ```
 
-将示例路径换成你的本地 DSH 源码目录。`link-host` 只在插件目录链接宿主开发依赖，本机路径保存在被 Git 忽略的 `.local/` 中。
+开发依赖使用公开 npm 的 DSH SDK，可直接构建。调试未发布的宿主改动时，才可选运行 `node scripts/link-host.mjs /绝对路径/deepseek-harness`；本机路径保存在被 Git 忽略的 `.local/` 中。每次源码修改后重建并提交 `dist`，CI 会核对源码与发行产物一致。
 
 网页测试还需在插件根目录执行：
 
@@ -59,17 +87,13 @@ pnpm pack --out artifacts/package/dsh-test-plugin.tgz
 node scripts/install-browser.mjs
 ```
 
-### 3. 安装到 DSH
-
-在 **DSH 源码目录** 执行，替换为刚生成的安装包绝对路径：
+本地 tgz 仍支持通过公开 CLI 安装：
 
 ```sh
 pnpm dsh plugin --profile web add /绝对路径/DSH-Test-Plugin/artifacts/package/dsh-test-plugin.tgz
 ```
 
-已有独立 `dsh` CLI 时可用 `dsh` 替代 `pnpm dsh`。随后按[安装与运维](doc/deployment/安装与运维.md#配置)配置测试 `workspace`、`outputRoot`、native 工具模式及专用 Playwright MCP，正常重启同一 Web profile 并刷新页面。
-
-**保留安装包文件。** profile 使用本地 `file:` 依赖；同路径升级时按[更新流程](doc/deployment/安装与运维.md#构建与打包)先 remove 再 add。使用自定义 `DSH_HOME` 时，安装与启动须使用同一个目录。
+使用本地 tgz 时保留安装包文件；profile 使用 `file:` 依赖。同路径升级按[更新流程](doc/deployment/安装与运维.md#构建与打包)先 remove 再 add，完成安装后再启动。
 
 ### 4. 在对话中执行测试
 

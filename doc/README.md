@@ -11,6 +11,7 @@ The English guides describe the current implementation. Historical design and ac
 ## 当前版本
 
 - [版本变更记录](../changelog.md)：各版本功能、修复和文档变化，以及尚未打新标签的主分支更新。
+- [GitHub安装与卸载验收](project/GitHub安装与卸载验收.md)：0.9.1 公开 SDK 构建、独立 npm 宿主、Git 安装及真实页面执行、停用和卸载验证。
 - [Browscreen命令接入验收](project/Browscreen命令接入验收.md)：0.9.0 PyPI 包、174 项回归、真实设置、接口与浏览器浮窗验证，以及部署边界。
 - [执行步骤与进度显示](user-guide/执行步骤与进度显示.md)：0.8.3 当前步骤焦点、完整列表、折叠、长文字及多实例编号。
 - [步骤进度界面验收](project/步骤进度界面验收.md)：0.8.3 所选稿对照、100步模拟列表、长文字、窄窗口与真实安装的验证范围。

@@ -4,7 +4,7 @@
 
 [简体中文](README.md) · English
 
-[Version v0.9.0](https://github.com/Pegasus-Yang/DSH-Test-Plugin/tree/v0.9.0) · [Changelog (Chinese)](changelog.md) · [MIT License](LICENSE) · [Documentation](doc/README.md) · [Issues](https://github.com/Pegasus-Yang/DSH-Test-Plugin/issues)
+[Version v0.9.1](https://github.com/Pegasus-Yang/DSH-Test-Plugin/tree/v0.9.1) · [Changelog (Chinese)](changelog.md) · [MIT License](LICENSE) · [Documentation](doc/README.md) · [Issues](https://github.com/Pegasus-Yang/DSH-Test-Plugin/issues)
 
 DSH Test Plugin is a native TypeScript plugin for DeepSeek Harness (DSH), supporting browser tests and HTTP GET JSON checks. It uses the current conversation's model, tools, approvals, and persistence, evaluates assertions against captured observations and sourced expectations, and produces static HTML reports.
 
@@ -16,7 +16,7 @@ Describe a test in the DSH input:
 
 The plugin presents a text plan, executes each step with progress updates, and returns the result and report link. Use `/test-plan` to review the plan before execution.
 
-> This is a development release validated with DSH `0.2.1-alpha.1`. Build and install it first. Website content and model execution can change; the recorded observations, assertions, and cleanup status determine the final result.
+> This development release targets DSH `0.2.1-alpha.1`. Git releases include built artifacts and can be installed directly. Website content and model execution can change; recorded observations, assertions, and cleanup status determine the final result.
 
 ## Features
 
@@ -35,23 +35,51 @@ The plugin presents a text plan, executes each step with progress updates, and r
 ### 1. Prerequisites
 
 - Node.js **22.19+** and pnpm **11.7.0**.
-- A locally built DeepSeek Harness **0.2.1-alpha.1** with a working model configuration.
+- An installed DeepSeek Harness **0.2.1-alpha.1** with a working model configuration, using either the standalone CLI or a source installation.
 - Browser tests require a dedicated Playwright MCP and Chromium; API-only tests can skip browser installation.
 
-Build the host according to its own documentation. Revalidate compatibility after changing the host or MCP version.
+Install the host according to its own documentation. Revalidate compatibility after changing the host or MCP version.
 
-### 2. Clone, build, and package
+### 2. Install from GitHub
+
+Enter this repository URL in the DSH plugin manager, install it, and enable the plugin:
+
+```text
+https://github.com/Pegasus-Yang/DSH-Test-Plugin.git#v0.9.1
+```
+
+Alternatively, run from the DSH source checkout:
+
+```sh
+pnpm dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.9.1
+pnpm dsh web
+```
+
+For a standalone CLI use `dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.9.1` and `dsh web`. Stop an existing host before CLI installation and restart the same profile afterwards. Use the same `DSH_HOME` for installation and startup.
+
+Git releases include `dist` and execute no plugin build scripts at installation. No source clone, `link-host`, or local debugging files are required. Configure native tools and a dedicated Playwright MCP using the [deployment guide](doc/deployment/安装与运维.en.md#configure-the-installed-plugin).
+
+### 3. Uninstall or develop from source
+
+Disable or remove the plugin in the plugin manager. For CLI removal, stop the host first:
+
+```sh
+pnpm dsh plugin --profile web remove dsh-test-plugin
+```
+
+Version 0.9.1 changes only MCP runtime parameters for automatic preview. Disabling restores the original browser configuration; restarting after removal leaves no plugin-file reference. Workspace reports and saved preferences remain. Earlier persistent preview overrides need the [one-time recovery steps](doc/deployment/常见问题速查与处理.md#f15-卸载后的预览配置残留).
+
+To edit source or create a local archive:
 
 ```sh
 git clone https://github.com/Pegasus-Yang/DSH-Test-Plugin.git
 cd DSH-Test-Plugin
 pnpm install
-node scripts/link-host.mjs /absolute/path/deepseek-harness
 pnpm build
 pnpm pack --out artifacts/package/dsh-test-plugin.tgz
 ```
 
-Replace the sample host path. `link-host` links development dependencies inside the plugin checkout and stores local paths under the Git-ignored `.local/` directory.
+Development dependencies use the public npm DSH SDK. `node scripts/link-host.mjs /absolute/path/deepseek-harness` is optional for unpublished host changes. Rebuild and commit `dist` after source changes; CI checks that the artifacts match.
 
 For browser tests, also run from the plugin root:
 
@@ -59,17 +87,13 @@ For browser tests, also run from the plugin root:
 node scripts/install-browser.mjs
 ```
 
-### 3. Install in DSH
-
-Run from the **DSH source checkout**, replacing the archive path:
+Local archives can also be installed through the public CLI:
 
 ```sh
 pnpm dsh plugin --profile web add /absolute/path/DSH-Test-Plugin/artifacts/package/dsh-test-plugin.tgz
 ```
 
-Use `dsh` instead of `pnpm dsh` if you have the standalone CLI. Configure the test `workspace`, `outputRoot`, native tool mode, and dedicated Playwright MCP using the [deployment guide](doc/deployment/安装与运维.en.md#configure-the-installed-plugin), then restart the same Web profile and refresh the page.
-
-**Keep the archive.** The profile uses a local `file:` dependency. Remove the installed dependency before adding an updated archive at the same path; see [installation and updates](doc/deployment/安装与运维.en.md). If using a custom `DSH_HOME`, use the same home for installation and startup.
+Keep local archives because they remain `file:` dependency sources. For same-path updates finish removal and installation before restarting; see the [deployment guide](doc/deployment/安装与运维.en.md).
 
 ### 4. Run tests in a conversation
 
