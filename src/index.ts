@@ -286,5 +286,8 @@ export function apply(ctx: Context, config: PluginConfig = {}): void {
     },
     "工作区内的处置证据JSON路径",
   );
-  ctx.effect(() => () => tests.shutdown());
+  ctx.effect(() => async () => {
+    await tests.shutdown();
+    await setup.dispose();
+  });
 }

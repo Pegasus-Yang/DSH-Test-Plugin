@@ -1,6 +1,6 @@
 # 依赖与构建产物
 node_modules/
-dist/
+# GitHub 仓库安装直接读取已构建的 dist，发行产物随版本提交。
 coverage/
 *.tsbuildinfo
 .pnpm-store/

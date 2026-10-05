@@ -1,0 +1,38 @@
+name: 插件构建与回归
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  plugin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.3
+          cache: pnpm
+      - name: 从公开依赖安装
+        run: pnpm install --frozen-lockfile
+      - name: 检查 Git 安装入口及源码与产物一致性
+        run: |
+          pnpm verify:package
+          pnpm build
+          git diff --exit-code -- dist
+      - name: 类型与行为回归
+        run: |
+          pnpm typecheck
+          pnpm test:unit
+          pnpm test:integration
+      - name: 发行入口检查
+        run: pnpm verify:package
+      - name: 检查实际安装包
+        run: |
+          pnpm pack --out "${RUNNER_TEMP}/dsh-test-plugin.tgz"
+          mkdir "${RUNNER_TEMP}/plugin-package"
+          tar -xzf "${RUNNER_TEMP}/dsh-test-plugin.tgz" -C "${RUNNER_TEMP}/plugin-package"
+          node scripts/check-package.mjs "${RUNNER_TEMP}/plugin-package/package"

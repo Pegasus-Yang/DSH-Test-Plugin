@@ -4,6 +4,24 @@ import * as clientPlugin from "../../src/client/index.js";
 import { Context } from "@deepseek-ai/cordis";
 import type { ProgressSnapshot } from "../../src/progress-model.js";
 
+// 插槽与会话测试不渲染图标；真实图标由浏览器端宿主提供并在 Web 验收中核对。
+vi.mock("@deepseek-ai/dsh-client-ui-primitives", () =>
+  Object.fromEntries(
+    [
+      "IconBrowseOutlineRegular",
+      "IconCheckCircleOutlineRegular",
+      "IconCheckOutlineRegular",
+      "IconChevronDownOutlineRegular",
+      "IconChevronUpOutlineRegular",
+      "IconClockOutlineRegular",
+      "IconInfoOutlineRegular",
+      "IconFlatListOutlineRegular",
+      "IconLoadingOutlineRegular",
+      "IconWarningOutlineRegular",
+    ].map((name) => [name, () => null]),
+  ),
+);
+
 afterEach(() => vi.unstubAllGlobals());
 
 it("在真实 Cordis 依赖边界下可调用原生恢复命令，不能依赖普通对象替身掩盖漏注入", async () => {

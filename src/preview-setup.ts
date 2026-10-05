@@ -1,5 +1,5 @@
-/** 将设置页选择交付给现有 MCP；只在下一次测试开始前接入。 */
-import type { Context } from "@deepseek-ai/cordis";
+/** 将预览参数限于 MCP 的运行配置，不持久修改用户的浏览器条目。 */
+import { FiberState, type Context } from "@deepseek-ai/cordis";
 import type {} from "@deepseek-ai/dsh-config-editor";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
@@ -20,6 +20,7 @@ interface McpConfig {
   env?: Record<string, string>;
   cwd?: string;
 }
+type McpEntry = ReturnType<Context["configEditor"]["entries"]>[number];
 function compatible(config: McpConfig): boolean {
   const browserIndex = config.args?.indexOf("--browser") ?? -1;
   const browser =
@@ -78,6 +79,18 @@ export function prepareMcpPreview(
   ];
   if (!launchArgs.some((arg) => arg.startsWith("--remote-debugging-port=")))
     launchArgs.push("--remote-debugging-port=0");
+  mkdirSync(workDir, { recursive: true });
+  // 运行产物保留独立副本，卸载包期间正在退出的 MCP 也能完成初始化。
+  const initializerBody = readFileSync(initializer);
+  const initializerHash = createHash("sha256")
+    .update(initializerBody)
+    .digest("hex")
+    .slice(0, 12);
+  const publishedInitializer = join(
+    workDir,
+    `cdp-publisher-${initializerHash}.cjs`,
+  );
+  writeFileSync(publishedInitializer, initializerBody, { mode: 0o600 });
   const merged = {
     ...original,
     browser: {
@@ -86,7 +99,7 @@ export function prepareMcpPreview(
         ...new Set([
           ...(browser.initPage ?? []).map(path),
           ...initPages.map(path),
-          initializer,
+          publishedInitializer,
         ]),
       ],
       launchOptions: {
@@ -97,7 +110,6 @@ export function prepareMcpPreview(
   };
   const body = JSON.stringify(merged, null, 2) + "\n";
   const hash = createHash("sha256").update(body).digest("hex").slice(0, 12);
-  mkdirSync(workDir, { recursive: true });
   const generated = join(workDir, `mcp-preview-${hash}.json`);
   writeFileSync(generated, body, { mode: 0o600 });
   return {
@@ -107,6 +119,8 @@ export function prepareMcpPreview(
 }
 
 export class PreviewSetup {
+  private target?: { entry: McpEntry; workDir: string };
+  private detach?: () => boolean;
   private message =
     "保存后，在下一次测试开始时接入浏览器；有画面后才打开浮窗。";
   constructor(
@@ -117,6 +131,51 @@ export class PreviewSetup {
       new URL("./cdp-publisher.cjs", import.meta.url),
     ),
   ) {}
+
+  private attach(): void {
+    if (this.detach) return;
+    const setup = this;
+    this.detach = this.ctx.on(
+      "internal/config",
+      function (_config, next) {
+        const current = next();
+        const target = setup.target;
+        if (!target || this.entry !== target.entry || !compatible(current))
+          return current;
+        return {
+          ...current,
+          ...prepareMcpPreview(current, target.workDir, setup.initializer),
+        };
+      },
+      { global: true },
+    );
+  }
+
+  private async restore(): Promise<void> {
+    const target = this.target;
+    this.target = undefined;
+    const fiber = target?.entry.fiber;
+    if (
+      !fiber ||
+      fiber.uid === null ||
+      target.entry.disabled ||
+      this.ctx.root.fiber.uid === null ||
+      this.ctx.root.fiber.state === FiberState.UNLOADING ||
+      this.ctx.root.fiber.state === FiberState.DISPOSED ||
+      fiber.state === FiberState.UNLOADING ||
+      fiber.state === FiberState.DISPOSED ||
+      fiber.config?.env?.DSH_TEST_PREVIEW_DIR !== target.workDir
+    )
+      return;
+    await fiber.restart();
+  }
+
+  /** 停用或卸载时解除运行配置接入，仍在运行的 MCP 恢复原始配置。 */
+  async dispose(): Promise<void> {
+    this.detach?.();
+    this.detach = undefined;
+    await this.restore();
+  }
 
   describe(): PreviewSettingsInfo {
     const entries = this.ctx.get("configEditor")?.entries() ?? [];
@@ -138,8 +197,12 @@ export class PreviewSetup {
 
   async prepare(): Promise<PreviewConfig | undefined> {
     const preferences = this.preferences();
-    if (!preferences) return this.config.preview;
+    if (!preferences) {
+      await this.restore();
+      return this.config.preview;
+    }
     if (!preferences.enabled) {
+      await this.restore();
       this.message = "实时预览已关闭。";
       return;
     }
@@ -151,7 +214,7 @@ export class PreviewSetup {
     const editor = this.ctx.get("configEditor");
     if (!editor)
       throw new Error(
-        "当前宿主没有配置编辑服务，请使用 Web profile 或手动配置预览",
+        "当前宿主没有浏览器配置服务，请使用 Web profile 或手动配置预览",
       );
     const entry = editor
       .entries()
@@ -171,20 +234,18 @@ export class PreviewSetup {
     );
     const current = entry.options.config as McpConfig;
     const next = prepareMcpPreview(current, workDir, this.initializer);
+    if (this.target?.entry !== entry) await this.restore();
+    this.attach();
+    this.target = { entry, workDir };
     this.message =
       "正在接入选中的 Playwright；不会启动 Browscreen，直到当前测试产生 CDP。";
     if (
-      !isDeepStrictEqual(current.args, next.args) ||
-      !isDeepStrictEqual(current.env, next.env)
+      !isDeepStrictEqual(entry.fiber?.config?.args, next.args) ||
+      !isDeepStrictEqual(entry.fiber?.config?.env, next.env)
     ) {
-      await editor.edit(entry, (current) => {
-        if (!compatible(current as McpConfig))
-          throw new Error("所选 MCP 配置已变化，请重新选择兼容的浏览器");
-        return {
-          ...current,
-          ...prepareMcpPreview(current as McpConfig, workDir, this.initializer),
-        };
-      });
+      if (!entry.fiber || entry.fiber.uid === null)
+        throw new Error("所选 MCP 未启用，请先在插件设置中启用浏览器");
+      await entry.fiber.restart();
     }
     this.message =
       "浏览器接入已准备；当前测试有 CDP 和有效画面时自动打开浮窗。";

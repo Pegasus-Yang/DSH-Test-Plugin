@@ -44,3 +44,10 @@ await build({
   format: "cjs",
   target: "node22",
 });
+const check = spawnSync(
+  process.execPath,
+  [fileURLToPath(new URL("./check-package.mjs", import.meta.url))],
+  { stdio: "inherit" },
+);
+if (check.error) throw check.error;
+if (check.status !== 0) process.exit(check.status ?? 1);

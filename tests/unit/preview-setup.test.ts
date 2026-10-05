@@ -5,13 +5,28 @@ import {
   rmSync,
   writeFileSync,
   existsSync,
+  mkdirSync,
 } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createVolatile, updateVolatile } from "@deepseek-ai/cosmokit";
+import { FiberState } from "@deepseek-ai/cordis";
 import { Config } from "../../src/config.js";
 import { PreviewSetup, prepareMcpPreview } from "../../src/preview-setup.js";
 import type { PreviewPreferences } from "../../src/preview-preferences.js";
+
+// 发布的 Cordis 使用 const enum，Vitest 转译源文件时需补充其声明值。
+vi.mock("@deepseek-ai/cordis", async (original) => ({
+  ...(await original<typeof import("@deepseek-ai/cordis")>()),
+  FiberState: {
+    PENDING: 0,
+    LOADING: 1,
+    ACTIVE: 2,
+    FAILED: 3,
+    DISPOSED: 4,
+    UNLOADING: 5,
+  },
+}));
 
 const folders: string[] = [];
 afterEach(() =>
@@ -23,6 +38,38 @@ function folder() {
   const root = mkdtempSync(join(tmpdir(), "preview-setup-"));
   folders.push(root);
   return root;
+}
+
+function runtime(entries: any[], namespace = "custom-test") {
+  let hook: any;
+  const detach = vi.fn(() => {
+    hook = undefined;
+    return true;
+  });
+  const edit = vi.fn();
+  const ctx: any = {
+    fiber: { entry: { options: { id: namespace } } },
+    root: { fiber: { uid: 0, state: FiberState.ACTIVE } },
+    get: () => ({ entries: () => entries, edit }),
+    on: vi.fn((_event, callback, options) => {
+      expect(options).toEqual({ global: true });
+      hook = callback;
+      return detach;
+    }),
+  };
+  for (const entry of entries)
+    entry.fiber = {
+      uid: 1,
+      state: FiberState.ACTIVE,
+      config: structuredClone(entry.options.config),
+      restart: vi.fn(async () => {
+        const value = structuredClone(entry.options.config);
+        entry.fiber.config = hook
+          ? hook.call({ entry }, value, () => value)
+          : value;
+      }),
+    };
+  return { ctx, edit, detach };
 }
 
 it("设置与运行配置默认使用本机命令，非法端口在保存前拒绝", () => {
@@ -47,6 +94,8 @@ it("设置与运行配置默认使用本机命令，非法端口在保存前拒�
 
 it("接入保留原有环境、浏览器参数和初始化脚本，重复准备不会再次改变 MCP 参数", () => {
   const root = folder();
+  const initializer = join(root, "cdp-publisher.cjs");
+  writeFileSync(initializer, "module.exports = async () => {};\n");
   const source = join(root, "original.json");
   writeFileSync(
     source,
@@ -72,16 +121,12 @@ it("接入保留原有环境、浏览器参数和初始化脚本，重复准备�
     env: { KEEP: "original" },
     cwd: root,
   };
-  const next = prepareMcpPreview(
-    config,
-    join(root, "generated"),
-    "/plugin/cdp-publisher.cjs",
-  );
+  const next = prepareMcpPreview(config, join(root, "generated"), initializer);
   const generated = JSON.parse(readFileSync(next.args!.at(-1)!, "utf8"));
   expect(generated.browser.initPage).toEqual([
     join(root, "init.js"),
     join(root, "another.js"),
-    "/plugin/cdp-publisher.cjs",
+    expect.stringMatching(/cdp-publisher-[a-f0-9]{12}\.cjs$/),
   ]);
   expect(generated.browser.launchOptions.args).toEqual([
     "--lang=zh-CN",
@@ -102,12 +147,12 @@ it("接入保留原有环境、浏览器参数和初始化脚本，重复准备�
     prepareMcpPreview(
       { ...config, ...next },
       join(root, "generated"),
-      "/plugin/cdp-publisher.cjs",
+      initializer,
     ),
   ).toEqual(next);
 });
 
-it("保存偏好不重启 MCP，下一次准备才接入；端口修改复用已有 MCP，关闭后不启动采集", async () => {
+it("接入只改变 MCP 运行配置；端口修改复用连接，关闭后恢复原始参数", async () => {
   const root = folder();
   const initializer = join(root, "cdp-publisher.cjs");
   writeFileSync(initializer, "module.exports = async () => {};\n");
@@ -125,16 +170,8 @@ it("保存偏好不重启 MCP，下一次准备才接入；端口修改复用已
       },
     },
   };
-  const edit = vi.fn(async (_entry, change) => {
-    // 配置编辑器取得锁后读取的最新值必须保留，不能被准备前的快照覆盖。
-    entry.options.config.env = { KEEP_LATEST: "latest" };
-    entry.options.config.args.push("--timeout-action", "20000");
-    entry.options.config = change(entry.options.config);
-  });
-  const ctx: any = {
-    fiber: { entry: { options: { id: "custom-test" } } },
-    get: () => ({ entries: () => [entry], edit }),
-  };
+  const raw = structuredClone(entry.options.config);
+  const { ctx, edit } = runtime([entry]);
   const setup = new PreviewSetup(
     ctx,
     () => preferences.get(),
@@ -154,15 +191,18 @@ it("保存偏好不重启 MCP，下一次准备才接入；端口修改复用已
     browscreenExecutable: "/tmp/installed browscreen/browscreen",
     browscreenUrl: "http://127.0.0.1:13390",
   });
-  expect(edit).toHaveBeenCalledTimes(1);
-  expect(entry.options.config.env.KEEP_LATEST).toBe("latest");
-  expect(entry.options.config.args).toContain("--timeout-action");
+  expect(edit).not.toHaveBeenCalled();
+  expect(entry.fiber.restart).toHaveBeenCalledTimes(1);
+  expect(entry.options.config).toEqual(raw);
+  expect(entry.fiber.config.env.DSH_TEST_PREVIEW_DIR).toBe(prepared!.workDir);
   expect(existsSync(join(prepared!.workDir, "owner.json"))).toBe(false);
   set({ ...preferences.get()!, port: 13391 });
   expect((await setup.prepare())?.browscreenUrl).toBe("http://127.0.0.1:13391");
-  expect(edit).toHaveBeenCalledTimes(1);
+  expect(entry.fiber.restart).toHaveBeenCalledTimes(1);
   set({ ...preferences.get()!, enabled: false });
   expect(await setup.prepare()).toBeUndefined();
+  expect(entry.fiber.restart).toHaveBeenCalledTimes(2);
+  expect(entry.fiber.config).toEqual(raw);
   expect(setup.describe()).toMatchObject({
     namespace: "custom-test",
     message: "实时预览已关闭。",
@@ -173,11 +213,7 @@ it("不存在或不支持的 MCP 不会被修改，错误原因可展示", async
   const root = folder();
   const initializer = join(root, "cdp-publisher.cjs");
   writeFileSync(initializer, "");
-  const edit = vi.fn();
-  const ctx: any = {
-    fiber: { entry: { options: { id: "harness-test" } } },
-    get: () => ({ entries: () => [], edit }),
-  };
+  const { ctx, edit } = runtime([], "harness-test");
   const setup = new PreviewSetup(
     ctx,
     () => ({
@@ -193,6 +229,127 @@ it("不存在或不支持的 MCP 不会被修改，错误原因可展示", async
   setup.failed(new Error("没有找到所选浏览器"));
   expect(setup.describe().message).toContain("没有找到所选浏览器");
   expect(edit).not.toHaveBeenCalled();
+});
+
+it("删除插件文件后运行副本仍有效，卸载解除接入并保留最新用户配置", async () => {
+  const root = folder();
+  const initializer = join(root, "plugin", "cdp-publisher.cjs");
+  const plugin = join(root, "plugin");
+  mkdirSync(plugin);
+  writeFileSync(initializer, "module.exports = async () => {};\n");
+  const entry: any = {
+    options: {
+      id: "selected",
+      name: "@deepseek-ai/dsh-mcp-client",
+      config: {
+        serverName: "playwright",
+        transport: "stdio",
+        args: ["@playwright/mcp@0.0.80", "--headless"],
+        env: { KEEP: "user" },
+      },
+    },
+  };
+  const { ctx, edit, detach } = runtime([entry]);
+  const setup = new PreviewSetup(
+    ctx,
+    () => ({
+      enabled: true,
+      browscreenExecutable: "browscreen",
+      port: 13390,
+      mcpId: "selected",
+    }),
+    { outputRoot: root },
+    initializer,
+  );
+  await setup.prepare();
+  const generated = JSON.parse(
+    readFileSync(entry.fiber.config.args.at(-1), "utf8"),
+  );
+  const copy = generated.browser.initPage.at(-1);
+  expect(copy).not.toBe(initializer);
+  rmSync(plugin, { recursive: true });
+  expect(existsSync(copy)).toBe(true);
+  // 用户接入期间调整普通配置，退出接入时仍应使用最新的原始值。
+  entry.options.config.args.push("--timeout-action", "20000");
+  entry.options.config.env.KEEP = "latest";
+  await setup.dispose();
+  expect(detach).toHaveBeenCalledOnce();
+  expect(entry.fiber.config).toEqual(entry.options.config);
+  expect(entry.fiber.config.env).toEqual({ KEEP: "latest" });
+  expect(entry.fiber.config.args).not.toContain("--config");
+  expect(edit).not.toHaveBeenCalled();
+});
+
+it("切换浏览器先恢复旧实例，接入不影响其他 MCP", async () => {
+  const root = folder();
+  const initializer = join(root, "cdp-publisher.cjs");
+  writeFileSync(initializer, "module.exports = async () => {};\n");
+  const entries: any[] = ["first", "second"].map((id) => ({
+    options: {
+      id,
+      name: "@deepseek-ai/dsh-mcp-client",
+      config: {
+        serverName: "playwright",
+        transport: "stdio",
+        args: ["@playwright/mcp@0.0.80", "--isolated"],
+      },
+    },
+  }));
+  const { ctx } = runtime(entries);
+  let mcpId = "first";
+  const setup = new PreviewSetup(
+    ctx,
+    () => ({
+      enabled: true,
+      browscreenExecutable: "browscreen",
+      port: 13390,
+      mcpId,
+    }),
+    { outputRoot: root },
+    initializer,
+  );
+  await setup.prepare();
+  await entries[1].fiber.restart();
+  expect(entries[1].fiber.config).toEqual(entries[1].options.config);
+  mcpId = "second";
+  await setup.prepare();
+  expect(entries[0].fiber.config).toEqual(entries[0].options.config);
+  expect(entries[1].fiber.config.env.DSH_TEST_PREVIEW_DIR).toBeDefined();
+  await setup.dispose();
+  expect(entries[1].fiber.config).toEqual(entries[1].options.config);
+});
+
+it("整个宿主关闭时卸载接入不会重新启动正在退出的 MCP", async () => {
+  const root = folder();
+  const initializer = join(root, "cdp-publisher.cjs");
+  writeFileSync(initializer, "module.exports = async () => {};\n");
+  const entry: any = {
+    options: {
+      id: "selected",
+      name: "@deepseek-ai/dsh-mcp-client",
+      config: {
+        serverName: "playwright",
+        transport: "stdio",
+        args: ["@playwright/mcp@0.0.80"],
+      },
+    },
+  };
+  const { ctx } = runtime([entry]);
+  const setup = new PreviewSetup(
+    ctx,
+    () => ({
+      enabled: true,
+      browscreenExecutable: "browscreen",
+      port: 13390,
+      mcpId: "selected",
+    }),
+    { outputRoot: root },
+    initializer,
+  );
+  await setup.prepare();
+  ctx.root.fiber.state = FiberState.UNLOADING;
+  await setup.dispose();
+  expect(entry.fiber.restart).toHaveBeenCalledTimes(1);
 });
 
 it("非 Chromium 的 JSON 浏览器配置不会被补充 Chromium 参数或生成接入文件", () => {
