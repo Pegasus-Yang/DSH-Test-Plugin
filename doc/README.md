@@ -38,6 +38,7 @@ The English guides describe the current implementation. Historical design and ac
 
 ## 设计与实施
 
+- [Browscreen视频录制与报告接入实施方案](design/Browscreen视频录制与报告接入实施方案.md)：正式 0.3.0 参数、独立录像开关、服务端采集、按实例归档、MP4 报告与 API 无媒体显示；方案待审核，尚未实施。
 - [Browscreen命令启动改造实施方案](design/Browscreen命令启动改造实施方案.md)：0.9.0 改造依据；直接切换为已安装的本机命令，删除旧接法兼容，包含版本检测、按需启动和验收计划。
 - [多对话并行测试优化方案](design/多对话并行测试优化方案.md)：后续优化，尚未实施；记录当前共享资源问题、CLI/独立 MCP 候选、运行与预览隔离、分阶段实施和验收标准。
 - [执行进度与浏览器实时预览方案](design/执行进度与浏览器实时预览方案.md)及[实施方案](design/执行进度与实时预览实施方案.md)：步骤图、实际耗时、DSH 原生浮窗和仅在 CDP 与首帧就绪时启用的 Browscreen 接入。
