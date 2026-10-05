@@ -4,7 +4,7 @@
 
 简体中文 · [English](README.en.md)
 
-[版本 v0.9.1](https://github.com/Pegasus-Yang/DSH-Test-Plugin/tree/v0.9.1) · [更新日志](changelog.md) · [MIT 许可证](LICENSE) · [文档](doc/README.md) · [问题反馈](https://github.com/Pegasus-Yang/DSH-Test-Plugin/issues)
+[版本 v0.9.2](https://github.com/Pegasus-Yang/DSH-Test-Plugin/tree/v0.9.2) · [更新日志](changelog.md) · [MIT 许可证](LICENSE) · [文档](doc/README.md) · [问题反馈](https://github.com/Pegasus-Yang/DSH-Test-Plugin/issues)
 
 DSH Test Plugin 是 DeepSeek Harness（DSH）的原生 TypeScript 插件，支持网页和 GET JSON 接口测试。它复用当前对话的模型、工具、审批及会话记录，通过可信观察与确定性比较给出断言结果，并生成可离线查看的 HTML 报告。
 
@@ -63,17 +63,17 @@ DSH Test Plugin 是 DeepSeek Harness（DSH）的原生 TypeScript 插件，支�
 在 DSH 插件管理页填写下面的仓库地址，安装后启用插件：
 
 ```text
-https://github.com/Pegasus-Yang/DSH-Test-Plugin.git#v0.9.1
+https://github.com/Pegasus-Yang/DSH-Test-Plugin.git#v0.9.2
 ```
 
 也可以在 **DSH 源码目录** 使用终端安装：
 
 ```sh
-pnpm dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.9.1
+pnpm dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.9.2
 pnpm dsh web
 ```
 
-已有独立 CLI 时，使用 `dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.9.1` 和 `dsh web`。CLI 安装前正常停止原服务，随后启动同一 profile 并刷新网页。使用自定义 `DSH_HOME` 时，安装与启动须使用同一个目录。
+已有独立 CLI 时，使用 `dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.9.2` 和 `dsh web`。CLI 安装前正常停止原服务，随后启动同一 profile 并刷新网页。使用自定义 `DSH_HOME` 时，安装与启动须使用同一个目录。
 
 Git 发行版本包含 `dist`，安装不执行插件构建脚本，不需要克隆源码、`link-host` 或本机调试文件。随后按[安装与运维](doc/deployment/安装与运维.md#配置)配置 native 工具模式及专用 Playwright MCP；设置页可选启用实时预览。
 
