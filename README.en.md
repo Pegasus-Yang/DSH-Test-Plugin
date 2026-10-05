@@ -34,13 +34,13 @@ The plugin presents a text plan, executes each step with progress updates, and r
 
 These screenshots show **real runs on version 0.9.1**, using the Chinese UI. The example visits ceshiren.com, searches for `agent`, opens the first result, and checks that the post body is not empty. Website content, generated steps, and elapsed time can vary.
 
-**See the current step and elapsed time.** The sky-blue panel shows the current action, settled count, total duration, and step duration. Expand the full list when needed.
+**See the current step and elapsed time.** The progress area shows the current action, settled count, total duration, and step duration. Expand the full list when needed.
 
 ![Current-step panel while opening the first search result, with 2 of 3 steps settled and elapsed time](doc/user-guide/images/当前步骤与耗时.jpg)
 
-**Watch the headless browser.** A floating window displays live frames after the current page has usable CDP and a valid first frame. Move, resize, or close it through the host UI.
+**Watch the execution and browser in the same conversation.** A floating window displays live frames from the headless browser after the current page has usable CDP and a valid first frame. Move, resize, or close it through the host UI. This full-page screenshot shows the preview, conversation records, and step progress together.
 
-![Live browser window showing the actual community post, frame number, capture time, and read-only status](doc/user-guide/images/浏览器实时画面.jpg)
+![Full DSH page with a live community-homepage window, conversation records, and an expanded progress panel showing the current step, timings, and all steps](doc/user-guide/images/浏览器实时画面.jpg)
 
 **Compare actual values with expectations.** The static report organizes cases, steps, assertions, and evidence, including the recorded comparison for the nonempty post body.
 
