@@ -10,6 +10,7 @@ The English guides describe the current implementation. Historical design and ac
 
 ## 当前版本
 
+- [收尾约束与账本报告优化验收](project/收尾约束与账本报告优化验收.md)：释放准入、检查点提交、流式重建与下载、报告去重；记录大日志量化比较、完整 GitLab 批次及定位失败的单独复测边界。
 - [工作区文件路径验收](project/工作区文件路径验收.md)：主分支未发布修复；文件命令按发起对话工作区读取，保留越界限制，公开 SDK 回归及实际 JSON 读取验证。
 - [GitLab 复杂用例](user-guide/GitLab复杂用例.md)：本地私有配置、17 条 UI/接口场景、独立固定基线、逐步运行、重跑与专用项目清理；[场景表](../examples/gitlab/README.md)。
 - [GitLab 复杂用例验收](project/GitLab复杂用例验收.md)：公开 SDK 回归、真实 DSH 分轮执行、100 个业务检查点、脱敏、接口无媒体和清理核对；保留失败及规模边界。
@@ -50,7 +51,7 @@ The English guides describe the current implementation. Historical design and ac
 
 ## 设计与实施
 
-- [收尾约束与账本报告优化实施方案](design/收尾约束与账本报告优化实施方案.md)：待审核，尚未实施；默认释放阶段的执行限制、快照去重、流式重建与下载、压缩日志独立保存，以及完整 GitLab 回归标准。
+- [收尾约束与账本报告优化实施方案](design/收尾约束与账本报告优化实施方案.md)：已获批准，核心实现及优化指标验证完成；保留原方案及完整回归标准，实际结果和分轮复测边界见验收记录。
 - [运行实际步骤与手工用例导出实施方案](design/运行实际步骤与手工用例导出实施方案.md)：已获批准，主分支实施；运行时逐条保存操作说明及真实调用，编号展示、失败重试记录和 Markdown／JSON 手工用例导出。
 - [Browscreen视频录制与报告接入实施方案](design/Browscreen视频录制与报告接入实施方案.md)：正式 0.3.0 参数、独立录像开关、服务端采集、按实例归档、MP4 报告与 API 无媒体显示；方案已获用户批准，实施结果见当前架构和录像验收记录；原调研范围按历史保留。
 - [Browscreen命令启动改造实施方案](design/Browscreen命令启动改造实施方案.md)：0.9.0 改造依据；直接切换为已安装的本机命令，删除旧接法兼容，包含版本检测、按需启动和验收计划。

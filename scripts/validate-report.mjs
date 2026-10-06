@@ -18,7 +18,9 @@ const producers = new Set(
 );
 const boundCalls = new Map(),
   finishedCalls = new Map();
+let eventCount = 0;
 for await (const event of ledgerEvents(dir)) {
+  eventCount++;
   if (!producers.has(event.payload?.call_id)) continue;
   if (event.type === "tool_bound")
     boundCalls.set(event.payload.call_id, event.seq);
@@ -129,7 +131,10 @@ try {
     assert.equal(await article.getAttribute("data-status"), instance.status);
     for (const [n, step] of instance.steps.entries()) {
       const row = article.locator(".step").nth(n);
-      assert.equal(await row.locator("h3").textContent(), step.description);
+      assert.equal(
+        await row.locator(".step-copy strong").textContent(),
+        step.description,
+      );
       if (step.assertion) {
         const values = await row.locator(".comparison pre").allTextContents();
         assert.deepEqual(values, [
@@ -137,7 +142,7 @@ try {
           JSON.stringify(step.assertion.expected, null, 2),
         ]);
         assert.equal(
-          await row.locator(".step-title .badge").textContent(),
+          await row.locator("summary > .badge").getAttribute("title"),
           step.assertion.status,
         );
       }
@@ -154,8 +159,9 @@ try {
   });
   assert.equal(await page.locator("#empty").isVisible(), true);
   await page.locator("#clear").click();
+  assert.equal(await page.locator("article.case:visible").count(), 1);
   assert.equal(
-    await page.locator("article.case:visible").count(),
+    await page.locator(".case-row:visible").count(),
     run.instances.length,
   );
   await page
@@ -192,7 +198,7 @@ try {
     run_id: run.suite_run_id,
     instance_count: run.instances.length,
     evidence_count: run.evidence.length,
-    event_count: events.length,
+    event_count: eventCount,
     rebuild_equal: true,
     observations_match_raw: true,
     expected_values_match_plan: true,

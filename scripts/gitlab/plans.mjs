@@ -393,7 +393,7 @@ export function createPlans(config, state) {
       [
         dom(
           "filter_list",
-          "打开绑定 Issue 列表，使用页面的 Closed 标签和 Label 筛选选择 dsh-smoke；打开唯一匹配的 gamma Issue，采集该 Issue 标题。不能用直接拼接筛选 URL 替代界面操作",
+          "打开绑定 Issue 列表，使用页面的 Closed 标签和 Label 筛选选择 dsh-smoke；打开唯一匹配的 gamma Issue，采集主内容区中该 Issue 的业务标题。先通过实际 DOM 确认定位指向 Issue 标题，再采集；不能直接取全页面的第一个 h1，不能采集导航栏的 Primary navigation 或其他导航标题。不能用直接拼接筛选 URL 替代界面操作",
           { url: listUrl, label: "dsh-smoke" },
           "title",
         ),
@@ -426,7 +426,7 @@ export function createPlans(config, state) {
       [
         dom(
           "preview_draft",
-          "打开绑定的新建 Issue 表单，使用纯文本 Markdown 编辑模式（需要时先切换），填写标题和绑定的 Markdown 原文，点击 Preview。只采集预览正文中渲染出的粗体段落文字，例如实际 DOM 中的 strong 元素；不要采集整个编辑器容器、工具栏、隐藏菜单或帮助文字。不要提交表单",
+          "打开绑定的新建 Issue 表单，使用纯文本 Markdown 编辑模式（需要时先切换），填写标题和绑定的 Markdown 原文，点击 Preview，等待预览渲染完成。先观察实际 DOM，确认匹配的是预览正文中已显示的粗体段落，再用一个已验证的精确选择器采集。不能使用逗号并列多个候选选择器、~ * 通配或全页面的 main strong 兜底，首个匹配可能是空或隐藏节点。不要采集编辑器输入框、整个容器、工具栏、隐藏菜单或帮助文字。不要提交表单",
           {
             url: listUrl + "/new?type=issue",
             title: draft,

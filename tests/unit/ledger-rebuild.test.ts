@@ -67,6 +67,62 @@ it("快照不内嵌账本，只保留两份已提交检查点且完整状态可�
     ).toBe(0o600);
   expect(await rebuild(t.recorder.directory)).toEqual(t.run);
 });
+
+it("固定响应的独立实例数量翻倍时，账本与保留状态近似线性增长", () => {
+  const measure = (count: number) => {
+    const t = fixture();
+    const template = t.run.instances[0]!;
+    t.run.instances = [];
+    for (let n = 0; n < count; n++) {
+      const case_run_id = `case_${n}`;
+      const call = {
+        call_id: `call_${n}`,
+        binding: {
+          suite_run_id: t.run.suite_run_id,
+          case_run_id,
+          phase: "test" as const,
+          step_id: `step_${n}`,
+          attempt_id: "attempt_1",
+        },
+        name: "固定响应",
+        args_redacted: {},
+        started_at: "now",
+        finished_at: "now",
+        body_started: true,
+        result: "x".repeat(8192),
+      };
+      const step = {
+        step_id: `step_${n}`,
+        phase: "test" as const,
+        description: "固定响应",
+        required: true,
+        status: "SUCCEEDED" as const,
+        started_at: "now",
+        duration_ms: 1,
+        calls: [call],
+        observations: [],
+      };
+      t.run.instances.push({ ...template, case_run_id, steps: [step] });
+      t.recorder.event("tool_finished", call);
+      t.recorder.snapshot(t.run);
+    }
+    const checkpoints = readdirSync(join(t.recorder.directory, "checkpoints"));
+    expect(checkpoints).toHaveLength(2);
+    return {
+      ledger: statSync(join(t.recorder.directory, "events.jsonl")).size,
+      state:
+        checkpoints.reduce(
+          (n, file) =>
+            n + statSync(join(t.recorder.directory, "checkpoints", file)).size,
+          0,
+        ) + statSync(join(t.recorder.directory, "results.json")).size,
+    };
+  };
+  const small = measure(10),
+    large = measure(20);
+  expect(large.ledger / small.ledger).toBeLessThan(2.1);
+  expect(large.state / small.state).toBeLessThan(2.2);
+});
 it("新版本仍可流式读取内嵌旧快照", async () => {
   const t = fixture();
   writeFileSync(
