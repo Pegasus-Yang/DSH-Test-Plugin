@@ -4,7 +4,7 @@
 
 简体中文 · [English](README.en.md)
 
-[版本 v0.10.0](https://github.com/Pegasus-Yang/DSH-Test-Plugin/tree/v0.10.0) · [更新日志](changelog.md) · [MIT 许可证](LICENSE) · [文档](doc/README.md) · [问题反馈](https://github.com/Pegasus-Yang/DSH-Test-Plugin/issues)
+[版本 v0.11.0](https://github.com/Pegasus-Yang/DSH-Test-Plugin/tree/v0.11.0) · [更新日志](changelog.md) · [MIT 许可证](LICENSE) · [文档](doc/README.md) · [问题反馈](https://github.com/Pegasus-Yang/DSH-Test-Plugin/issues)
 
 DSH Test Plugin 是 DeepSeek Harness（DSH）的原生 TypeScript 插件，支持网页和 GET JSON 接口测试。它复用当前对话的模型、工具、审批及会话记录，通过可信观察与确定性比较给出断言结果，并生成可离线查看的 HTML 报告。
 
@@ -24,7 +24,7 @@ DSH Test Plugin 是 DeepSeek Harness（DSH）的原生 TypeScript 插件，支�
 | --- | --- |
 | 自然语言规划 | 将任务拆成业务步骤和文字检查点；支持原生计划审核与修改 |
 | 网页与接口测试 | 通过专用 Playwright MCP 操作网页；采集 GET JSON 响应并校验状态码和字段 |
-| 实际步骤与手工用例（主分支，未发布） | 随运行逐条保存操作说明和真实输入，按实例编号展示；下载 Markdown 手工用例与 JSON 记录，保留失败和重试 |
+| 实际步骤与手工用例 | 随运行逐条保存操作说明和真实输入，按实例编号展示；下载 Markdown 手工用例与 JSON 记录，保留失败和重试 |
 | 可信断言 | 记录实际观察、预期及来源，用确定性比较判断结果 |
 | 文件与参数化 | 导入 TXT、Markdown、JSON 用例；CSV 数据展开后先审核再执行 |
 | 执行进度 | 展示当前操作、已结算数量和耗时；完整列表按需展开，支持长文字和多实例编号 |
@@ -32,7 +32,7 @@ DSH Test Plugin 是 DeepSeek Harness（DSH）的原生 TypeScript 插件，支�
 | 浏览器录像 | 独立开关默认关闭；按浏览器实例归档 MP4，在报告中播放、拖动及下载；接口实例无媒体入口 |
 | 报告与收尾 | 静态 HTML 报告包含步骤、断言及附件；支持停止、资源清理和隔离环境处置 |
 
-实际步骤与手工用例目前属于主分支未发布更新，`v0.10.0` 标签暂不包含；使用开发安装包体验，详细操作见[实际步骤与手工用例](doc/user-guide/实际步骤与手工用例.md)。
+0.11.0 新增实际步骤与手工用例导出，并修复当前对话的工作区文件读取、收紧浏览器释放、优化报告和账本存储。详细操作见[实际步骤与手工用例](doc/user-guide/实际步骤与手工用例.md)，完整变化见[更新日志](changelog.md)。复杂回归可使用[GitLab 样例](doc/user-guide/GitLab复杂用例.md)。
 
 ## 实际效果
 
@@ -67,17 +67,17 @@ DSH Test Plugin 是 DeepSeek Harness（DSH）的原生 TypeScript 插件，支�
 在 DSH 插件管理页填写下面的仓库地址，安装后启用插件：
 
 ```text
-https://github.com/Pegasus-Yang/DSH-Test-Plugin.git#v0.10.0
+https://github.com/Pegasus-Yang/DSH-Test-Plugin.git#v0.11.0
 ```
 
 也可以在 **DSH 源码目录** 使用终端安装：
 
 ```sh
-pnpm dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.10.0
+pnpm dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.11.0
 pnpm dsh web
 ```
 
-已有独立 CLI 时，使用 `dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.10.0` 和 `dsh web`。CLI 安装前正常停止原服务，随后启动同一 profile 并刷新网页。使用自定义 `DSH_HOME` 时，安装与启动须使用同一个目录。
+已有独立 CLI 时，使用 `dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.11.0` 和 `dsh web`。CLI 安装前正常停止原服务，随后启动同一 profile 并刷新网页。使用自定义 `DSH_HOME` 时，安装与启动须使用同一个目录。
 
 Git 发行版本包含 `dist`，安装不执行插件构建脚本，不需要克隆源码、`link-host` 或本机调试文件。随后按[安装与运维](doc/deployment/安装与运维.md#配置)配置 native 工具模式及专用 Playwright MCP；设置页可选启用实时预览。
 
@@ -127,11 +127,11 @@ pnpm dsh plugin --profile web add /绝对路径/DSH-Test-Plugin/artifacts/packag
 /test-data examples/httpbin-parameters.csv --file examples/httpbin-parameterized.md
 ```
 
-主分支的文件路径相对于发起命令的当前对话工作区；在 DSH 中选择工作区后，从该工作区的新建或已有对话执行。没有工作目录信息的历史会话才使用插件配置的 `workspace`。将 [examples](examples) 中的文件复制到实际使用的工作区，完整输入格式、审核过程和参数规则见[使用说明](doc/user-guide/使用说明.md)。此路径修复尚未发布到版本标签。
+文件路径相对于发起命令的当前对话工作区；在 DSH 中选择工作区后，从该工作区的新建或已有对话执行。没有工作目录信息的历史会话才使用插件配置的 `workspace`。将 [examples](examples) 中的文件复制到实际使用的工作区，完整输入格式、审核过程和参数规则见[使用说明](doc/user-guide/使用说明.md)。
 
 ## 浏览器实时预览与录像
 
-0.10.0 提供独立录像开关及报告视频回放，可直接使用上方 GitHub 标签安装。已有安装先移除旧包，再安装新标签并重启同一 profile。
+0.11.0 提供独立录像开关及报告视频回放，可直接使用上方 GitHub 标签安装。已有安装先移除旧包，再安装新标签并重启同一 profile。
 
 先在 DSH 宿主安装 PyPI 的 `browscreen[video]==0.3.0`（Python ≥3.14，支持稳定版本 `>=0.3.0,<0.4.0`）。在 **设置 → 测试插件 → 浏览器预览与录像** 中启用、检测安装、选择采集端口及专用 Playwright MCP 并保存。命令默认是 `browscreen`，高级设置可填完整可执行文件路径；无需下载源码或提前启动服务。
 
@@ -141,7 +141,7 @@ pnpm dsh plugin --profile web add /绝对路径/DSH-Test-Plugin/artifacts/packag
 
 ## 常用命令与报告
 
-以下为 0.10.0 的命令与界面操作；历史变化见[版本变更记录](changelog.md)。
+以下为 0.11.0 的命令与界面操作；历史变化见[版本变更记录](changelog.md)。
 
 | 命令 | 用途 |
 | --- | --- |
