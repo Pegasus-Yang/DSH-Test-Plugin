@@ -127,7 +127,7 @@ Enter these commands in the **DSH input**, not a terminal. Run them separately:
 /test-data examples/httpbin-parameters.csv --file examples/httpbin-parameterized.md
 ```
 
-File paths resolve against the plugin's configured `workspace`. Copy [examples](examples) into that workspace if needed. The included case files are Chinese examples; you can write your own in English. See the [user guide](doc/user-guide/使用说明.en.md) for input formats, approval, and parameter rules.
+On the main branch, file paths resolve against the workspace of the conversation that invokes the command. Select a workspace in DSH and use a conversation belonging to it. Older sessions without a working directory fall back to the configured plugin `workspace`. Copy [examples](examples) into the conversation workspace if needed. The included case files are Chinese examples; you can write your own in English. See the [user guide](doc/user-guide/使用说明.en.md) for input formats, approval, and parameter rules. This path fix has not yet been released under a version tag.
 
 ## Live browser preview and recording
 

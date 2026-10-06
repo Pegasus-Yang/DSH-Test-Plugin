@@ -109,11 +109,15 @@ export function apply(ctx, config = {}) {
             },
         }));
     });
-    function inputPath(input) {
-        const full = realpathSync(resolve(tests.config.workspace, input.trim()));
-        const rel = relative(realpathSync(tests.config.workspace), full);
+    function commandWorkspace(agent) {
+        // 命令随发起对话的工作区读取文件；无 cwd 的历史会话沿用插件配置。
+        return agent?.session?.header?.cwd ?? tests.config.workspace;
+    }
+    function inputPath(input, workspace = tests.config.workspace) {
+        const full = realpathSync(resolve(workspace, input.trim()));
+        const rel = relative(realpathSync(workspace), full);
         if (rel === ".." || rel.startsWith(".." + sep))
-            throw new Error("输入文件必须位于项目工作区");
+            throw new Error("输入文件必须位于项目工作区：" + workspace);
         return full;
     }
     const register = (name, description, handler, hint) => ctx.effect(() => ctx.commands.register({
@@ -135,34 +139,36 @@ export function apply(ctx, config = {}) {
         if (rawInput.trim() === "--file")
             throw new Error("请提供TXT或Markdown用例路径");
         return tests.start(agent, rawInput.trim(), undefined, true, file
-            ? loadTextInput(tests.config.workspace, fileArgument(file[1]))
+            ? loadTextInput(commandWorkspace(agent), fileArgument(file[1]))
             : undefined);
     }, "任务描述或 --file cases.md；规划后先审核，确认后执行");
     register("test-run", "执行TXT、Markdown文字用例或完整JSON测试集合", ({ agent, rawInput }) => {
         const usage = "请提供工作区内的TXT、Markdown或JSON测试集合文件路径，例如 /test-run examples/cases.txt；自然语言任务请使用 /test <任务描述>。";
         if (!rawInput.trim())
             throw new Error(usage);
+        const workspace = commandWorkspace(agent);
+        const input = fileArgument(rawInput);
         let path;
         try {
-            path = inputPath(fileArgument(rawInput));
+            path = inputPath(input, workspace);
         }
         catch (error) {
             if (["ENOENT", "ENOTDIR"].includes(error.code ?? ""))
-                throw new Error("输入文件不存在。" + usage);
+                throw new Error(`输入文件不存在：${resolve(workspace, input)}。当前工作区：${workspace}。${usage}`);
             throw error;
         }
         if (!statSync(path).isFile())
             throw new Error(usage);
         const extension = extname(path).toLowerCase();
         if ([".txt", ".md", ".markdown"].includes(extension)) {
-            return tests.start(agent, rawInput.trim(), undefined, false, loadTextInput(tests.config.workspace, path));
+            return tests.start(agent, rawInput.trim(), undefined, false, loadTextInput(workspace, path));
         }
         if (extension !== ".json")
             throw new Error(usage);
         const plan = JSON.parse(readFileSync(path, "utf8"));
         return tests.start(agent, `执行测试集合 ${rawInput.trim()}。请在当前对话逐步说明执行情况，按test_current指引使用原生工具完成采集、断言及清理，最后提供报告链接。`, plan);
     }, "TXT、Markdown或JSON文件路径；自然语言请使用 /test");
-    register("test-data", "读取CSV参数与任务模板，先审核每个实例的参数和文字步骤，再执行", ({ agent, rawInput }) => tests.start(agent, rawInput.trim(), undefined, true, loadDataInput(tests.config.workspace, rawInput)), "data.csv <包含${参数名}的任务> 或 data.csv --file cases.md");
+    register("test-data", "读取CSV参数与任务模板，先审核每个实例的参数和文字步骤，再执行", ({ agent, rawInput }) => tests.start(agent, rawInput.trim(), undefined, true, loadDataInput(commandWorkspace(agent), rawInput)), "data.csv <包含${参数名}的任务> 或 data.csv --file cases.md");
     ctx.effect(() => async () => {
         await tests.shutdown();
         await setup.dispose();

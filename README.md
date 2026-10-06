@@ -127,7 +127,7 @@ pnpm dsh plugin --profile web add /绝对路径/DSH-Test-Plugin/artifacts/packag
 /test-data examples/httpbin-parameters.csv --file examples/httpbin-parameterized.md
 ```
 
-示例文件路径相对于插件配置的 `workspace`；使用其他工作区时，先将 [examples](examples) 中的文件复制过去。完整输入格式、审核过程和参数规则见[使用说明](doc/user-guide/使用说明.md)。
+主分支的文件路径相对于发起命令的当前对话工作区；在 DSH 中选择工作区后，从该工作区的新建或已有对话执行。没有工作目录信息的历史会话才使用插件配置的 `workspace`。将 [examples](examples) 中的文件复制到实际使用的工作区，完整输入格式、审核过程和参数规则见[使用说明](doc/user-guide/使用说明.md)。此路径修复尚未发布到版本标签。
 
 ## 浏览器实时预览与录像
 

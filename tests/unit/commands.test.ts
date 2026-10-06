@@ -7,12 +7,14 @@ import {
   writeFileSync,
   symlinkSync,
   mkdirSync,
+  realpathSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import type { Context } from "@deepseek-ai/cordis";
 import { NativeTests } from "../../src/native-test.js";
 import { apply } from "../../src/index.js";
+import { sample } from "../fixtures/plan.js";
 
 const roots: string[] = [];
 afterEach(() => {
@@ -269,4 +271,131 @@ it("TXT与Markdown入口直接规划，文件审核和CSV入口强制原生审�
     kind: "error",
   });
   expect(start).not.toHaveBeenCalled();
+});
+
+function conversationWorkspace() {
+  const root = realpathSync(
+    mkdtempSync(join(tmpdir(), "conversation-workspace-")),
+  );
+  roots.push(root);
+  const agent = { id: root, session: { header: { cwd: root } } };
+  return { root, agent };
+}
+
+it.each(["relative", "absolute"])(
+  "/test-run 使用当前对话的工作区读取 %s 路径，忽略宿主默认目录",
+  async (mode) => {
+    const t = setup();
+    const conversation = conversationWorkspace();
+    const plan = sample();
+    const file = join(conversation.root, "ui.json");
+    writeFileSync(file, JSON.stringify(plan));
+    const start = vi.spyOn(t.runner, "start").mockResolvedValue("已接收");
+    expect(
+      await t.execute(
+        "test-run",
+        mode === "relative" ? "ui.json" : file,
+        conversation.agent,
+      ),
+    ).toMatchObject({ kind: "success" });
+    expect(start).toHaveBeenCalledWith(
+      conversation.agent,
+      expect.any(String),
+      plan,
+    );
+  },
+);
+
+it("文字、审核和CSV文件入口使用同一对话工作区，支持带空格的路径", async () => {
+  const t = setup();
+  const conversation = conversationWorkspace();
+  writeFileSync(join(conversation.root, "cases one.txt"), "检查${值}");
+  writeFileSync(join(conversation.root, "cases one.md"), "- 检查${值}");
+  writeFileSync(join(conversation.root, "data one.csv"), "值\n001\n002");
+  const start = vi.spyOn(t.runner, "start").mockResolvedValue("已接收");
+  expect(
+    await t.execute("test-run", '"cases one.txt"', conversation.agent),
+  ).toMatchObject({ kind: "success" });
+  expect(start.mock.calls.at(-1)![4]?.case_file?.path).toBe(
+    join(conversation.root, "cases one.txt"),
+  );
+  expect(start.mock.calls.at(-1)![3]).toBe(false);
+  expect(
+    await t.execute("test-plan", '--file "cases one.md"', conversation.agent),
+  ).toMatchObject({ kind: "success" });
+  expect(start.mock.calls.at(-1)![4]?.case_file?.path).toBe(
+    join(conversation.root, "cases one.md"),
+  );
+  expect(start.mock.calls.at(-1)![3]).toBe(true);
+  expect(
+    await t.execute(
+      "test-data",
+      '"data one.csv" --file "cases one.md"',
+      conversation.agent,
+    ),
+  ).toMatchObject({ kind: "success" });
+  expect(start.mock.calls.at(-1)![4]?.csv_file?.path).toBe(
+    join(conversation.root, "data one.csv"),
+  );
+  expect(start.mock.calls.at(-1)![4]?.instances).toHaveLength(2);
+});
+
+it("不同对话读取各自同名文件，当前工作区缺失文件时不回退到宿主目录", async () => {
+  const t = setup();
+  const one = conversationWorkspace();
+  const two = conversationWorkspace();
+  writeFileSync(join(one.root, "cases.txt"), "第一工作区用例");
+  writeFileSync(join(two.root, "cases.txt"), "第二工作区用例");
+  writeFileSync(join(t.root, "host-only.json"), JSON.stringify(sample()));
+  const start = vi.spyOn(t.runner, "start").mockResolvedValue("已接收");
+  for (const [conversation, task] of [
+    [one, "第一工作区用例"],
+    [two, "第二工作区用例"],
+  ] as const) {
+    expect(
+      await t.execute("test-run", "cases.txt", conversation.agent),
+    ).toMatchObject({ kind: "success" });
+    expect(start.mock.calls.at(-1)![4]?.instances[0]?.task).toBe(task);
+  }
+  start.mockClear();
+  expect(
+    await t.execute("test-run", "host-only.json", one.agent),
+  ).toMatchObject({
+    kind: "error",
+    text: expect.stringContaining(one.root),
+  });
+  expect(start).not.toHaveBeenCalled();
+});
+
+it("当前对话的路径边界继续拒绝外部绝对路径、上级路径和符号链接", async () => {
+  const t = setup();
+  const conversation = conversationWorkspace();
+  const outside = join(t.root, "outside.json");
+  writeFileSync(outside, JSON.stringify(sample()));
+  symlinkSync(t.root, join(conversation.root, "outside"));
+  const start = vi.spyOn(t.runner, "start").mockResolvedValue("已接收");
+  for (const path of [
+    outside,
+    join("..", basename(t.root), "outside.json"),
+    "outside/outside.json",
+  ]) {
+    expect(await t.execute("test-run", path, conversation.agent)).toMatchObject(
+      {
+        kind: "error",
+        text: expect.stringContaining("输入文件必须位于项目工作区"),
+      },
+    );
+  }
+  expect(start).not.toHaveBeenCalled();
+});
+
+it("没有cwd的历史对话仍使用已配置的workspace", async () => {
+  const t = setup();
+  writeFileSync(join(t.root, "ui.json"), JSON.stringify(sample()));
+  const start = vi.spyOn(t.runner, "start").mockResolvedValue("已接收");
+  const agent = { id: "legacy", session: { header: {} } };
+  expect(await t.execute("test-run", "ui.json", agent)).toMatchObject({
+    kind: "success",
+  });
+  expect(start).toHaveBeenCalledTimes(1);
 });

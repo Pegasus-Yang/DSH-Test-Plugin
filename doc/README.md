@@ -10,6 +10,7 @@ The English guides describe the current implementation. Historical design and ac
 
 ## 当前版本
 
+- [工作区文件路径验收](project/工作区文件路径验收.md)：主分支未发布修复；文件命令按发起对话工作区读取，保留越界限制，公开 SDK 回归及实际 JSON 读取验证。
 - [GitLab 复杂用例](user-guide/GitLab复杂用例.md)：本地私有配置、17 条 UI/接口场景、独立固定基线、逐步运行、重跑与专用项目清理；[场景表](../examples/gitlab/README.md)。
 - [GitLab 复杂用例验收](project/GitLab复杂用例验收.md)：公开 SDK 回归、真实 DSH 分轮执行、100 个业务检查点、脱敏、接口无媒体和清理核对；保留失败及规模边界。
 
