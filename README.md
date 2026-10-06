@@ -165,6 +165,8 @@ pnpm dsh plugin --profile web add /绝对路径/DSH-Test-Plugin/artifacts/packag
 
 ## 开发与贡献
 
+项目提供 [GitLab 复杂回归用例](doc/user-guide/GitLab复杂用例.md)：4 条 UI 场景与 13 条接口场景，覆盖创建、编辑、评论、状态流转、筛选、分页和错误响应，并用独立接口核对界面操作的持久化结果。账号从被 Git 忽略的本地配置读取，测试数据按次准备和清理；[完整场景表](examples/gitlab/README.md)。
+
 完成依赖安装和 `link-host` 后，在插件根目录运行：
 
 ```sh

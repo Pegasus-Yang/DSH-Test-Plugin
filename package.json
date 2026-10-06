@@ -29,7 +29,10 @@
     "test:e2e": "node scripts/e2e.mjs",
     "link:host": "node scripts/link-host.mjs",
     "start:host": "node scripts/start-host.mjs",
-    "verify:package": "node scripts/check-package.mjs"
+    "verify:package": "node scripts/check-package.mjs",
+    "gitlab:prepare": "node scripts/gitlab.mjs prepare",
+    "gitlab:generate": "node scripts/gitlab.mjs generate",
+    "gitlab:cleanup": "node scripts/gitlab.mjs cleanup"
   },
   "engines": {
     "node": ">=22.19.0"

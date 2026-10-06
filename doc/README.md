@@ -10,6 +10,9 @@ The English guides describe the current implementation. Historical design and ac
 
 ## 当前版本
 
+- [GitLab 复杂用例](user-guide/GitLab复杂用例.md)：本地私有配置、17 条 UI/接口场景、独立固定基线、逐步运行、重跑与专用项目清理；[场景表](../examples/gitlab/README.md)。
+- [GitLab 复杂用例验收](project/GitLab复杂用例验收.md)：公开 SDK 回归、真实 DSH 分轮执行、100 个业务检查点、脱敏、接口无媒体和清理核对；保留失败及规模边界。
+
 - [实际步骤与手工用例验收](project/实际步骤与手工用例验收.md)：公开 SDK 回归、真实网页、接口/CSV、错误/拒绝/取消、导出和媒体核对。
 - [实际步骤与手工用例](user-guide/实际步骤与手工用例.md)：主分支新增功能；运行时操作说明、真实输入、实例编号、状态含义及 Markdown／JSON 导出。
 
