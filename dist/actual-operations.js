@@ -50,9 +50,11 @@ const pendingExpected = "待补充，原任务未定义独立检查";
 /** 手工执行使用真实输入；短期定位引用与任意脚本仅保留在调用依据中。 */
 export function operationInputs(step, op) {
     const call = step.calls.find((c) => c.call_id === op.tool_call_id);
-    if (!call?.args_redacted ||
-        typeof call.args_redacted !== "object" ||
-        Array.isArray(call.args_redacted))
+    return operationArguments(call?.args_redacted);
+}
+/** 只保留人可以使用的输入，不将短期定位或执行脚本写入手工用例。 */
+export function operationArguments(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value))
         return {};
     const withoutLocators = (value) => Array.isArray(value)
         ? value.map(withoutLocators)
@@ -61,7 +63,7 @@ export function operationInputs(step, op) {
                 .filter(([key]) => !["ref", "startRef", "endRef", "function", "code"].includes(key))
                 .map(([key, v]) => [key, withoutLocators(v)]))
             : value;
-    return withoutLocators(call.args_redacted);
+    return withoutLocators(value);
 }
 export function projectActualCase(run, instance) {
     const definition = run.plan.cases.find((c) => c.case_id === instance.case_id);

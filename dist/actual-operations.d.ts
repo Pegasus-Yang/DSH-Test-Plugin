@@ -63,6 +63,8 @@ export interface ActualCase {
 }
 /** 手工执行使用真实输入；短期定位引用与任意脚本仅保留在调用依据中。 */
 export declare function operationInputs(step: StepResult, op: ActualOperation): Record<string, Json>;
+/** 只保留人可以使用的输入，不将短期定位或执行脚本写入手工用例。 */
+export declare function operationArguments(value: unknown): Record<string, Json>;
 export declare function projectActualCase(run: SuiteRun, instance: CaseRun): ActualCase;
 export declare const operationLabels: Record<string, string>;
 export declare function inputText(row: ActualRow): string;

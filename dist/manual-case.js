@@ -1,7 +1,8 @@
-/** 从同一份已脱敏事实生成手工用例，原文件与重建文件分别保存。 */
+/** 从操作事实生成供后续执行的手工用例；执行记录另存 JSON。 */
 import { join } from "node:path";
 import { atomicWrite } from "./recorder.js";
-import { projectActualCase, inputText, expectedText, operationLabels, } from "./actual-operations.js";
+import { projectActualCase, } from "./actual-operations.js";
+import { manualCaseSource, readManualSource, } from "./manual-source.js";
 export function actualStepsDocument(run) {
     return {
         format: "dsh-actual-steps",
@@ -13,28 +14,147 @@ export function actualStepsDocument(run) {
         cases: run.instances.map((i) => projectActualCase(run, i)),
     };
 }
-const md = (text) => String(text ?? "")
-    .replace(/[\\`*_{}\[\]<>&#|]/g, (c) => `&#${c.charCodeAt(0)};`)
-    .replace(/\r?\n/g, "<br>");
-function rowsTable(rows, numbered) {
-    if (!rows.length)
-        return "未记录。\n";
-    return (`| ${numbered ? "序号" : "记录"} | 操作步骤 | 实际输入 | 原有预期 | 本次记录 | 来源规划步骤 |\n| --- | --- | --- | --- | --- | --- |\n` +
+const valueText = (value) => typeof value === "string"
+    ? value === ""
+        ? "空字符串"
+        : `「${value.replace(/\r\n|\r|\n/g, "\\n")}」`
+    : JSON.stringify(value);
+const cell = (text) => text.replace(/[\\|<>]/g, "\\$&").replace(/\r\n|\r|\n/g, " ");
+const operators = {
+    eq: "等于",
+    neq: "不等于",
+    contains: "包含",
+    range: "满足范围",
+    exists: "存在性为",
+    text: "文本符合",
+    visible: "可见性为",
+};
+function operationDescription(description, name, inputs) {
+    const tool = name.replace(/^mcp__playwright__/, "");
+    const element = typeof inputs.element === "string" ? inputs.element : "";
+    if (tool === "browser_type" && typeof inputs.text === "string")
+        return `在${element || "输入框"}中输入${valueText(inputs.text)}${inputs.submit ? "并提交" : ""}${inputs.text.includes("\n") ? "（\\n 表示换行）" : ""}`;
+    if (tool === "browser_navigate" && typeof inputs.url === "string")
+        return `访问 ${inputs.url}`;
+    if (tool === "test_api_get" && typeof inputs.url === "string")
+        return `发送 GET 请求到 ${inputs.url}`;
+    if (tool === "browser_fill_form" && Array.isArray(inputs.fields))
+        return ("填写表单：" +
+            inputs.fields
+                .map((f) => {
+                const field = f;
+                return `${field.name ?? "字段"}输入${valueText(field.value ?? "")}`;
+            })
+                .join("；"));
+    if (tool === "browser_click" && element)
+        return `${inputs.button === "right" ? "右键点击" : "点击"}${element}${inputs.doubleClick ? "（双击）" : ""}${Array.isArray(inputs.modifiers) && inputs.modifiers.length ? "（按住 " + inputs.modifiers.join("+") + "）" : ""}`;
+    if (tool === "browser_hover" && element)
+        return `将鼠标移到${element}`;
+    if (tool === "browser_drag" && inputs.startElement && inputs.endElement)
+        return `从${inputs.startElement}拖动到${inputs.endElement}`;
+    if (tool === "browser_wait_for") {
+        const waits = [
+            typeof inputs.time === "number" ? `等待 ${inputs.time} 秒` : "",
+            typeof inputs.text === "string"
+                ? `等待${valueText(inputs.text)}出现`
+                : "",
+            typeof inputs.textGone === "string"
+                ? `等待${valueText(inputs.textGone)}消失`
+                : "",
+        ].filter(Boolean);
+        if (waits.length)
+            return waits.join("，");
+    }
+    if (tool === "browser_resize" &&
+        typeof inputs.width === "number" &&
+        typeof inputs.height === "number")
+        return `将浏览器窗口调整为 ${inputs.width} × ${inputs.height}`;
+    if (tool === "browser_tabs") {
+        if (inputs.action === "new")
+            return "打开新的浏览器标签页";
+        if (typeof inputs.index === "number")
+            return `${inputs.action === "close" ? "关闭" : "切换到"}第 ${inputs.index + 1} 个浏览器标签页`;
+    }
+    if (tool === "browser_select_option" &&
+        element &&
+        Array.isArray(inputs.values))
+        return `在${element}中选择${inputs.values.map(valueText).join("、")}`;
+    if (tool === "browser_press_key" && typeof inputs.key === "string")
+        return `${description}，按 ${inputs.key}`;
+    if (tool === "browser_file_upload" && Array.isArray(inputs.paths))
+        return `${description}，选择文件 ${inputs.paths.map(valueText).join("、")}`;
+    if (tool === "browser_handle_dialog")
+        return `${inputs.accept ? "确认" : "取消"}页面对话框${typeof inputs.promptText === "string" ? "，输入" + valueText(inputs.promptText) : ""}`;
+    return description;
+}
+function manualRows(rows, source, data, calls = []) {
+    return rows
+        .filter((r) => r.kind === "check" || r.state === "SUCCEEDED")
+        .map((row) => {
+        if (row.kind === "check") {
+            const check = source.checks[row.source_step_id] ??
+                (typeof row.expected === "object" ? row.expected : undefined);
+            return {
+                description: check?.description ?? row.description,
+                expected: check
+                    ? `${operators[check.operator] ?? check.operator} ${valueText(check.value)}`
+                    : "",
+            };
+        }
+        const raw = data?.operations[row.id];
+        return {
+            description: operationDescription(raw?.description ?? row.description, raw?.name ??
+                calls.find((call) => call.call_id === row.tool_call_id)?.name ??
+                "", raw?.inputs ?? row.inputs),
+            expected: "",
+        };
+    });
+}
+function phaseRows(rows, definitions, source, data, calls = []) {
+    // 按原前置/收尾顺序补入声明的条件，不把失败尝试写成下一次必须重做的动作。
+    const steps = [];
+    for (const definition of definitions) {
+        const recorded = rows.filter((r) => r.source_step_id === definition.step_id);
+        if (recorded.length)
+            steps.push(...manualRows(recorded, source, data, calls));
+        else
+            steps.push({
+                description: definition.description,
+                expected: definition.expected
+                    ? `${operators[definition.expected.operator] ?? definition.expected.operator} ${valueText(definition.expected.value)}`
+                    : "",
+            });
+    }
+    steps.push(...manualRows(rows.filter((r) => !definitions.some((d) => d.step_id === r.source_step_id)), source, data, calls));
+    return steps;
+}
+function rowsTable(rows) {
+    return ("| 序号 | 操作步骤 | 预期结果 |\n| --- | --- | --- |\n" +
         rows
-            .map((row) => `| ${numbered ? row.number : "—"} | ${md(row.description)} | ${md(inputText(row))} | ${md(expectedText(row))} | ${md(operationLabels[row.state] ?? row.state)}${row.operation?.granularity === "composite" ? "；复合操作" : ""}${row.operation?.reason ? "；" + md(row.operation.reason) : ""} | ${md(row.source_step_id)}：${md(row.source_description)} |`)
+            .map((r, n) => `| ${n + 1} | ${cell(r.description)} | ${cell(r.expected)} |`)
             .join("\n") +
         "\n");
 }
-function caseMarkdown(c) {
-    return `## ${md(c.name)}\n\n实例：${md(c.case_run_id)}；数据：${md(c.data_id)}；本次状态：${md(c.status)}。\n\n实际步骤说明完整性：${c.completeness}。${c.needs_review ? "保存为手工用例前请复核失败、重试、复合操作和缺少的预期。" : "操作说明已记录；工具成功与业务检查结果分别显示。"}\n\n${c.completeness_reasons.map((r) => `- ${md(r)}\n`).join("")}\n### 原始任务\n\n${md(c.original_task)}\n\n### 测试数据\n\n${md(JSON.stringify(c.parameters, null, 2))}\n\n### 原规划\n\n${c.planned_steps.map((s, n) => `${n + 1}. ${md(s.description)}${s.checks?.length ? "；检查：" + s.checks.map(md).join("；") : ""}`).join("\n")}\n\n### 前置条件\n\n${c.preconditions.definitions.map((s) => `- ${md(s)}`).join("\n") || "原计划未定义独立前置条件。"}\n\n${rowsTable(c.preconditions.recorded, false)}\n### 实际步骤\n\n${rowsTable(c.steps, true)}\n### 收尾\n\n${c.cleanup.definitions.map((s) => `- ${md(s)}`).join("\n") || "原计划未定义业务收尾。"}\n\n${rowsTable(c.cleanup.recorded, false)}\n${c.not_dispatched.length ? "### 未执行的说明（不计步骤序号）\n\n" + rowsTable(c.not_dispatched, false) + "\n" : ""}`;
+export function manualCaseFilename(index, rebuilt = false) {
+    return `manual-cases${index === undefined ? "" : "-" + (index + 1)}${rebuilt ? "-rebuilt" : ""}.md`;
 }
-export function manualCasesMarkdown(run, caseRunId) {
-    const cases = actualStepsDocument(run).cases.filter((c) => !caseRunId || c.case_run_id === caseRunId);
-    return (`# ${md(run.name)} · 手工用例\n\n运行：${md(run.suite_run_id)}。本文件记录本次实际路径，保留失败和重试；未重新复跑。没有独立检查的操作预期需由使用者补充。技术定位引用仅在 JSON 调用依据中保存。\n\n` +
-        cases.map(caseMarkdown).join("\n"));
+export function manualCasesMarkdown(run, caseRunId, data) {
+    const sources = data?.cases ?? manualCaseSource(run);
+    return run.instances
+        .filter((i) => !caseRunId || i.case_run_id === caseRunId)
+        .map((i) => {
+        const c = projectActualCase(run, i);
+        const source = sources[i.case_run_id] ?? manualCaseSource(run)[i.case_run_id];
+        const original = source.original_case.replace(/[<>]/g, "\\$&");
+        return `# 用例名称：${cell(source.name)}\n\n## 原始用例\n\n${original}\n\n## 前置用例\n\n${rowsTable(phaseRows(c.preconditions.recorded, source.preconditions, source, data, c.call_records))}\n## 实际步骤\n\n${rowsTable(manualRows(c.steps, source, data, c.call_records))}\n## 收尾\n\n${rowsTable(phaseRows(c.cleanup.recorded, source.cleanup, source, data, c.call_records))}`;
+    })
+        .join("\n---\n\n");
 }
 export function writeManualCases(directory, run, rebuilt = false) {
     const suffix = rebuilt ? "-rebuilt" : "";
+    const source = readManualSource(directory, run.suite_run_id);
     atomicWrite(join(directory, `actual-steps${suffix}.json`), JSON.stringify(actualStepsDocument(run), null, 2) + "\n");
-    atomicWrite(join(directory, `manual-cases${suffix}.md`), manualCasesMarkdown(run));
+    atomicWrite(join(directory, manualCaseFilename(undefined, rebuilt)), manualCasesMarkdown(run, undefined, source));
+    for (const [index, instance] of run.instances.entries())
+        atomicWrite(join(directory, manualCaseFilename(index, rebuilt)), manualCasesMarkdown(run, instance.case_run_id, source));
 }

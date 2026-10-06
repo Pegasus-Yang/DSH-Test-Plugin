@@ -22,13 +22,13 @@ export class ReportAccess {
       .update(`${path}:${expires}`)
       .digest("hex");
   }
-  /** 已认证报告签发单个录像或账本文件票据，兼容 sandbox 下的严格 Cookie。 */
+  /** 已认证报告签发单个录像、账本或手工用例票据，兼容严格 Cookie。 */
   authorizeFile(req: IncomingMessage): boolean {
     if (!["GET", "HEAD"].includes(req.method ?? "")) return false;
     try {
       const url = new URL(req.url ?? "/", "http://local");
       if (
-        !/^\/test-reports\/run-[\w-]+\/(?:evidence\/browser-[\w-]+\.mp4|events\.jsonl(?:\.gz)?)$/.test(
+        !/^\/test-reports\/run-[\w-]+\/(?:evidence\/browser-[\w-]+\.mp4|events\.jsonl(?:\.gz)?|manual-cases(?:-[1-9]\d*)?(?:-rebuilt)?\.md)$/.test(
           url.pathname,
         )
       )
@@ -147,7 +147,7 @@ export class ReportAccess {
       const suffix = pathname.slice(reportPrefix.length + 1);
       if (
         !pathname.startsWith(reportPrefix + "/") ||
-        !/^run-[\w-]+\/(?:report(?:-rebuilt)?\.html|results(?:-rebuilt)?\.json|actual-steps(?:-rebuilt)?\.json|manual-cases(?:-rebuilt)?\.md|plan\.json|events\.jsonl(?:\.gz)?|evidence\/[\w.-]+)$/.test(
+        !/^run-[\w-]+\/(?:report(?:-rebuilt)?\.html|results(?:-rebuilt)?\.json|actual-steps(?:-rebuilt)?\.json|manual-cases(?:-[1-9]\d*)?(?:-rebuilt)?\.md|plan\.json|events\.jsonl(?:\.gz)?|evidence\/[\w.-]+)$/.test(
           suffix,
         )
       )
@@ -240,7 +240,7 @@ export class ReportAccess {
       else if (extname(target) === ".html") {
         const base = pathname.slice(0, pathname.lastIndexOf("/") + 1);
         const html = readFileSync(target, "utf8").replace(
-          /(src|href)="(evidence\/browser-[\w-]+\.mp4|events\.jsonl(?:\.gz)?)(\?download=1)?"/g,
+          /(src|href)="(evidence\/browser-[\w-]+\.mp4|events\.jsonl(?:\.gz)?|manual-cases(?:-[1-9]\d*)?(?:-rebuilt)?\.md)(\?download=1)?"/g,
           (_match, attribute, file: string, download: string) => {
             const expires = Date.now() + 86400000;
             if (!existsSync(join(target, "..", file))) return _match;

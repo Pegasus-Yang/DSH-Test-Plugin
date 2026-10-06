@@ -1,5 +1,11 @@
 import { afterEach, expect, it } from "vitest";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import {
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -21,6 +27,9 @@ import {
   writeManualCases,
 } from "../../src/manual-case.js";
 import { Recorder, rebuild } from "../../src/recorder.js";
+import { ManualSource, readManualSource } from "../../src/manual-source.js";
+import { createTextInput } from "../../src/case-input.js";
+import { writeReport } from "../../src/report.js";
 import { sample } from "../fixtures/plan.js";
 
 const roots: string[] = [];
@@ -182,7 +191,7 @@ it("未知、复合、错误归属与旧记录不伪装成完整说明", () => {
   const c = projectActualCase(run, i);
   expect(c.completeness).toBe("NOT_RECORDED");
   expect(c.steps).toEqual([]);
-  expect(manualCasesMarkdown(run)).toContain("不根据旧调用事后补写");
+  expect(manualCasesMarkdown(run)).not.toContain("| 1 |");
 });
 
 it("Markdown转义特殊字符，原与只读重建导出一致且不覆盖原文件", async () => {
@@ -191,6 +200,7 @@ it("Markdown转义特殊字符，原与只读重建导出一致且不覆盖原�
   roots.push(root);
   const recorder = new Recorder(root, run.suite_run_id);
   recorder.protect({ password: "secret-pass" });
+  step.calls[0]!.name = "mcp__playwright__browser_run_code";
   step.actual_operations![0]!.description =
     "输入 secret-pass | <script>\n**关键词**";
   const safe = recorder.sanitize(run) as unknown as SuiteRun;
@@ -206,9 +216,10 @@ it("Markdown转义特殊字符，原与只读重建导出一致且不覆盖原�
   );
   expect(markdown).not.toContain("secret-pass");
   expect(markdown).not.toContain("<script>");
-  expect(markdown).toContain("&#124;");
-  expect(markdown).toContain("<br>");
-  expect(markdown).toContain("&#42;&#42;");
+  expect(markdown).toContain("\\|");
+  expect(markdown).not.toMatch(/&#\d+;/);
+  expect(markdown).not.toContain("<br>");
+  expect(markdown).toContain("**关键词**");
   const regenerated = await rebuild(recorder.directory);
   writeManualCases(recorder.directory, regenerated, true);
   expect(
@@ -270,4 +281,200 @@ it("复合表单的短期ref只留在调用依据，不成为手工输入", () =
   expect(
     projectActualCase(run, i).call_records[0]!.args_redacted,
   ).toHaveProperty("fields.0.ref", "e12");
+});
+
+it("手工用例只含五部分和三列，成功动作合并真实输入，无预期留空", () => {
+  const { run, step } = fixture();
+  run.plan.planning = {
+    original_task: "搜索 qa_user_1，确认点赞数不为0",
+    rationale: "拆解依据不能进入原始用例",
+  };
+  step.actual_operations![0]!.state = "ERROR";
+  step.actual_operations![0]!.description = "失败尝试，不应要求执行人重做";
+  step.calls[1]!.args_redacted = {
+    element: "搜索框",
+    ref: "e10",
+    text: "qa_user_1",
+  };
+  const md = manualCasesMarkdown(run);
+  expect(md.match(/^#+ .+$/gm)).toEqual([
+    "# 用例名称：测试",
+    "## 原始用例",
+    "## 前置用例",
+    "## 实际步骤",
+    "## 收尾",
+  ]);
+  expect(md.match(/^\| 序号 \| 操作步骤 \| 预期结果 \|$/gm)).toHaveLength(3);
+  expect(md).toContain("| 1 | 在搜索框中输入「qa_user_1」 |  |");
+  expect(md).toContain("| 2 | 核对点赞不为0 | 不等于 0 |");
+  for (const text of [
+    "本次状态",
+    "完整性",
+    "实际输入",
+    "来源规划",
+    "本次记录",
+    "测试数据",
+    "原规划",
+    "run-one",
+    "失败尝试",
+    "拆解依据",
+    "&#95;",
+  ])
+    expect(md).not.toContain(text);
+  expect(md).toContain(run.plan.planning.original_task);
+});
+
+it("JSON 没有原始文字描述时留空，不使用套件名或任务包装", () => {
+  const { run } = fixture();
+  run.name = "系统自动拼出的执行说明";
+  expect(manualCasesMarkdown(run)).toContain("## 原始用例\n\n\n\n## 前置用例");
+  expect(manualCasesMarkdown(run)).not.toContain(run.name);
+});
+
+it("CSV 原始用例保留用户模板，不混入背景、替换后的任务或参数快照", () => {
+  const { run, i } = fixture();
+  const input = createTextInput(
+    {
+      context: "全局背景",
+      templates: [{ id: "t", text: "输入 ${keyword} 并检查结果", line: 1 }],
+    },
+    { path: "data.csv", content: "keyword\nagent\n" },
+  );
+  i.case_id = input.instances[0]!.id;
+  run.plan.cases[0]!.case_id = i.case_id;
+  run.plan.planning = {
+    original_task: "参数化运行的系统包装",
+    rationale: "分析",
+    input,
+  };
+  const md = manualCasesMarkdown(run);
+  expect(md).toContain("## 原始用例\n\n输入 ${keyword} 并检查结果\n");
+  expect(md).not.toContain("全局背景");
+  expect(md).not.toContain("参数化运行的系统包装");
+});
+
+it("原始手工资料保留输入和地址，审计仍脱敏，重建及单例下载一致", async () => {
+  const { run, i, step } = fixture();
+  const root = mkdtempSync(join(tmpdir(), "manual-original-"));
+  roots.push(root);
+  const recorder = new Recorder(root, run.suite_run_id);
+  const password = "manual-test-only-password",
+    url = "http://example.test/sign_in?token=manual_test_token";
+  recorder.protect({ password });
+  run.plan.planning = {
+    original_task: "访问 " + url + "，登录并检查",
+    rationale: "原文与规划分开",
+  };
+  step.calls[0]!.args_redacted = {
+    element: "密码框",
+    ref: "e1",
+    text: password,
+  };
+  step.calls[1]!.name = "mcp__playwright__browser_navigate";
+  step.calls[1]!.args_redacted = { url };
+  const source = new ManualSource(recorder.directory, run.suite_run_id);
+  for (const op of step.actual_operations!) {
+    const call = step.calls.find((c) => c.call_id === op.tool_call_id)!;
+    source.record(op, call.name, call.args_redacted, op.description);
+  }
+  source.save(run);
+  recorder.snapshot(run);
+  const safe = recorder.sanitize(run) as unknown as SuiteRun;
+  writeManualCases(recorder.directory, safe);
+  writeReport(recorder.directory, safe);
+  const md = readFileSync(join(recorder.directory, "manual-cases.md"), "utf8");
+  expect(md).toContain(`在密码框中输入「${password}」`);
+  expect(md).toContain(`访问 ${url}`);
+  expect(md).not.toContain("[已脱敏]");
+  expect(md).not.toMatch(/&#\d+;/);
+  expect(
+    readFileSync(join(recorder.directory, "manual-cases-1.md"), "utf8"),
+  ).toBe(md);
+  for (const name of [
+    "manual-source.json",
+    "manual-cases.md",
+    "manual-cases-1.md",
+  ])
+    expect(statSync(join(recorder.directory, name)).mode & 0o777).toBe(0o600);
+  for (const name of [
+    "events.jsonl",
+    "results.json",
+    "actual-steps.json",
+    "report.html",
+  ])
+    expect(readFileSync(join(recorder.directory, name), "utf8")).not.toContain(
+      password,
+    );
+  const html = readFileSync(join(recorder.directory, "report.html"), "utf8");
+  expect(html).toContain('href="manual-cases-1.md?download=1"');
+  const downloads = JSON.parse(
+    /id="report-data">([^<]+)/.exec(html)![1]!,
+  ).downloads;
+  for (const data of Object.values(downloads) as { base64: string }[])
+    expect(Buffer.from(data.base64, "base64").toString()).not.toContain(
+      password,
+    );
+  writeManualCases(recorder.directory, await rebuild(recorder.directory), true);
+  expect(
+    readFileSync(join(recorder.directory, "manual-cases-rebuilt.md"), "utf8"),
+  ).toBe(md);
+  expect(
+    readFileSync(join(recorder.directory, "manual-cases-1-rebuilt.md"), "utf8"),
+  ).toBe(md);
+  expect(i.status).toBe("PASS");
+});
+
+it("前置与收尾按原定义排序、分别编号，声明的预期保留", () => {
+  const { run } = fixture();
+  run.plan.cases[0]!.preconditions = [
+    {
+      step_id: "condition",
+      kind: "assertion",
+      description: "确认账号可用",
+      required: true,
+      depends_on: [],
+      assertion: {
+        observation_ref: "read.likes",
+        operator: "eq",
+        literal: 0,
+        rule_ref: "r",
+      },
+    },
+  ];
+  run.plan.cases[0]!.cleanup = [
+    {
+      step_id: "close",
+      kind: "intent",
+      description: "退出登录",
+      required: true,
+      depends_on: [],
+    },
+  ];
+  const md = manualCasesMarkdown(run);
+  expect(md).toContain(
+    "## 前置用例\n\n| 序号 | 操作步骤 | 预期结果 |\n| --- | --- | --- |\n| 1 | 确认账号可用 | 等于 0 |",
+  );
+  expect(md).toContain("| 1 | 退出登录 |  |");
+});
+
+it("损坏或其他运行的原始手工资料明确报错，不猜测还原", () => {
+  const { run } = fixture();
+  const root = mkdtempSync(join(tmpdir(), "manual-invalid-"));
+  roots.push(root);
+  writeFileSync(join(root, "manual-source.json"), "{invalid");
+  expect(() => readManualSource(root, run.suite_run_id)).toThrow(
+    "原始资料无效",
+  );
+  writeFileSync(
+    join(root, "manual-source.json"),
+    JSON.stringify({
+      schema_version: "1",
+      suite_run_id: "another",
+      cases: {},
+      operations: {},
+    }),
+  );
+  expect(() => readManualSource(root, run.suite_run_id)).toThrow(
+    "不属于本次运行",
+  );
 });

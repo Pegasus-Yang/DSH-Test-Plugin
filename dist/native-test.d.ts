@@ -67,6 +67,7 @@ export declare class NativeTest {
     private mediaDeadline?;
     private task;
     private readonly originalTask;
+    private readonly manualSource;
     private draft?;
     private reviewCall?;
     private reviewDismissed;

@@ -6,6 +6,7 @@ import { NativeTests } from "../../src/native-test.js";
 import { sample } from "../fixtures/plan.js";
 import { rebuild } from "../../src/recorder.js";
 import { projectActualCase } from "../../src/actual-operations.js";
+import { ManualSource } from "../../src/manual-source.js";
 
 const cleanups: (() => void)[] = [];
 afterEach(() => cleanups.splice(0).forEach((f) => f()));
@@ -311,12 +312,81 @@ it("两个实际动作分别保存说明与子调用，父封装不重复编号�
   expect(new Set(c.call_records.map((c) => c.call_id)).size).toBe(2);
   expect(
     readFileSync(join(test.recorder.directory, "manual-cases.md"), "utf8"),
-  ).toContain("| 2 | 在搜索输入框输入关键词");
+  ).toContain("| 2 | 在搜索框中输入「agent」");
   expect(
     JSON.parse(
       readFileSync(join(test.recorder.directory, "actual-steps.json"), "utf8"),
     ).cases[0].steps,
   ).toHaveLength(3);
+});
+
+it("手工原始输入在派发前落盘，导出真实值且运行审计继续脱敏", async () => {
+  const t = setup();
+  const password = "manual-native-test-only-password";
+  const plan = sample();
+  plan.cases[0]!.datasets[0]!.inputs = { password };
+  await t.manager.start(t.agent, "登录并检查", plan);
+  await t.step();
+  const test = t.manager.sessions.get("origin")!;
+  t.definitions.set("mcp__playwright__browser_type", {
+    execute: () => {
+      const source = JSON.parse(
+        readFileSync(
+          join(test.recorder.directory, "manual-source.json"),
+          "utf8",
+        ),
+      );
+      expect(
+        Object.values(source.operations).some(
+          (op: any) => op.inputs.text === password,
+        ),
+      ).toBe(true);
+      expect(
+        readFileSync(join(test.recorder.directory, "results.json"), "utf8"),
+      ).not.toContain(password);
+      return { typed: true };
+    },
+  });
+  const typed = await t.call("test_execute_operation", {
+    description: "输入密码 " + password,
+    tool_name: "mcp__playwright__browser_type",
+    arguments: { element: "密码框", ref: "e1", text: password },
+  });
+  expect(typed.isError).toBe(false);
+  await t.step();
+  await t.step();
+  await t.call("test_finish");
+  expect(
+    readFileSync(join(test.recorder.directory, "manual-cases.md"), "utf8"),
+  ).toContain(`在密码框中输入「${password}」`);
+  expect(
+    readFileSync(join(test.recorder.directory, "events.jsonl"), "utf8"),
+  ).not.toContain(password);
+  expect(
+    readFileSync(join(test.recorder.directory, "report.html"), "utf8"),
+  ).not.toContain(password);
+});
+
+it("原始手工输入保存失败时不派发业务工具", async () => {
+  const t = setup();
+  await t.manager.start(t.agent, "输入关键词", sample());
+  await t.step();
+  const write = vi
+    .spyOn(ManualSource.prototype, "save")
+    .mockImplementationOnce(() => {
+      throw new Error("测试原始资料写失败");
+    });
+  try {
+    const result = await t.call("test_execute_operation", {
+      description: "输入关键词",
+      tool_name: "mcp__playwright__browser_type",
+      arguments: { element: "搜索框", ref: "e1", text: "agent" },
+    });
+    expect(result.isError).toBe(true);
+    expect(t.dispatched).not.toContain("mcp__playwright__browser_type");
+  } finally {
+    write.mockRestore();
+  }
 });
 
 it("工具Schema给出完整MCP名称，省略前缀提示正确名称且不会派发", async () => {

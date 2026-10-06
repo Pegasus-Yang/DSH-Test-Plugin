@@ -114,12 +114,12 @@ export function operationInputs(
   op: ActualOperation,
 ): Record<string, Json> {
   const call = step.calls.find((c) => c.call_id === op.tool_call_id);
-  if (
-    !call?.args_redacted ||
-    typeof call.args_redacted !== "object" ||
-    Array.isArray(call.args_redacted)
-  )
-    return {};
+  return operationArguments(call?.args_redacted);
+}
+
+/** 只保留人可以使用的输入，不将短期定位或执行脚本写入手工用例。 */
+export function operationArguments(value: unknown): Record<string, Json> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   const withoutLocators = (value: Json): Json =>
     Array.isArray(value)
       ? value.map(withoutLocators)
@@ -135,7 +135,7 @@ export function operationInputs(
               .map(([key, v]) => [key, withoutLocators(v)]),
           )
         : value;
-  return withoutLocators(call.args_redacted) as Record<string, Json>;
+  return withoutLocators(value as Json) as Record<string, Json>;
 }
 
 export function projectActualCase(

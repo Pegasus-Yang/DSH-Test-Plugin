@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expand, parsePlan, type SuiteRun } from "../../src/contracts.js";
 import { writeReport } from "../../src/report.js";
+import { writeManualCases } from "../../src/manual-case.js";
 import { sample } from "../fixtures/plan.js";
 function render(change: (run: SuiteRun, directory: string) => void): string {
   const dir = mkdtempSync(join(tmpdir(), "report-test-"));
@@ -30,6 +31,7 @@ function render(change: (run: SuiteRun, directory: string) => void): string {
   };
   change(run, dir);
   try {
+    writeManualCases(dir, run);
     writeReport(dir, run);
     return readFileSync(join(dir, "report.html"), "utf8");
   } finally {

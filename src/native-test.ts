@@ -69,6 +69,7 @@ import {
 } from "./actual-operations.js";
 import type { ActualOperation } from "./contracts.js";
 import { writeManualCases } from "./manual-case.js";
+import { ManualSource } from "./manual-source.js";
 
 declare module "@deepseek-ai/dsh-llm" {
   interface MessageSourceMap {
@@ -331,6 +332,7 @@ export class NativeTest {
   private mediaDeadline?: number;
   private task: string;
   private readonly originalTask: string;
+  private readonly manualSource: ManualSource;
   private draft?: SuiteRun["plan"];
   private reviewCall?: string;
   private reviewDismissed = false;
@@ -371,7 +373,7 @@ export class NativeTest {
       incomplete: false,
       resource_quarantined: false,
       manifest: {
-        plugin_version: "0.11.0",
+        plugin_version: "0.11.1",
         plan_review: review,
         execution: "native-conversation",
         origin_session_id: agent.id,
@@ -379,6 +381,7 @@ export class NativeTest {
         actual_operations_schema: operationSchemaVersion,
       },
     };
+    this.manualSource = new ManualSource(this.recorder.directory, id);
   }
   get id(): string {
     return this.agent.id;
@@ -1731,6 +1734,7 @@ export class NativeTest {
       };
       records.push(operation);
       this.operations.set(id, operation);
+      this.manualSource.record(operation, name, args, explanation.description);
       this.recorder.event("operation_registered", operation, operation.binding);
       this.recorder.event(
         "operation_linked",
@@ -2044,6 +2048,7 @@ export class NativeTest {
   }
   private save(): void {
     this.recorder.snapshot(this.run);
+    this.manualSource.save(this.run);
     try {
       this.owner.preview.sync(this.run, {
         directory: this.recorder.directory,

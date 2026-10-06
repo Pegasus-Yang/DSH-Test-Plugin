@@ -14,7 +14,8 @@ import {
   operationLabels,
   type ActualRow,
 } from "./actual-operations.js";
-import { actualStepsDocument, manualCasesMarkdown } from "./manual-case.js";
+import { actualStepsDocument, manualCaseFilename } from "./manual-case.js";
+import { join } from "node:path";
 const escape = (value: unknown): string =>
   String(value ?? "").replace(
     /[&<>"']/g,
@@ -63,6 +64,12 @@ export function writeReport(
   const data = new ReportData();
   const download = (name: string, bytes: Buffer, mime: string, label: string) =>
     `<a href="#" data-report-download="${data.download(bytes, mime)}" download="${escape(name)}">${escape(label)}</a>`;
+  const manualDownload = (index?: number) => {
+    const file = manualCaseFilename(index, filename === "report-rebuilt.html");
+    return existsSync(join(directory, file))
+      ? `<a href="${file}?download=1" download="${file}">${index === undefined ? "下载完整批次手工用例" : "下载手工用例 Markdown"}</a>`
+      : `<span>手工用例未生成，请重建报告</span>`;
+  };
   const callDetails = (id: string, value: unknown) => {
     data.call(id, value);
     return `<details class="inspect" data-report-call="${escape(id)}"><summary>查看原生调用依据（脱敏）</summary><pre></pre></details>`;
@@ -131,7 +138,7 @@ export function writeReport(
           })
           .join("")}</div>`;
       const actualPanel = hasActual
-        ? `<div class="panel actual" id="panel-${index}-actual" role="tabpanel" aria-labelledby="tab-${index}-actual" data-panel="actual"><div class="actual-intro"><strong>实际步骤说明：${actual.completeness === "COMPLETE" ? "已完整记录" : "需复核"}</strong><p>操作结果来自原生工具，业务结果看检查。没有独立检查的中间预期保留为待补充。</p>${actual.completeness_reasons.map((r) => `<p class="reason">${escape(r)}</p>`).join("")}<div class="footer-links">${download(`actual-steps-${i.case_run_id}.json`, Buffer.from(JSON.stringify({ ...actualStepsDocument(run), cases: [actual] }, null, 2)), "application/json", "下载实际步骤 JSON")}${download(`manual-cases-${i.case_run_id}.md`, Buffer.from(manualCasesMarkdown(run, i.case_run_id)), "text/markdown", "下载手工用例 Markdown")}</div></div>${actual.preconditions.recorded.length ? `<details class="inspect"><summary>前置操作 · ${actual.preconditions.recorded.length} 条</summary>${actualRows(actual.preconditions.recorded)}</details>` : ""}${actualRows(actual.steps)}${actual.cleanup.recorded.length ? `<details class="inspect"><summary>业务收尾 · ${actual.cleanup.recorded.length} 条</summary>${actualRows(actual.cleanup.recorded)}</details>` : ""}${actual.not_dispatched.length ? `<details class="inspect"><summary>未执行的说明 · ${actual.not_dispatched.length} 条（不计序号）</summary>${actualRows(actual.not_dispatched)}</details>` : ""}</div>`
+        ? `<div class="panel actual" id="panel-${index}-actual" role="tabpanel" aria-labelledby="tab-${index}-actual" data-panel="actual"><div class="actual-intro"><strong>实际步骤说明：${actual.completeness === "COMPLETE" ? "已完整记录" : "需复核"}</strong><p>操作结果来自原生工具，业务结果看检查。没有独立检查的中间预期保留为待补充。</p>${actual.completeness_reasons.map((r) => `<p class="reason">${escape(r)}</p>`).join("")}<div class="footer-links">${download(`actual-steps-${i.case_run_id}.json`, Buffer.from(JSON.stringify({ ...actualStepsDocument(run), cases: [actual] }, null, 2)), "application/json", "下载实际步骤 JSON")}${manualDownload(index)}</div></div>${actual.preconditions.recorded.length ? `<details class="inspect"><summary>前置操作 · ${actual.preconditions.recorded.length} 条</summary>${actualRows(actual.preconditions.recorded)}</details>` : ""}${actualRows(actual.steps)}${actual.cleanup.recorded.length ? `<details class="inspect"><summary>业务收尾 · ${actual.cleanup.recorded.length} 条</summary>${actualRows(actual.cleanup.recorded)}</details>` : ""}${actual.not_dispatched.length ? `<details class="inspect"><summary>未执行的说明 · ${actual.not_dispatched.length} 条（不计序号）</summary>${actualRows(actual.not_dispatched)}</details>` : ""}</div>`
         : "";
       const media = recordingMedia(directory, run, i);
       const caseMs = i.steps.reduce((n, s) => n + s.duration_ms, 0);
@@ -204,7 +211,7 @@ export function writeReport(
     )
     .join("");
   const eventPath = safePath(directory, "events.jsonl");
-  const links = `<div class="footer-links">${download("actual-steps.json", Buffer.from(JSON.stringify(actualStepsDocument(run), null, 2)), "application/json", "下载完整批次实际步骤")}${download("manual-cases.md", Buffer.from(manualCasesMarkdown(run)), "text/markdown", "下载完整批次手工用例")}${download("results.json", Buffer.from(JSON.stringify(redact(run), null, 2)), "application/json", "下载运行数据")}${download("plan.json", Buffer.from(JSON.stringify(redact(run.plan), null, 2)), "application/json", "下载冻结计划")}${existsSync(eventPath) ? `<a href="events.jsonl?download=1" download="events.jsonl">下载事件账本</a>` : ""}</div>`;
+  const links = `<div class="footer-links">${download("actual-steps.json", Buffer.from(JSON.stringify(actualStepsDocument(run), null, 2)), "application/json", "下载完整批次实际步骤")}${manualDownload()}${download("results.json", Buffer.from(JSON.stringify(redact(run), null, 2)), "application/json", "下载运行数据")}${download("plan.json", Buffer.from(JSON.stringify(redact(run.plan), null, 2)), "application/json", "下载冻结计划")}${existsSync(eventPath) ? `<a href="events.jsonl?download=1" download="events.jsonl">下载事件账本</a>` : ""}</div>`;
   const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escape(run.name)} · 测试报告</title><style>${reportStyle}</style></head><body><nav class="rail" aria-label="报告导航"><div class="brand">DSH / TEST REPORT</div>${[
     ["overview", "home", "概览"],
     ["cases", "list-details", "测试用例"],

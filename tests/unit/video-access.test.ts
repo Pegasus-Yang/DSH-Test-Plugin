@@ -196,3 +196,45 @@ it("账本以独立流式附件下载，票据只准入指定运行文件和GET/
     "media=",
   );
 });
+
+it("手工用例独立下载，原始资料不开放；票据不能换实例、文件或写入", async () => {
+  const t = setup();
+  const directory = join(roots.at(-1)!, "run-one");
+  const manual = "# 用例名称：登录\n\n| 1 | 输入 qa_user_1 |  |\n";
+  writeFileSync(join(directory, "manual-cases-1.md"), manual);
+  writeFileSync(join(directory, "manual-source.json"), '{"private":true}');
+  writeFileSync(
+    join(directory, "report.html"),
+    '<a href="manual-cases-1.md?download=1" download>手工用例</a>',
+  );
+  const report = await request(t.access, "/test-reports/run-one/report.html");
+  const link = report.body
+    .toString()
+    .match(/href="([^"]+)"/)![1]
+    .replaceAll("&amp;", "&");
+  const url = "/test-reports/run-one/" + link;
+  expect(t.access.authorizeFile({ url, method: "GET" } as never)).toBe(true);
+  expect(t.access.authorizeFile({ url, method: "HEAD" } as never)).toBe(true);
+  expect(t.access.authorizeFile({ url, method: "POST" } as never)).toBe(false);
+  for (const target of [
+    url.replace("-1.md", "-2.md"),
+    url.replace("-1.md", "-1-rebuilt.md"),
+    url.replace("manual-cases-1.md", "manual-source.json"),
+  ])
+    expect(
+      t.access.authorizeFile({ url: target, method: "GET" } as never),
+    ).toBe(false);
+  const file = await request(t.access, url);
+  expect(file.body.toString()).toBe(manual);
+  expect(file.headers["Content-Disposition"]).toContain("attachment");
+  expect(
+    (await request(t.access, "/test-reports/run-one/manual-source.json"))
+      .status,
+  ).toBe(404);
+  expect(
+    (await request(t.access, "/test-reports/run-one/manual-cases-0.md")).status,
+  ).toBe(404);
+  expect(readFileSync(join(directory, "report.html"), "utf8")).not.toContain(
+    "media=",
+  );
+});

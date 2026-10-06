@@ -4,7 +4,7 @@
 
 [简体中文](README.md) · English
 
-[Version v0.11.0](https://github.com/Pegasus-Yang/DSH-Test-Plugin/tree/v0.11.0) · [Changelog (Chinese)](changelog.md) · [MIT License](LICENSE) · [Documentation](doc/README.md) · [Issues](https://github.com/Pegasus-Yang/DSH-Test-Plugin/issues)
+[Version v0.11.1](https://github.com/Pegasus-Yang/DSH-Test-Plugin/tree/v0.11.1) · [Changelog (Chinese)](changelog.md) · [MIT License](LICENSE) · [Documentation](doc/README.md) · [Issues](https://github.com/Pegasus-Yang/DSH-Test-Plugin/issues)
 
 DSH Test Plugin is a native TypeScript plugin for DeepSeek Harness (DSH), supporting browser tests and HTTP GET JSON checks. It uses the current conversation's model, tools, approvals, and persistence, evaluates assertions against captured observations and sourced expectations, and produces static HTML reports.
 
@@ -32,7 +32,7 @@ The plugin presents a text plan, executes each step with progress updates, and r
 | Browser recordings | Independent toggle, off by default; per-instance MP4 playback, seeking and download; no media UI for API instances |
 | Reports and cleanup | Static HTML reports with steps, assertions, and attachments; stop, cleanup, and environment recovery |
 
-Version 0.11.0 adds actual-step recording and manual-case export, fixes file resolution against the current conversation's workspace, restricts browser release operations, and reduces report and ledger storage. See the [actual-step guide (Chinese)](doc/user-guide/实际步骤与手工用例.md), [changelog (Chinese)](changelog.md), and [GitLab regression examples (Chinese)](doc/user-guide/GitLab复杂用例.md).
+Version 0.11.1 simplifies manual cases into five sections and three-column step tables, preserving real execution data and URLs. Results, failures, and evidence remain in the run report. Actual-step recording, workspace fixes, and storage improvements were introduced in 0.11.0. See the [actual-step guide (Chinese)](doc/user-guide/实际步骤与手工用例.md), [changelog (Chinese)](changelog.md), and [GitLab regression examples (Chinese)](doc/user-guide/GitLab复杂用例.md).
 
 ## Screenshots
 
@@ -67,17 +67,17 @@ Install the host according to its own documentation. Revalidate compatibility af
 Enter this repository URL in the DSH plugin manager, install it, and enable the plugin:
 
 ```text
-https://github.com/Pegasus-Yang/DSH-Test-Plugin.git#v0.11.0
+https://github.com/Pegasus-Yang/DSH-Test-Plugin.git#v0.11.1
 ```
 
 Alternatively, run from the DSH source checkout:
 
 ```sh
-pnpm dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.11.0
+pnpm dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.11.1
 pnpm dsh web
 ```
 
-For a standalone CLI use `dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.11.0` and `dsh web`. Stop an existing host before CLI installation and restart the same profile afterwards. Use the same `DSH_HOME` for installation and startup.
+For a standalone CLI use `dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.11.1` and `dsh web`. Stop an existing host before CLI installation and restart the same profile afterwards. Use the same `DSH_HOME` for installation and startup.
 
 Git releases include `dist` and execute no plugin build scripts at installation. No source clone, `link-host`, or local debugging files are required. Configure native tools and a dedicated Playwright MCP using the [deployment guide](doc/deployment/安装与运维.en.md#configure-the-installed-plugin).
 
@@ -131,7 +131,7 @@ File paths resolve against the workspace of the conversation that invokes the co
 
 ## Live browser preview and recording
 
-Version 0.11.0 includes independent recording and report playback. Install the GitHub tag above; remove an older plugin installation first, install the new tag, then restart the same profile.
+Version 0.11.1 includes independent recording and report playback. Install the GitHub tag above; remove an older plugin installation first, install the new tag, then restart the same profile.
 
 Install `browscreen[video]==0.3.0` from PyPI on the DSH host first (Python ≥3.14; stable versions `>=0.3.0,<0.4.0`). In **Settings → 测试插件 → 浏览器预览与录像**, enable preview, click 检测安装, select the capture port and dedicated Playwright MCP, and save. The command defaults to `browscreen`; advanced settings accept its absolute executable path. No source checkout or separate service startup is required.
 
@@ -141,7 +141,7 @@ The floating preview waits for the current page's CDP and a valid first frame. A
 
 ## Commands and reports
 
-These commands and UI actions describe version 0.11.0; see the [changelog](changelog.md) for earlier versions.
+These commands and UI actions describe version 0.11.1; see the [changelog](changelog.md) for earlier versions.
 
 | Command | Purpose |
 | --- | --- |

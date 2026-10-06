@@ -7,7 +7,7 @@ export declare class ReportAccess {
     origin?: () => string;
     private mediaKey;
     private fileToken;
-    /** 已认证报告签发单个录像或账本文件票据，兼容 sandbox 下的严格 Cookie。 */
+    /** 已认证报告签发单个录像、账本或手工用例票据，兼容严格 Cookie。 */
     authorizeFile(req: IncomingMessage): boolean;
     private selected?;
     constructor(outputRoot: string);
