@@ -97,3 +97,40 @@ it("网页报告使用宿主HTTP地址，避免相对链接被聊天渲染器解
     "http://127.0.0.1:3080/test-reports/run-example/report.html",
   );
 });
+
+it("实际步骤及手工用例文件仅开放规定名称，Markdown以附件下载", () => {
+  const { access, root } = setup();
+  for (const suffix of ["", "-rebuilt"]) {
+    writeFileSync(
+      join(root, `run-example/actual-steps${suffix}.json`),
+      '{"format":"dsh-actual-steps"}',
+    );
+    writeFileSync(
+      join(root, `run-example/manual-cases${suffix}.md`),
+      "# 手工用例",
+    );
+    const json = get(
+      access,
+      `/test-reports/run-example/actual-steps${suffix}.json`,
+    );
+    expect(json.status).toBe(200);
+    expect(json.headers["Content-Type"]).toContain("application/json");
+    const md = get(
+      access,
+      `/test-reports/run-example/manual-cases${suffix}.md`,
+    );
+    expect(md.status).toBe(200);
+    expect(md.headers["Content-Type"]).toBe("text/markdown; charset=utf-8");
+    expect(md.headers["Content-Disposition"]).toContain("attachment");
+    expect(
+      get(access, `/test-reports/run-example/manual-cases${suffix}.md`, "HEAD")
+        .body,
+    ).toBeUndefined();
+    expect(
+      get(access, `/test-reports/run-example/manual-cases${suffix}.md`, "POST")
+        .status,
+    ).toBe(405);
+  }
+  writeFileSync(join(root, "run-example/private.md"), "private");
+  expect(get(access, "/test-reports/run-example/private.md").status).toBe(404);
+});

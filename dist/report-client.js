@@ -7,7 +7,7 @@ export function reportInteractions() {
     const filters = ["case", "data", "status"].map((id) => document.getElementById(id));
     const search = document.getElementById("search");
     let selected = cases[0]?.id;
-    let tab = "steps";
+    let tab = cases[0]?.querySelector('[data-tab="actual"]') ? "actual" : "steps";
     const navigate = (view) => {
         for (const page of document.querySelectorAll("[data-view]"))
             page.hidden = page.dataset.view !== view;
@@ -20,7 +20,7 @@ export function reportInteractions() {
         const active = cases.find((item) => item.id === selected);
         if (active &&
             ![...active.querySelectorAll("[data-tab]")].some((button) => button.dataset.tab === value))
-            value = "steps";
+            value = active.querySelector('[data-tab="actual"]') ? "actual" : "steps";
         tab = value;
         for (const video of document.querySelectorAll("video"))
             video.pause();

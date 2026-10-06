@@ -147,7 +147,7 @@ export class ReportAccess {
       const suffix = pathname.slice(reportPrefix.length + 1);
       if (
         !pathname.startsWith(reportPrefix + "/") ||
-        !/^run-[\w-]+\/(?:report(?:-rebuilt)?\.html|results(?:-rebuilt)?\.json|plan\.json|events\.jsonl|evidence\/[\w.-]+)$/.test(
+        !/^run-[\w-]+\/(?:report(?:-rebuilt)?\.html|results(?:-rebuilt)?\.json|actual-steps(?:-rebuilt)?\.json|manual-cases(?:-rebuilt)?\.md|plan\.json|events\.jsonl|evidence\/[\w.-]+)$/.test(
           suffix,
         )
       )
@@ -166,11 +166,17 @@ export class ReportAccess {
         ".jsonl": "text/plain; charset=utf-8",
         ".png": "image/png",
         ".mp4": "video/mp4",
+        ".md": "text/markdown; charset=utf-8",
       };
       res.setHeader(
         "Content-Type",
         types[extname(target)] ?? "application/octet-stream",
       );
+      if (extname(target) === ".md")
+        res.setHeader(
+          "Content-Disposition",
+          `attachment; filename="${target.split(sep).at(-1)}"`,
+        );
       if (extname(target) === ".html")
         res.setHeader(
           "Content-Security-Policy",

@@ -138,6 +138,23 @@ export interface AssertionResult {
     evidence_refs: string[];
     plan_revision: number;
 }
+/** 在派发之前保存说明，执行状态只能由原生调用事件结算。 */
+export interface ActualOperation {
+    operation_id: string;
+    order_in_step: number;
+    binding: Binding;
+    description: string;
+    description_source: "model" | "capture_reason" | "template";
+    parent_call_id: string;
+    tool_call_id: string;
+    granularity: "atomic" | "composite";
+    dispatch_observed: boolean;
+    state: "REGISTERED" | "DISPATCHED" | "SUCCEEDED" | "ERROR" | "NOT_DISPATCHED" | "UNKNOWN";
+    created_at: string;
+    dispatched_at?: string;
+    finished_at?: string;
+    reason?: string;
+}
 export interface StepResult {
     step_id: string;
     phase: Phase;
@@ -151,6 +168,8 @@ export interface StepResult {
     calls: CallRecord[];
     observations: Observation[];
     assertion?: AssertionResult;
+    actual_operations?: ActualOperation[];
+    actual_operation_notes?: string[];
     cleanup_applicable?: boolean;
     capture_attempts?: {
         capture: Record<string, Capture>;

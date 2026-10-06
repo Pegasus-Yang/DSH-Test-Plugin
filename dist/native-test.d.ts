@@ -11,6 +11,7 @@ import { PreviewManager } from "./preview.js";
 import { type ProgressSnapshot } from "./progress-model.js";
 import { type TestConfig } from "./config.js";
 import type { TextInput } from "./case-input.js";
+import type { ActualOperation } from "./contracts.js";
 declare module "@deepseek-ai/dsh-llm" {
     interface MessageSourceMap {
         "plugin:test": {
@@ -57,6 +58,9 @@ export declare class NativeTest {
     private current?;
     private calls;
     private pendingTools;
+    private trustedCalls;
+    private operations;
+    private delegatedFailures;
     private disposers;
     private timer?;
     private stoppingTimer?;
@@ -112,8 +116,9 @@ export declare class NativeTest {
     };
     presentation(): ProgressSnapshot;
     private bind;
+    private isTrusted;
     private settle;
-    call(name: string, args: unknown, parent: ToolRunContext): Promise<{
+    call(name: string, args: unknown, parent: ToolRunContext, explanation?: Pick<ActualOperation, "description" | "description_source">): Promise<{
         callId: ToolCallId;
         result: ToolExecutionResult;
     }>;
@@ -123,6 +128,7 @@ export declare class NativeTest {
     private requireSettled;
     private cleanupAllowed;
     private armStopDeadline;
+    private exportManualCases;
     private save;
     private emergency;
     dispose(): void;

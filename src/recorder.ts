@@ -20,6 +20,7 @@ import {
   type Json,
   type SuiteRun,
 } from "./contracts.js";
+import { sealOperations } from "./actual-operations.js";
 export interface RecordedEvent {
   type: string;
   binding: Binding | { suite_run_id: string };
@@ -170,8 +171,13 @@ export class Recorder {
     }
   }
   snapshot(run: SuiteRun): void {
-    this.event("state_saved", run);
-    atomicJson(join(this.directory, "results.json"), this.sanitize(run));
+    try {
+      this.event("state_saved", run);
+      atomicJson(join(this.directory, "results.json"), this.sanitize(run));
+    } catch (error) {
+      this.failed = error instanceof Error ? error : new Error(String(error));
+      throw this.failed;
+    }
   }
   json(name: string, value: unknown): void {
     try {
@@ -213,6 +219,8 @@ export function rebuild(directory: string): SuiteRun {
   const pending = new Map<string, { case_run_id: string }>();
   const applied = new Set<string>();
   const revisions = new Set<number>();
+  const operationEvents: { seq: number; type: string; payload: any }[] = [];
+  let stateSeq = -1;
   let seq = 0;
   for (let i = 0; i < lines.length; i++) {
     if (!lines[i] && i === lines.length - 1) continue;
@@ -227,7 +235,18 @@ export function rebuild(directory: string): SuiteRun {
       throw new Error("JSONL中间损坏，拒绝重建");
     }
     if (e.seq !== seq++) throw new Error("事件序列不连续");
-    if (e.type === "state_saved") state = e.payload;
+    if (e.type === "state_saved") {
+      state = e.payload;
+      stateSeq = e.seq;
+    }
+    if (
+      [
+        "operation_registered",
+        "operation_dispatched",
+        "operation_finished",
+      ].includes(e.type)
+    )
+      operationEvents.push(e);
     if (e.type === "plan_revised") revisions.add(e.payload.revision);
     if (e.type === "revision_applied")
       applied.add(e.payload.case_run_id + ":" + e.payload.revision);
@@ -236,6 +255,24 @@ export function rebuild(directory: string): SuiteRun {
       pending.delete(e.payload.call_id);
   }
   if (!state) throw new Error("没有可重建的状态快照");
+  for (const event of operationEvents.filter((e) => e.seq > stateSeq)) {
+    const op = event.payload;
+    const step = state.instances
+      .find((i) => i.case_run_id === op.binding.case_run_id)
+      ?.steps.find(
+        (s) => s.step_id === op.binding.step_id && s.phase === op.binding.phase,
+      );
+    if (!step) continue;
+    const records = (step.actual_operations ??= []);
+    const index = records.findIndex((r) => r.operation_id === op.operation_id);
+    if (index < 0) records.push(op);
+    else if (
+      !["UNKNOWN", "NOT_DISPATCHED", "SUCCEEDED", "ERROR"].includes(
+        records[index]!.state,
+      )
+    )
+      records[index] = op;
+  }
   for (const instance of state.instances)
     for (const revision of instance.applied_revisions)
       if (
@@ -275,5 +312,6 @@ export function rebuild(directory: string): SuiteRun {
     state.resource_quarantined = true;
     state.incomplete = true;
   }
+  sealOperations(state, "只读重建：进程中断或在途操作未获得最终结果");
   return state;
 }

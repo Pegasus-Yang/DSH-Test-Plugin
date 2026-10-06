@@ -12,6 +12,7 @@ import {
   type Step,
   type StepResult,
   type SuiteRun,
+  type ActualOperation,
 } from "./contracts.js";
 import { Recorder, redact } from "./recorder.js";
 interface CaptureHost {
@@ -20,6 +21,7 @@ interface CaptureHost {
     name: string,
     args: unknown,
     parent: ToolRunContext,
+    explanation?: Pick<ActualOperation, "description" | "description_source">,
   ): Promise<{ callId: string; result: ToolExecutionResult }>;
 }
 
@@ -145,7 +147,11 @@ export async function captureStep(
   for (const [name, cap] of Object.entries(captures).filter(
     ([, c]) => c.kind === "http",
   )) {
-    const response = await host.call("test_api_get", { url: cap.url }, exec);
+    const reason = result.capture_attempts?.at(-1)?.reason;
+    const response = await host.call("test_api_get", { url: cap.url }, exec, {
+      description: `${reason ?? step.description}；发送 GET 请求并采集 ${name}`,
+      description_source: reason ? "capture_reason" : "template",
+    });
     if (response.result.isError) throw new Error("API采集工具失败");
     const evidence = recorder.evidence(
       randomUUID() + ".json",

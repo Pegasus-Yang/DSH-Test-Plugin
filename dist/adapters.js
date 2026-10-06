@@ -80,7 +80,11 @@ export async function captureStep(host, recorder, suite, step, result, binding, 
             save(name, field(data, "values." + name), response.callId, "playwright-dom-v1", evidence.evidence_id, "values." + name);
     }
     for (const [name, cap] of Object.entries(captures).filter(([, c]) => c.kind === "http")) {
-        const response = await host.call("test_api_get", { url: cap.url }, exec);
+        const reason = result.capture_attempts?.at(-1)?.reason;
+        const response = await host.call("test_api_get", { url: cap.url }, exec, {
+            description: `${reason ?? step.description}；发送 GET 请求并采集 ${name}`,
+            description_source: reason ? "capture_reason" : "template",
+        });
         if (response.result.isError)
             throw new Error("API采集工具失败");
         const evidence = recorder.evidence(randomUUID() + ".json", JSON.stringify(redact(response.result), null, 2), "application/json");

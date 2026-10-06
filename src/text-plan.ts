@@ -412,6 +412,17 @@ export function validateTextExpectation(
   text: string,
   assertion: AssertionSpec,
 ): void {
+  if (
+    /(?:正文|文本|body|text)[\s\S]*(?:不(?:为|是)?空|非空|not\s+empty)|non[\s-]*empty[\s\S]*(?:正文|文本|body|text)/i.test(
+      text,
+    )
+  ) {
+    if (assertion.operator !== "neq" || assertion.literal !== "")
+      throw new Error(
+        '正文或文本不为空应使用text采集、neq及expected_value空字符串（""），不能改为数字或字符串0，也不能用可见性替代正文检查',
+      );
+    return;
+  }
   const numeric = numericExpectation(text);
   if (!numeric) return;
   if (

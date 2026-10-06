@@ -5,6 +5,7 @@ import { join } from "node:path";
 import type { NativeTests } from "./native-test.js";
 import { atomicJson, rebuild } from "./recorder.js";
 import { writeReport } from "./report.js";
+import { writeManualCases } from "./manual-case.js";
 
 export interface ReportResult {
   run_id: string;
@@ -91,6 +92,7 @@ export class TestUiAccess {
         const directory = join(this.tests.config.outputRoot, id);
         if (!existsSync(directory)) throw new Error("运行记录不存在");
         const run = rebuild(directory);
+        writeManualCases(directory, run, true);
         atomicJson(join(directory, "results-rebuilt.json"), run);
         writeReport(directory, run, "report-rebuilt.html");
         value = {

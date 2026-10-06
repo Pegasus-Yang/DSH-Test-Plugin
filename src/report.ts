@@ -7,6 +7,14 @@ import { reportStyle } from "./report-style.js";
 import { reportInteractions } from "./report-client.js";
 import { reportIcons } from "./report-icons.js";
 import { recordingMedia } from "./report-media.js";
+import {
+  projectActualCase,
+  inputText,
+  expectedText,
+  operationLabels,
+  type ActualRow,
+} from "./actual-operations.js";
+import { actualStepsDocument, manualCasesMarkdown } from "./manual-case.js";
 const escape = (value: unknown): string =>
   String(value ?? "").replace(
     /[&<>"']/g,
@@ -52,6 +60,8 @@ export function writeReport(
   filename = "report.html",
 ): void {
   const stats = statistics(run);
+  const download = (name: string, bytes: Buffer, mime: string, label: string) =>
+    `<a href="data:${mime};base64,${bytes.toString("base64")}" download="${escape(name)}">${escape(label)}</a>`;
   const totalMs = run.finished_at
     ? Date.parse(run.finished_at) - Date.parse(run.created_at)
     : NaN;
@@ -93,6 +103,26 @@ export function writeReport(
   const caseKey = (caseId: string) => sourceOf(caseId)?.template_id ?? caseId;
   const cases = run.instances
     .map((i, index) => {
+      const actual = projectActualCase(run, i);
+      const hasActual =
+        actual.completeness !== "NOT_RECORDED" &&
+        actual.steps.length +
+          actual.preconditions.recorded.length +
+          actual.cleanup.recorded.length +
+          actual.not_dispatched.length >
+          0;
+      const actualRows = (rows: ActualRow[]) =>
+        `<div class="actual-list">${rows
+          .map((row) => {
+            const call = actual.call_records.find(
+              (c) => c.call_id === row.tool_call_id,
+            );
+            return `<section class="actual-row" data-actual-id="${escape(row.id)}"><div class="actual-heading">${row.number ? `<span class="number">${row.number}</span>` : ""}<h3>${escape(row.description)}</h3><span class="badge ${escape(row.state)}">${escape(operationLabels[row.state] ?? row.state)}</span></div><div class="actual-source">来源：${escape(row.source_step_id)} · ${escape(row.source_description)}${row.operation?.granularity === "composite" ? " · 复合操作，内部动作需复核" : ""}</div><dl class="actual-values"><dt>实际输入</dt><dd>${escape(inputText(row))}</dd><dt>原有预期</dt><dd>${escape(expectedText(row))}</dd></dl>${row.operation?.reason ? `<p class="reason">${escape(row.operation.reason)}</p>` : ""}${row.assertion ? `<p>本次实际值：<code>${escape(JSON.stringify(row.assertion.actual))}</code></p>` : ""}${row.evidence_refs[0] ? `<button class="evidence-button" data-evidence="evidence-${index}-${escape(row.evidence_refs[0])}">查看本次采集证据</button>` : ""}${call ? `<details class="inspect"><summary>查看原生调用依据（脱敏）</summary><pre>${json(call)}</pre></details>` : ""}</section>`;
+          })
+          .join("")}</div>`;
+      const actualPanel = hasActual
+        ? `<div class="panel actual" id="panel-${index}-actual" role="tabpanel" aria-labelledby="tab-${index}-actual" data-panel="actual"><div class="actual-intro"><strong>实际步骤说明：${actual.completeness === "COMPLETE" ? "已完整记录" : "需复核"}</strong><p>操作结果来自原生工具，业务结果看检查。没有独立检查的中间预期保留为待补充。</p>${actual.completeness_reasons.map((r) => `<p class="reason">${escape(r)}</p>`).join("")}<div class="footer-links">${download(`actual-steps-${i.case_run_id}.json`, Buffer.from(JSON.stringify({ ...actualStepsDocument(run), cases: [actual] }, null, 2)), "application/json", "下载实际步骤 JSON")}${download(`manual-cases-${i.case_run_id}.md`, Buffer.from(manualCasesMarkdown(run, i.case_run_id)), "text/markdown", "下载手工用例 Markdown")}</div></div>${actual.preconditions.recorded.length ? `<details class="inspect"><summary>前置操作 · ${actual.preconditions.recorded.length} 条</summary>${actualRows(actual.preconditions.recorded)}</details>` : ""}${actualRows(actual.steps)}${actual.cleanup.recorded.length ? `<details class="inspect"><summary>业务收尾 · ${actual.cleanup.recorded.length} 条</summary>${actualRows(actual.cleanup.recorded)}</details>` : ""}${actual.not_dispatched.length ? `<details class="inspect"><summary>未执行的说明 · ${actual.not_dispatched.length} 条（不计序号）</summary>${actualRows(actual.not_dispatched)}</details>` : ""}</div>`
+        : "";
       const media = recordingMedia(directory, run, i);
       const caseMs = i.steps.reduce((n, s) => n + s.duration_ms, 0);
       const ids = [
@@ -129,6 +159,7 @@ export function writeReport(
           s.assertion || i.effective_required_assertion_ids.includes(s.step_id),
       );
       return `<article class="case" id="case-${index}" data-case="${escape(caseKey(i.case_id))}" data-data="${escape(i.data_id)}" data-status="${escape(i.status)}" data-search="${escape([i.name, i.case_id, i.data_id, i.status].join(" ").toLocaleLowerCase())}"${index ? " hidden" : ""}><header class="case-head"><div class="case-heading">${i.status === "PASS" ? icon("circle-check", "status-icon") : ""}<h2>${escape(i.name)}</h2>${badge(i.status)}</div><div class="case-meta"><span>用例标识<b>${escape(i.case_id)}</b></span><span>数据集<b>${escape(i.data_id)}</b></span><span>步骤耗时<b>${duration(caseMs)}</b></span></div></header>${i.issues.length ? `<aside class="issue">${i.issues.map(escape).join("<br>")}</aside>` : ""}${i.unsettled_call_ids.length ? `<aside class="issue danger">尚有 ${i.unsettled_call_ids.length} 次未结算调用；外部执行可能仍未停止。</aside>` : ""}${sourceInfo}${textPlan}${media.notice}<div class="tabs" role="tablist" aria-label="用例详情">${[
+        ...(hasActual ? [["actual", "实际步骤"]] : []),
         ["steps", "步骤"],
         ["assertions", "断言"],
         ["attachments", "附件"],
@@ -136,11 +167,11 @@ export function writeReport(
       ]
         .map(
           ([key, label]) =>
-            `<button role="tab" id="tab-${index}-${key}" aria-controls="panel-${index}-${key}" aria-selected="${key === "steps"}" data-tab="${key}">${label}${key === "assertions" ? ` (${assertions.length})` : key === "attachments" ? ` (${ids.length})` : ""}</button>`,
+            `<button role="tab" id="tab-${index}-${key}" aria-controls="panel-${index}-${key}" aria-selected="${key === (hasActual ? "actual" : "steps")}" data-tab="${key}">${label}${key === "assertions" ? ` (${assertions.length})` : key === "attachments" ? ` (${ids.length})` : ""}</button>`,
         )
         .join(
           "",
-        )}</div><div class="panel" id="panel-${index}-steps" role="tabpanel" aria-labelledby="tab-${index}-steps" data-panel="steps">${steps || '<p class="empty">尚未执行任何步骤</p>'}</div><div class="panel" id="panel-${index}-assertions" role="tabpanel" aria-labelledby="tab-${index}-assertions" data-panel="assertions" hidden>${assertions.map((s) => `<section class="assertion-item"><h3>${escape(s.description)} ${badge(s.status)}</h3>${s.assertion ? compare(s, index) : `<p class="reason">${escape(s.reason ?? "此断言未执行，没有实际值与比较结果。")}</p>`}</section>`).join("") || '<p class="empty">尚无已执行的断言；不能据此判定通过。</p>'}<details class="inspect"><summary>输入数据与冻结预期</summary><pre>${json(i.data)}</pre></details>${i.revision_history?.length ? `<details class="inspect"><summary>动态检查来源与事后标记</summary><pre>${json(i.revision_history)}</pre></details>` : ""}</div><div class="panel attachments" id="panel-${index}-attachments" role="tabpanel" aria-labelledby="tab-${index}-attachments" data-panel="attachments" hidden>${ids.map((id) => attachment(id, index)).join("") || '<p class="empty">本用例没有采集附件</p>'}</div>${media.videos ? `<div class="panel recordings" id="panel-${index}-recordings" role="tabpanel" aria-labelledby="tab-${index}-recordings" data-panel="recordings" hidden>${media.videos}</div>` : ""}</article>`;
+        )}</div>${actualPanel}<div class="panel" id="panel-${index}-steps" role="tabpanel" aria-labelledby="tab-${index}-steps" data-panel="steps"${hasActual ? " hidden" : ""}>${steps || '<p class="empty">尚未执行任何步骤</p>'}</div><div class="panel" id="panel-${index}-assertions" role="tabpanel" aria-labelledby="tab-${index}-assertions" data-panel="assertions" hidden>${assertions.map((s) => `<section class="assertion-item"><h3>${escape(s.description)} ${badge(s.status)}</h3>${s.assertion ? compare(s, index) : `<p class="reason">${escape(s.reason ?? "此断言未执行，没有实际值与比较结果。")}</p>`}</section>`).join("") || '<p class="empty">尚无已执行的断言；不能据此判定通过。</p>'}<details class="inspect"><summary>输入数据与冻结预期</summary><pre>${json(i.data)}</pre></details>${i.revision_history?.length ? `<details class="inspect"><summary>动态检查来源与事后标记</summary><pre>${json(i.revision_history)}</pre></details>` : ""}</div><div class="panel attachments" id="panel-${index}-attachments" role="tabpanel" aria-labelledby="tab-${index}-attachments" data-panel="attachments" hidden>${ids.map((id) => attachment(id, index)).join("") || '<p class="empty">本用例没有采集附件</p>'}</div>${media.videos ? `<div class="panel recordings" id="panel-${index}-recordings" role="tabpanel" aria-labelledby="tab-${index}-recordings" data-panel="recordings" hidden>${media.videos}</div>` : ""}</article>`;
     })
     .join("");
   const options = (key: "case_id" | "data_id" | "status") =>
@@ -162,10 +193,8 @@ export function writeReport(
         `<button class="case-row" data-select-case="case-${index}" aria-current="${index === 0}">${i.status === "PASS" ? icon("circle-check", "status-icon") : ""}<span class="row-content"><strong>${escape(i.name)}</strong><small>${escape(i.data_id)} · ${escape(labels[i.status] ?? i.status)}</small></span><span class="row-time">${duration(i.steps.reduce((n, s) => n + s.duration_ms, 0))}</span></button>`,
     )
     .join("");
-  const download = (name: string, bytes: Buffer, mime: string, label: string) =>
-    `<a href="data:${mime};base64,${bytes.toString("base64")}" download="${name}">${label}</a>`;
   const eventPath = safePath(directory, "events.jsonl");
-  const links = `<div class="footer-links">${download("results.json", Buffer.from(JSON.stringify(redact(run), null, 2)), "application/json", "下载运行数据")}${download("plan.json", Buffer.from(JSON.stringify(redact(run.plan), null, 2)), "application/json", "下载冻结计划")}${existsSync(eventPath) ? download("events.jsonl.gz", gzipSync(readFileSync(eventPath)), "application/gzip", "下载事件账本（压缩）") : ""}</div>`;
+  const links = `<div class="footer-links">${download("actual-steps.json", Buffer.from(JSON.stringify(actualStepsDocument(run), null, 2)), "application/json", "下载完整批次实际步骤")}${download("manual-cases.md", Buffer.from(manualCasesMarkdown(run)), "text/markdown", "下载完整批次手工用例")}${download("results.json", Buffer.from(JSON.stringify(redact(run), null, 2)), "application/json", "下载运行数据")}${download("plan.json", Buffer.from(JSON.stringify(redact(run.plan), null, 2)), "application/json", "下载冻结计划")}${existsSync(eventPath) ? download("events.jsonl.gz", gzipSync(readFileSync(eventPath)), "application/gzip", "下载事件账本（压缩）") : ""}</div>`;
   const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escape(run.name)} · 测试报告</title><style>${reportStyle}</style></head><body><nav class="rail" aria-label="报告导航"><div class="brand">DSH / TEST REPORT</div>${[
     ["overview", "home", "概览"],
     ["cases", "list-details", "测试用例"],
@@ -177,7 +206,7 @@ export function writeReport(
     )
     .join(
       "",
-    )}<small>静态测试报告<br>可离线查看</small></nav><main class="app"><header class="run-header"><h1>${escape(run.name)}</h1><div class="run-meta"><span>${escape(time(run.created_at))}</span><span>${run.lifecycle === "FINISHED" ? "已结束" : "记录未结算"}</span><span>静态报告</span></div><div class="metrics"><div class="metric"><strong>${stats.total}</strong><span>用例总数</span></div><div class="metric"><strong class="positive">${stats.PASS ?? 0}</strong><span>通过</span></div><div class="metric"><strong class="${stats.total - (stats.PASS ?? 0) ? "negative" : ""}">${stats.total - (stats.PASS ?? 0)}</strong><span>未通过 / 未完成</span></div><div class="metric"><strong>${duration(totalMs)}</strong><span>运行总耗时（含规划）</span></div></div></header>${run.manifest.plan_approved === false ? '<aside class="issue">计划未获批准，未执行任何业务。</aside>' : ""}${run.incomplete || run.resource_quarantined ? `<aside class="issue danger">${run.incomplete ? "记录不完整。" : ""}${run.resource_quarantined ? "环境已隔离，外部执行可能仍未停止。" : ""}</aside>` : ""}<section class="workspace" data-view="cases"><aside class="case-list"><div class="list-title"><h3>测试用例</h3><span>${stats.total} 个实例</span></div><label class="search">${icon("search")}<input id="search" type="search" placeholder="搜索用例名称或标识…" aria-label="搜索用例"></label><div class="filters"><label>用例<select id="case"><option value="">全部</option>${options("case_id")}</select></label><label>数据<select id="data"><option value="">全部</option>${options("data_id")}</select></label><label>状态<select id="status"><option value="">全部</option>${options("status")}</select></label></div><div class="list-subtitle"><span id="count" aria-live="polite"></span><button id="clear" class="text-button">清除筛选</button></div><div class="case-rows">${list}</div><p class="empty" id="empty" hidden>没有符合筛选条件的实例</p></aside><div class="detail">${cases}<div id="no-detail" class="empty" hidden>没有可展示的用例，请调整筛选条件。</div></div></section><section class="overview" data-view="overview" hidden><h2>运行总览</h2>${input ? `<p>原始用例 ${input.templates.length} 条 · CSV 数据 ${input.rows.length} 行 · 执行实例 ${input.instances.length} 个</p>` : ""}<p>${stats.total ? (((stats.PASS ?? 0) / stats.total) * 100).toFixed(1) + "%" : "—"} 用例通过率 · ${passedAssertions} / ${assertionCount} 条已执行断言通过</p><div class="distribution">${Object.entries(
+    )}<small>静态测试报告<br>可离线查看</small></nav><main class="app"><header class="run-header"><h1>${escape(run.name)}</h1><div class="run-meta"><span>${escape(time(run.created_at))}</span><span>${run.lifecycle === "FINISHED" ? "已结束" : "记录未结算"}</span><span>静态报告</span></div><div class="metrics"><div class="metric"><strong>${stats.total}</strong><span>用例总数</span></div><div class="metric"><strong class="positive">${stats.PASS ?? 0}</strong><span>通过</span></div><div class="metric"><strong class="${stats.total - (stats.PASS ?? 0) ? "negative" : ""}">${stats.total - (stats.PASS ?? 0)}</strong><span>未通过 / 未完成</span></div><div class="metric"><strong>${duration(totalMs)}</strong><span>运行总耗时（含规划）</span></div></div></header>${run.manifest.plan_approved === false ? '<aside class="issue">计划未获批准，未执行任何业务。</aside>' : ""}${run.incomplete || run.resource_quarantined ? `<aside class="issue danger">${run.incomplete ? "记录不完整。" : ""}${run.resource_quarantined ? "环境已隔离，外部执行可能仍未停止。" : ""}</aside>` : ""}${run.manifest.actual_steps_export_error ? `<aside class="issue">${escape(run.manifest.actual_steps_export_error)}</aside>` : ""}<section class="workspace" data-view="cases"><aside class="case-list"><div class="list-title"><h3>测试用例</h3><span>${stats.total} 个实例</span></div><label class="search">${icon("search")}<input id="search" type="search" placeholder="搜索用例名称或标识…" aria-label="搜索用例"></label><div class="filters"><label>用例<select id="case"><option value="">全部</option>${options("case_id")}</select></label><label>数据<select id="data"><option value="">全部</option>${options("data_id")}</select></label><label>状态<select id="status"><option value="">全部</option>${options("status")}</select></label></div><div class="list-subtitle"><span id="count" aria-live="polite"></span><button id="clear" class="text-button">清除筛选</button></div><div class="case-rows">${list}</div><p class="empty" id="empty" hidden>没有符合筛选条件的实例</p></aside><div class="detail">${cases}<div id="no-detail" class="empty" hidden>没有可展示的用例，请调整筛选条件。</div></div></section><section class="overview" data-view="overview" hidden><h2>运行总览</h2>${input ? `<p>原始用例 ${input.templates.length} 条 · CSV 数据 ${input.rows.length} 行 · 执行实例 ${input.instances.length} 个</p>` : ""}<p>${stats.total ? (((stats.PASS ?? 0) / stats.total) * 100).toFixed(1) + "%" : "—"} 用例通过率 · ${passedAssertions} / ${assertionCount} 条已执行断言通过</p><div class="distribution">${Object.entries(
     stats,
   )
     .filter(([k, v]) => k !== "total" && v > 0)

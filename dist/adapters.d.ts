@@ -1,9 +1,9 @@
 import type { ToolRunContext, ToolExecutionResult } from "@deepseek-ai/dsh-tools";
-import { type Binding, type Json, type Step, type StepResult, type SuiteRun } from "./contracts.js";
+import { type Binding, type Json, type Step, type StepResult, type SuiteRun, type ActualOperation } from "./contracts.js";
 import { Recorder } from "./recorder.js";
 interface CaptureHost {
     id: string;
-    call(name: string, args: unknown, parent: ToolRunContext): Promise<{
+    call(name: string, args: unknown, parent: ToolRunContext, explanation?: Pick<ActualOperation, "description" | "description_source">): Promise<{
         callId: string;
         result: ToolExecutionResult;
     }>;

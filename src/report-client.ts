@@ -9,7 +9,7 @@ export function reportInteractions(): void {
   );
   const search = document.getElementById("search") as HTMLInputElement;
   let selected = cases[0]?.id;
-  let tab = "steps";
+  let tab = cases[0]?.querySelector('[data-tab="actual"]') ? "actual" : "steps";
   const navigate = (view: string) => {
     for (const page of document.querySelectorAll<HTMLElement>("[data-view]"))
       page.hidden = page.dataset.view !== view;
@@ -29,7 +29,7 @@ export function reportInteractions(): void {
         (button) => button.dataset.tab === value,
       )
     )
-      value = "steps";
+      value = active.querySelector('[data-tab="actual"]') ? "actual" : "steps";
     tab = value;
     for (const video of document.querySelectorAll<HTMLVideoElement>("video"))
       video.pause();

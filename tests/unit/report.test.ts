@@ -58,6 +58,66 @@ it("用户字段安全转义，报告脚本与图标离线自包含", () => {
   expect(html).not.toMatch(/<link[^>]+href=["']https?:/);
   expect(html).toContain("data:image/svg+xml;base64,");
 });
+
+it("新报告默认显示编号实际步骤和实例下载，旧记录继续使用原步骤页", () => {
+  const html = render((run) => {
+    run.manifest.actual_operations_schema = "1";
+    const binding = {
+      suite_run_id: run.suite_run_id,
+      case_run_id: run.instances[0]!.case_run_id,
+      phase: "test" as const,
+      step_id: "read",
+      attempt_id: "1",
+    };
+    run.instances[0]!.steps = [
+      {
+        step_id: "read",
+        phase: "test",
+        description: "搜索",
+        required: true,
+        status: "SUCCEEDED",
+        started_at: run.created_at,
+        duration_ms: 1,
+        observations: [],
+        calls: [
+          {
+            call_id: "child",
+            binding,
+            name: "mcp__playwright__browser_type",
+            args_redacted: { text: "agent", ref: "e2" },
+            started_at: run.created_at,
+            body_started: "unknown",
+          },
+        ],
+        actual_operations: [
+          {
+            operation_id: "operation",
+            order_in_step: 1,
+            binding,
+            description: "输入 <agent> | 关键词",
+            description_source: "model",
+            parent_call_id: "parent",
+            tool_call_id: "child",
+            granularity: "atomic",
+            dispatch_observed: true,
+            state: "SUCCEEDED",
+            created_at: run.created_at,
+          },
+        ],
+      },
+    ];
+  });
+  expect(html).toContain('aria-selected="true" data-tab="actual"');
+  expect(html).toContain('data-panel="steps" hidden');
+  expect(html).toContain('data-actual-id="operation"');
+  expect(html).toContain("输入 &lt;agent&gt; | 关键词");
+  expect(html).toContain("下载手工用例 Markdown");
+  expect(html).not.toContain('data-tab="recordings"');
+  expect(html).not.toContain('id="image-dialog"');
+  const old = render(() => {});
+  expect(old).not.toMatch(/<button[^>]+data-tab="actual"/);
+  expect(old).toContain('aria-selected="true" data-tab="steps"');
+});
 it("缺失证据显示明确提示，不产生无效预览或捏造附件", () => {
   const html = render((run) => {
     run.instances[0].steps = [

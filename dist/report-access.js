@@ -122,7 +122,7 @@ export class ReportAccess {
             }
             const suffix = pathname.slice(reportPrefix.length + 1);
             if (!pathname.startsWith(reportPrefix + "/") ||
-                !/^run-[\w-]+\/(?:report(?:-rebuilt)?\.html|results(?:-rebuilt)?\.json|plan\.json|events\.jsonl|evidence\/[\w.-]+)$/.test(suffix))
+                !/^run-[\w-]+\/(?:report(?:-rebuilt)?\.html|results(?:-rebuilt)?\.json|actual-steps(?:-rebuilt)?\.json|manual-cases(?:-rebuilt)?\.md|plan\.json|events\.jsonl|evidence\/[\w.-]+)$/.test(suffix))
                 throw new Error("不支持的报告路径");
             const target = realpathSync(join(this.outputRoot, suffix));
             const rel = relative(realpathSync(this.outputRoot), target);
@@ -136,8 +136,11 @@ export class ReportAccess {
                 ".jsonl": "text/plain; charset=utf-8",
                 ".png": "image/png",
                 ".mp4": "video/mp4",
+                ".md": "text/markdown; charset=utf-8",
             };
             res.setHeader("Content-Type", types[extname(target)] ?? "application/octet-stream");
+            if (extname(target) === ".md")
+                res.setHeader("Content-Disposition", `attachment; filename="${target.split(sep).at(-1)}"`);
             if (extname(target) === ".html")
                 res.setHeader("Content-Security-Policy", "sandbox allow-scripts allow-downloads allow-popups allow-popups-to-escape-sandbox; default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; media-src 'self'");
             if (extname(target) === ".mp4") {

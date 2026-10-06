@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { NativeTests } from "../../src/native-test.js";
 import { sample } from "../fixtures/plan.js";
 import { rebuild } from "../../src/recorder.js";
+import { projectActualCase } from "../../src/actual-operations.js";
 
 const cleanups: (() => void)[] = [];
 afterEach(() => cleanups.splice(0).forEach((f) => f()));
@@ -20,6 +21,7 @@ function setup(value = 3, preparePreview?: () => Promise<void>) {
   const dispatched: string[] = [];
   let domResult: any = { values: { likes: value } };
   let sequence = 0;
+  let approval = "allow";
   const on = (name: string, fn: Function) => {
     const set = events.get(name) ?? new Set();
     set.add(fn);
@@ -56,6 +58,12 @@ function setup(value = 3, preparePreview?: () => Promise<void>) {
     };
     full.rootCallId ??= full.callId;
     full.token = {};
+    const contexts: unknown[] = [];
+    let concludesTurn = false;
+    full.deferContext = (context: unknown) => contexts.push(context);
+    full.concludeTurn = () => {
+      concludesTurn = true;
+    };
     toolNames.push(full.name);
     await emit(
       "session/event",
@@ -78,32 +86,64 @@ function setup(value = 3, preparePreview?: () => Promise<void>) {
         }
         return { kind: "allow" };
       });
-      if (decision.kind !== "allow") throw new Error(decision.reason);
-      const response = await waterfall("tools/execute", full, () => {
+      if (
+        decision.kind !== "allow" &&
+        !(decision.kind === "ask" && approval === "allow")
+      )
+        throw new Error(decision.reason ?? "审批拒绝");
+      result = await waterfall("tools/execute", full, async () => {
         dispatched.push(full.name);
-        if (definitions.has(full.name))
-          return definitions.get(full.name).execute(full.arguments, full);
-        if (full.name.endsWith("browser_evaluate"))
+        try {
+          const def = definitions.get(full.name);
+          const response = def
+            ? await def.execute(full.arguments, full)
+            : full.name.endsWith("browser_evaluate")
+              ? {
+                  content: [
+                    {
+                      type: "text",
+                      text: "### Result\n" + JSON.stringify(domResult),
+                    },
+                  ],
+                }
+              : {};
+          // 宿主要求工具值为无损JSON；替身也验证这一公开边界。
+          expect(response).toStrictEqual(JSON.parse(JSON.stringify(response)));
           return {
-            content: [
-              {
-                type: "text",
-                text: "### Result\n" + JSON.stringify(domResult),
-              },
-            ],
+            value: response,
+            isError: false,
+            content:
+              def?.output?.render(full.arguments, response) ??
+              response.content ??
+              [],
+            ...(contexts.length ? { additionalContexts: contexts } : {}),
+            ...(concludesTurn ? { concludesTurn: true } : {}),
           };
-        return {};
+        } catch (error: any) {
+          return {
+            isError: true,
+            error: {
+              message: error.message,
+              ...(error.code
+                ? { info: { name: error.name, code: error.code } }
+                : {}),
+            },
+            content: [{ type: "text", text: String(error) }],
+          };
+        }
       });
-      // 宿主要求工具值为无损JSON；替身也验证这一公开边界。
-      expect(response).toStrictEqual(JSON.parse(JSON.stringify(response)));
-      result = { value: response, isError: false, content: [] };
     } catch (error) {
       result = {
         isError: true,
+        error: { message: String(error) },
         content: [{ type: "text", text: String(error) }],
       };
     }
-    await emit("tools/result", full, result);
+    try {
+      await emit("tools/result", full, result);
+    } catch {
+      /* 官方结果观察器的失败不会改写执行结果。 */
+    }
     return result;
   };
   const planMode = { get: vi.fn(() => ({ active: false })), set: vi.fn() };
@@ -197,6 +237,9 @@ function setup(value = 3, preparePreview?: () => Promise<void>) {
     },
     sections,
     definitions,
+    setApproval: (value: string) => {
+      approval = value;
+    },
     guards,
     root,
     end,
@@ -204,8 +247,403 @@ function setup(value = 3, preparePreview?: () => Promise<void>) {
     announce,
     step,
     emit,
+    execute,
   };
 }
+
+it("两个实际动作分别保存说明与子调用，父封装不重复编号；原生图片和上下文正常返回", async () => {
+  const t = setup();
+  await t.manager.start(t.agent, "搜索agent并检查点赞", sample());
+  await t.step();
+  const test = t.manager.sessions.get("origin")!;
+  const content = [
+    { type: "text", text: "点击完成" },
+    { type: "image", mimeType: "image/png", data: "aW1hZ2U=" },
+  ];
+  t.definitions.set("mcp__playwright__browser_click", {
+    output: { render: () => content },
+    execute: (_: any, exec: any) => {
+      const saved = JSON.parse(
+        readFileSync(join(test.recorder.directory, "results.json"), "utf8"),
+      );
+      expect(
+        saved.instances[0].steps.at(-1).actual_operations[0].dispatch_observed,
+      ).toBe(true);
+      exec.deferContext({
+        source: { kind: "plugin:test", form: "notice", summary: "子调用" },
+        content: [{ type: "text", text: "上下文" }],
+      });
+      return { clicked: true };
+    },
+  });
+  const click = await t.call("test_execute_operation", {
+    description: "点击页面搜索按钮，展开输入框",
+    tool_name: "mcp__playwright__browser_click",
+    arguments: { element: "搜索按钮", ref: "e1" },
+  });
+  expect(click.isError).toBe(false);
+  expect(click.content).toEqual(content);
+  expect(click.additionalContexts).toHaveLength(1);
+  const type = await t.call("test_execute_operation", {
+    description: "在搜索输入框输入关键词",
+    tool_name: "mcp__playwright__browser_type",
+    arguments: { element: "搜索框", ref: "e2", text: "agent" },
+  });
+  expect(type.isError).toBe(false);
+  await t.step();
+  await t.step();
+  await t.call("test_finish");
+  const c = projectActualCase(test.run, test.run.instances[0]!);
+  expect(c.steps.map((r) => r.number)).toEqual([1, 2, 3]);
+  expect(c.steps.map((r) => r.kind)).toEqual([
+    "operation",
+    "operation",
+    "check",
+  ]);
+  expect(c.steps[1]!.inputs.text).toBe("agent");
+  expect(
+    c.steps.every(
+      (r) =>
+        r.operation?.binding.case_run_id ===
+          test.run.instances[0]!.case_run_id || r.kind === "check",
+    ),
+  ).toBe(true);
+  expect(new Set(c.call_records.map((c) => c.call_id)).size).toBe(2);
+  expect(
+    readFileSync(join(test.recorder.directory, "manual-cases.md"), "utf8"),
+  ).toContain("| 2 | 在搜索输入框输入关键词");
+  expect(
+    JSON.parse(
+      readFileSync(join(test.recorder.directory, "actual-steps.json"), "utf8"),
+    ).cases[0].steps,
+  ).toHaveLength(3);
+});
+
+it("工具Schema给出完整MCP名称，省略前缀提示正确名称且不会派发", async () => {
+  const t = setup();
+  await t.manager.start(t.agent, "访问页面", sample());
+  await t.step();
+  const names = t.definitions.get("test_execute_operation").parameters
+    .properties.tool_name.enum;
+  expect(names).toContain("mcp__playwright__browser_navigate");
+  expect(names).not.toContain("browser_navigate");
+  const result = await t.call("test_execute_operation", {
+    description: "访问页面",
+    tool_name: "browser_navigate",
+    arguments: { url: "https://example.test" },
+  });
+  expect(result.isError).toBe(true);
+  expect(result.content[0].text).toContain("mcp__playwright__browser_click");
+  for (const input of [
+    { description: "访问", arguments: {} },
+    {
+      description: "访问",
+      tool_name: "mcp__playwright__browser_navigate",
+      arguments: [],
+      state: "SUCCEEDED",
+    },
+  ]) {
+    const invalid = await t.call("test_execute_operation", input);
+    expect(invalid.isError).toBe(true);
+    expect(invalid.content[0].text).toContain("操作参数无效");
+  }
+  expect(t.dispatched).not.toContain("mcp__playwright__browser_navigate");
+});
+
+it("原生定位失败仍返回错误，调整重试保留两条同名操作", async () => {
+  const t = setup();
+  await t.manager.start(t.agent, "搜索agent", sample());
+  await t.step();
+  const body = vi
+    .fn()
+    .mockRejectedValueOnce(
+      Object.assign(new Error("定位未命中"), {
+        code: "LOCATOR_MISSING",
+        name: "LocatorError",
+      }),
+    )
+    .mockResolvedValueOnce({ ok: true });
+  t.definitions.set("mcp__playwright__browser_click", { execute: body });
+  const args = {
+    description: "点击搜索按钮",
+    tool_name: "mcp__playwright__browser_click",
+    arguments: { ref: "e1" },
+  };
+  const failed = await t.call("test_execute_operation", args);
+  expect(failed.isError).toBe(true);
+  expect(failed.error).toMatchObject({
+    message: "定位未命中",
+    info: { code: "LOCATOR_MISSING" },
+  });
+  expect(failed.content[0].text).toContain("定位未命中");
+  expect(
+    (
+      await t.call("test_execute_operation", {
+        ...args,
+        arguments: { ref: "e2" },
+      })
+    ).isError,
+  ).toBe(false);
+  const test = t.manager.sessions.get("origin")!;
+  const c = projectActualCase(test.run, test.run.instances[0]!);
+  expect(c.steps.map((r) => r.state)).toEqual(["ERROR", "SUCCEEDED"]);
+  expect(c.steps[0]!.operation!.operation_id).not.toBe(
+    c.steps[1]!.operation!.operation_id,
+  );
+  expect(body).toHaveBeenCalledTimes(2);
+});
+
+it("裸调业务工具得到带说明入口提示，目标拒绝及原生审批拒绝不派发、不占主编号", async () => {
+  const t = setup();
+  const plan = sample();
+  (plan.cases[0]!.steps[0]!.action as any).approval = true;
+  await t.manager.start(t.agent, "搜索agent", plan);
+  await t.step();
+  const raw = await t.call("mcp__playwright__browser_click", { ref: "e1" });
+  expect(raw.content[0].text).toContain("test_execute_operation");
+  expect(raw.isError).toBe(true);
+  const navigate = {
+    description: "访问搜索页面",
+    tool_name: "mcp__playwright__browser_navigate",
+    arguments: { url: "https://foreign.test" },
+  };
+  expect((await t.call("test_execute_operation", navigate)).isError).toBe(true);
+  t.setApproval("reject");
+  expect(
+    (
+      await t.call("test_execute_operation", {
+        description: "点击搜索",
+        tool_name: "mcp__playwright__browser_click",
+        arguments: { ref: "e1" },
+      })
+    ).isError,
+  ).toBe(true);
+  const test = t.manager.sessions.get("origin")!;
+  const c = projectActualCase(test.run, test.run.instances[0]!);
+  expect(c.steps).toEqual([]);
+  expect(c.not_dispatched).toHaveLength(2);
+  expect(
+    c.not_dispatched.every(
+      (r) => r.state === "NOT_DISPATCHED" && r.number === undefined,
+    ),
+  ).toBe(true);
+  expect(t.dispatched).not.toContain("mcp__playwright__browser_click");
+  expect(t.dispatched).not.toContain("mcp__playwright__browser_navigate");
+});
+
+it("复合输入提交标为需复核，原生终止标记随成功子调用传递", async () => {
+  const t = setup();
+  await t.manager.start(t.agent, "输入agent", sample());
+  await t.step();
+  t.definitions.set("mcp__playwright__browser_type", {
+    execute: (_: any, exec: any) => {
+      exec.concludeTurn();
+      return {};
+    },
+  });
+  const r = await t.call("test_execute_operation", {
+    description: "输入并提交搜索",
+    tool_name: "mcp__playwright__browser_type",
+    arguments: { ref: "e2", text: "agent", submit: true },
+  });
+  expect(r.concludesTurn).toBe(true);
+  const test = t.manager.sessions.get("origin")!;
+  expect(projectActualCase(test.run, test.run.instances[0]!).completeness).toBe(
+    "PARTIAL",
+  );
+});
+
+it("取消宽限截止封存未知操作，迟到结果只入审计，不改写手工步骤文件", async () => {
+  const t = setup();
+  await t.manager.start(t.agent, "点击搜索", sample());
+  await t.step();
+  let release!: () => void, entered!: () => void;
+  const started = new Promise<void>((r) => {
+    entered = r;
+  });
+  t.definitions.set("mcp__playwright__browser_click", {
+    execute: () =>
+      new Promise((r) => {
+        entered();
+        release = () => r({ ok: true });
+      }),
+  });
+  const pending = t.call("test_execute_operation", {
+    description: "点击搜索按钮",
+    tool_name: "mcp__playwright__browser_click",
+    arguments: { ref: "e1" },
+  });
+  await started;
+  const test = t.manager.sessions.get("origin")!;
+  t.agent.whenIdle.mockImplementation(() => new Promise(() => {}));
+  test.stop();
+  await new Promise((r) => setTimeout(r, 55));
+  expect(test.closed).toBe(true);
+  const before = readFileSync(
+    join(test.recorder.directory, "actual-steps.json"),
+    "utf8",
+  );
+  expect(JSON.parse(before).cases[0].steps[0].state).toBe("UNKNOWN");
+  release();
+  await pending;
+  expect(
+    readFileSync(join(test.recorder.directory, "actual-steps.json"), "utf8"),
+  ).toBe(before);
+  expect(
+    readFileSync(join(test.recorder.directory, "events.jsonl"), "utf8"),
+  ).toContain("late_tool_result");
+  expect(
+    projectActualCase(rebuild(test.recorder.directory), test.run.instances[0]!)
+      .steps[0]!.state,
+  ).toBe("UNKNOWN");
+});
+
+it("MCP以普通错误返回取消时仍使用原生信号标为未知，不依赖取消错误码或文字", async () => {
+  const t = setup();
+  await t.manager.start(t.agent, "取消点击", sample());
+  await t.step();
+  const controller = new AbortController();
+  t.definitions.set("mcp__playwright__browser_click", {
+    execute: () => {
+      controller.abort();
+      throw new Error("transport request cancelled");
+    },
+  });
+  const result = await t.execute({
+    name: "test_execute_operation",
+    arguments: {
+      description: "点击搜索按钮",
+      tool_name: "mcp__playwright__browser_click",
+      arguments: { ref: "e1" },
+    },
+    signal: controller.signal,
+  });
+  expect(result.isError).toBe(true);
+  const test = t.manager.sessions.get("origin")!;
+  expect(
+    projectActualCase(test.run, test.run.instances[0]!).steps[0]!.state,
+  ).toBe("UNKNOWN");
+  expect(projectActualCase(test.run, test.run.instances[0]!).completeness).toBe(
+    "PARTIAL",
+  );
+});
+
+it("必需说明快照写入失败时原生业务工具不派发", async () => {
+  const t = setup();
+  await t.manager.start(t.agent, "点击搜索", sample());
+  await t.step();
+  const test = t.manager.sessions.get("origin")!;
+  const snapshot = vi
+    .spyOn(test.recorder, "snapshot")
+    .mockImplementation(() => {
+      test.recorder.failed = new Error("模拟磁盘写失败");
+      throw test.recorder.failed;
+    });
+  try {
+    expect(
+      (
+        await t.call("test_execute_operation", {
+          description: "点击搜索",
+          tool_name: "mcp__playwright__browser_click",
+          arguments: { ref: "e1" },
+        })
+      ).isError,
+    ).toBe(true);
+    expect(t.dispatched).not.toContain("mcp__playwright__browser_click");
+    expect(
+      [...t.guards]
+        .map((guard) =>
+          guard({
+            agent: t.agent,
+            name: "mcp__playwright__browser_snapshot",
+            callId: "future",
+            arguments: {},
+          }),
+        )
+        .some((reason) => String(reason).includes("账本写入失败")),
+    ).toBe(true);
+  } finally {
+    snapshot.mockRestore();
+  }
+});
+
+it("真实正文为空时，非空文字检查不能以与字符串0比较放行，导出仍显示原空字符串预期", async () => {
+  const t = setup();
+  await t.manager.start(t.agent, "检查帖子正文不为空");
+  await t.announce(
+    (
+      await t.call("test_submit_plan", {
+        name: "空正文",
+        steps: [{ description: "检查正文", checks: ["帖子正文不为空"] }],
+      })
+    ).value.plan_summary,
+  );
+  await t.call("test_define_step", {
+    capability: "browser",
+    allowed_targets: ["https://example.test"],
+    reason: "读取真实正文",
+  });
+  t.setDomResult({ values: { body: "" } });
+  await t.call("test_capture", {
+    capture: { body: { kind: "dom", mode: "text", selector: "article" } },
+    reason: "当前正文位置",
+  });
+  const bind = {
+    check_index: 0,
+    assertion: {
+      observation_ref: "step_1.body",
+      operator: "neq",
+      expected_value: "0",
+    },
+  };
+  expect((await t.call("test_bind_check", bind)).isError).toBe(true);
+  expect(
+    (
+      await t.call("test_bind_check", {
+        ...bind,
+        assertion: { ...bind.assertion, expected_value: "" },
+      })
+    ).isError,
+  ).toBe(false);
+  await t.call("test_finish_step");
+  await t.step();
+  expect((await t.call("test_finish")).value.statistics.FAIL).toBe(1);
+  const test = t.manager.sessions.get("origin")!;
+  const row = projectActualCase(test.run, test.run.instances[0]!).steps[0]!;
+  expect(row.assertion).toMatchObject({
+    status: "FAIL",
+    expected: "",
+    actual: "",
+  });
+});
+
+it("派生文件导出失败提示重建，保留已结算断言和原生运行结果", async () => {
+  const t = setup();
+  await t.manager.start(t.agent, "核对点赞", sample());
+  await t.step();
+  await t.step();
+  await t.step();
+  const module = await import("../../src/manual-case.js");
+  const exportFile = vi
+    .spyOn(module, "writeManualCases")
+    .mockImplementation(() => {
+      throw new Error("模拟派生文件导出失败");
+    });
+  try {
+    const final = await t.call("test_finish");
+    expect(final.isError).toBe(false);
+    expect(final.value.statistics.PASS).toBe(1);
+    expect(final.value.actual_steps_export_error).toContain("重建");
+    const test = t.manager.sessions.get("origin")!;
+    expect(test.recorder.failed).toBeUndefined();
+    expect(rebuild(test.recorder.directory).instances[0]!.status).toBe("PASS");
+    expect(
+      readFileSync(join(test.recorder.directory, "report.html"), "utf8"),
+    ).toContain("实际步骤文件导出失败");
+  } finally {
+    exportFile.mockRestore();
+  }
+});
 
 it.each([
   [3, "PASS"],
@@ -318,8 +756,10 @@ it("停止先等待原生在途结算，再在同一会话运行预授权清理�
   expect(t.followups[1].source.kind).toBe("plugin:test");
   expect(
     (
-      await t.call("mcp__playwright__browser_navigate", {
-        url: "https://example.test",
+      await t.call("test_execute_operation", {
+        description: "打开目标页面以读取点赞",
+        tool_name: "mcp__playwright__browser_navigate",
+        arguments: { url: "https://example.test" },
       })
     ).isError,
   ).toBe(true);
@@ -531,8 +971,10 @@ it("JSON运行时采集可修正定位且不改预期", async () => {
   await t.step();
   expect(
     (
-      await t.call("mcp__playwright__browser_navigate", {
-        url: "https://example.test",
+      await t.call("test_execute_operation", {
+        description: "打开目标页面以读取点赞",
+        tool_name: "mcp__playwright__browser_navigate",
+        arguments: { url: "https://example.test" },
       })
     ).isError,
   ).toBe(false);
@@ -906,8 +1348,10 @@ it("文字计划只冻结短句，运行时按采集方式登记输出；缺少�
   expect((await t.call("test_define_step", base)).isError).toBe(false);
   expect(
     (
-      await t.call("mcp__playwright__browser_navigate", {
-        url: "https://example.test",
+      await t.call("test_execute_operation", {
+        description: "打开目标页面以读取点赞",
+        tool_name: "mcp__playwright__browser_navigate",
+        arguments: { url: "https://example.test" },
       })
     ).isError,
   ).toBe(false);

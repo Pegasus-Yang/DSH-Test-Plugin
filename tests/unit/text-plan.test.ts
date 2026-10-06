@@ -16,6 +16,31 @@ const input = {
     { description: "查看帖子点赞", checks: ["点赞数不为0"] },
   ],
 };
+it.each([
+  "帖子正文不为空",
+  "文本非空",
+  "post body is not empty",
+  "non-empty text",
+])("%s 的预期必须保持空字符串，不能把0或可见性当作非空", (text) => {
+  const assertion = {
+    observation_ref: "read.body",
+    operator: "neq" as const,
+    literal: "",
+    rule_ref: "user",
+  };
+  expect(() => validateTextExpectation(text, assertion)).not.toThrow();
+  for (const literal of ["0", 0, true])
+    expect(() =>
+      validateTextExpectation(text, { ...assertion, literal }),
+    ).toThrow("空字符串");
+  expect(() =>
+    validateTextExpectation(text, {
+      ...assertion,
+      operator: "visible",
+      literal: true,
+    }),
+  ).toThrow();
+});
 it("只接受业务短句，规划不要求也不接受执行参数", () => {
   const plan = parseTextPlan(
     input,

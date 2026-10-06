@@ -24,12 +24,15 @@ The plugin presents a text plan, executes each step with progress updates, and r
 | --- | --- |
 | Natural-language plans | Split tasks into business actions and textual checks; review or revise plans through native approval |
 | Browser and API tests | Operate a dedicated Playwright MCP browser; capture GET JSON responses and check status codes or fields |
+| Actual steps and manual cases (unreleased main branch) | Record operation explanations and real inputs during execution; per-instance numbering, JSON and Markdown downloads, with failures and retries retained |
 | Evidence-based assertions | Preserve actual observations, expectations, and their sources; compute results deterministically |
 | Files and parameters | Import TXT, Markdown, or JSON cases; expand CSV data and review before running |
 | Execution progress | Show the current step, settled count, and elapsed time; expand the bounded list for long text and continuous batch numbering |
 | Live browser preview | Display headless browser frames through Browscreen after the current page has usable CDP and a valid first frame |
 | Browser recordings | Independent toggle, off by default; per-instance MP4 playback, seeking and download; no media UI for API instances |
 | Reports and cleanup | Static HTML reports with steps, assertions, and attachments; stop, cleanup, and environment recovery |
+
+Actual-step recording and manual-case export are currently unreleased main-branch changes; the `v0.10.0` tag does not include them. Use a development package to try this feature.
 
 ## Screenshots
 

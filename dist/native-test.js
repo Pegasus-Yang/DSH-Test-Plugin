@@ -3,7 +3,7 @@ import { ToolCallId } from "@deepseek-ai/dsh-llm/brand";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { aggregate, expand, field, parsePlan, actionSchema, assertionSchema, statistics, captureSchema, validateCaptures, } from "./contracts.js";
+import { aggregate, ajv, expand, field, parsePlan, actionSchema, assertionSchema, statistics, captureSchema, validateCaptures, } from "./contracts.js";
 import { Recorder } from "./recorder.js";
 import { RecoveryManager } from "./recovery.js";
 import { captureStep } from "./adapters.js";
@@ -16,6 +16,8 @@ import { defaults } from "./config.js";
 import { parseTextPlan, textPlanSchema, textReview, validateTextExpectation, parseTextExpected, batchTextPlanSchema, parseBatchPlan, announcementParts, } from "./text-plan.js";
 import { testLanguage, languageGuide } from "./language.js";
 import { applyRevision } from "./revisions.js";
+import { compositeOperation, operationTool, operationToolNames, operationSchemaVersion, sealOperations, } from "./actual-operations.js";
+import { writeManualCases } from "./manual-case.js";
 const empty = {
     type: "object",
     properties: {},
@@ -31,7 +33,8 @@ const guide = `当前对话已启用测试增强，仍由本会话正常推理�
 规划阶段只根据用户描述分析目标、业务步骤、输入和预期。禁止访问网站、运行命令、调用API或提前验证用例；不能通过预跑寻找选择器。只可使用test_submit_plan、test_current、todo_write和ask_user_question。已给目标、输入和预期时直接形成计划；缺少必要信息时在本会话追问。
 test_submit_plan按工具schema提交：普通任务为{name,rationale:"一两句面向用户的拆分说明",steps:[{description,checks?:string[]}]}；文件/参数化批量模式为{name,rationale,cases:[{instance_id,name,rationale,steps}]}，按planning_input.instances每个id恰好提交一次，使用对应已展开task与参数，不能合并、遗漏或自行改参数。把用户的一段话按常规理解拆成几个业务动作短句，checks只写用户预期的自然语言。不要提供suite_id、执行工具、选择器、能力类型、URL白名单、输出Schema、字段路径或比较器；不要为了未知页面结构追问用户。例如steps:[{description:"访问ceshiren.com"},{description:"搜索agent"},{description:"打开第一条搜索结果"},{description:"查看帖子的点赞数",checks:["点赞数不为0"]}]。用户没有提供的操作细节无需在规划期补齐。rationale简要说明为什么按这些业务动作拆分、怎样核对目标，不展开详细推理。/test提交成功后，必须先在正常对话中用原始任务、拆分思路、步骤清单三个部分通报返回的plan_summary，再执行第一个动作；/test-plan通过原生审核卡片展示这三部分。
 文字计划执行：每次只处理test_current的当前步骤。需要操作目标时先test_define_step({capability:"browser"或"api",allowed_targets:[本步目标网址],reason:"当前步骤依据"})设定操作范围，无需填写outputs。随后使用原生工具观察、操作、调整；了解实际页面后直接test_capture采集。采集时插件按采集方式自动登记输出类型，无需先写输出Schema；已有成功观察不可覆盖，但可补采其他输出。API通常以response保存完整响应。不是在执行开始时编译整份计划，不能配置未来步骤。
-文字检查点：获得可信观察后，对当前步骤的每个checks，调用test_bind_check({check_index:从0开始,assertion:{observation_ref:"step_编号.输出名.可选嵌套路径",operator:"eq/neq/...",expected_value:"用户预期原文，例如agent或0；不加引号或数组包装"}})。也可用expected_observation_ref比较前一步观察（例如第一条搜索结果链接）。rule_ref由插件绑定文字检查点；不用提交actual。预期来自原文和文字检查，不能按实际值改写；数字不为0用neq和expected_value直接填"0"（按数字条件解析为数值0）。每个文字检查都必须绑定程序断言，不能靠口头宣布通过；纯检查步骤可以直接引用前一步的可信观察。绑定后test_finish_step结算当前步骤并计算断言。无法完成用test_fail_step说明原因。
+实际操作说明：浏览器访问、点击、输入、按键、选择、拖动、业务等待等必须调用test_execute_operation({description:"面向用户的简短操作说明，说明对象、动作和必要目的",tool_name:"mcp__playwright__browser_click",arguments:{原工具参数}})。tool_name从Schema的完整名称中选择，必须保留mcp__playwright__前缀。先观察真实页面，再提交当前一个动作的说明并执行，不能一次编造后续操作。常规导航、点击、输入和提交必须逐个使用原子动作工具，不得用browser_run_code或browser_evaluate把这些常规交互合并成脚本。只有原子工具无法表达的动作才使用复合脚本，并保留需复核标记。点击搜索按钮与输入关键词分别调用；browser_type不要submit:true，输入后单独browser_press_key提交Enter；多个表单字段优先逐字段填写。说明随同一次调用保存，不需要另一个登记工具或额外模型轮次。原生browser_snapshot、截图及只读browser_evaluate仍可直接用于分析；evaluate仅允许观察，脚本操作必须带说明并标为复合操作，无法证明内部每个动作都完成。API请求继续test_capture，不调用新的浏览器入口或直接test_api_get。操作成功仅表示工具结算，断言仍按可信采集计算。定位失败可调整后产生新记录，保留旧失败；插件自行生成身份、顺序和状态。用户要求的准备与清理遵守当前冻结阶段，自动复位、关闭继续test_capture({})。
+文字检查点：获得可信观察后，对当前步骤的每个checks，调用test_bind_check({check_index:从0开始,assertion:{observation_ref:"step_编号.输出名.可选嵌套路径",operator:"eq/neq/...",expected_value:"用户预期原文，例如agent或0；不加引号或数组包装"}})。也可用expected_observation_ref比较前一步观察（例如第一条搜索结果链接）。rule_ref由插件绑定文字检查点；不用提交actual。预期来自原文和文字检查，不能按实际值改写；数字不为0用neq和expected_value直接填"0"（按数字条件解析为数值0）。正文或文本不为空必须用text采集、operator:"neq"、expected_value:""（空字符串），不能填0或字符串0，也不能以元素可见替代正文非空。每个文字检查都必须绑定程序断言，不能靠口头宣布通过；纯检查步骤可以直接引用前一步的可信观察。绑定后test_finish_step结算当前步骤并计算断言。无法完成用test_fail_step说明原因。
 执行阶段：文字计划提交（/test-plan还需批准）后按test_current执行当前业务目标。此时才使用正常Playwright工具查看页面、点击、输入、等待和检查DOM，可根据实际状态调整定位、操作组合和重试，无需重跑整条用例；只完成当前步骤，不提前执行后续步骤。browser_evaluate可用于实际页面结构检查，断言实际值仍只接受test_capture可信采集。JSON文件计划已提交时直接按test_current继续，不能重复提交计划或预跑。
 运行时采集：完成当前动作后，按页面/接口实际情况调用test_capture({capture:{输出名:采集定义},reason:"依据当前页面选择或修正定位的原因"})。它不接受actual或任意执行代码。dom mode支持text/number/count/visible/url/attribute/value；selector为真实CSS，可用index定位集合。页面路径用{kind:"dom",mode:"url",field:"pathname"}；元素href用{kind:"dom",mode:"attribute",attribute:"href",selector:"实际选择器",index:0,field:"pathname"}；数字用mode:number；文本框用mode:value；http仅用于返回JSON的GET接口。HTTP采集本身会发送请求，直接调用test_capture，无需先用test_api_get预发一次。完整响应为{status:number,body:JSON}，不含headers；可声明单一object输出，用{kind:"http",url:"授权URL",field:""}一次采集，再通过step_id.output_name.status及step_id.output_name.body的嵌套路径断言。必要输出都要采集。采集定义可根据实际页面修正，保留每次原因和调用记录；已有成功观察不可覆盖，只补采尚缺的输出。不能改变输出含义、输出类型、目标范围或断言预期。静态JSON的capture和自动清理已有采集定义，直接test_capture({})即可。
 采集成功后调用test_finish_step；程序计算断言，模型不能填写实际值或口头改判。定位失败可修正重试；确实无法完成时test_fail_step说明原因。用户停止后不再执行业务，只按同会话收尾指导执行预授权清理。全部完成调用test_finish，并在原生最终回复写明逐步结果、断言实际/预期、保存位置和工具返回的报告链接。BLOCKED、SKIPPED或缺证据不能写成通过。`;
@@ -220,6 +223,9 @@ export class NativeTest {
     current;
     calls = new Map();
     pendingTools = new Set();
+    trustedCalls = new Map();
+    operations = new Map();
+    delegatedFailures = new Map();
     disposers = [];
     timer;
     stoppingTimer;
@@ -267,6 +273,7 @@ export class NativeTest {
                 execution: "native-conversation",
                 origin_session_id: agent.id,
                 tools_mode: "native",
+                actual_operations_schema: operationSchemaVersion,
             },
         };
     }
@@ -317,6 +324,69 @@ export class NativeTest {
         }));
         tool("test_submit_plan", "提交本对话文字测试计划；审核入口只保存草案。从原文提取预期，不能提交实际结果。批量模式每个instance_id恰好规划一次。", this.input ? batchTextPlanSchema : textPlanSchema, (args) => this.submit(args));
         tool("test_current", "读取当前步骤、冻结目标、输入及已计算断言。", empty, () => this.state());
+        const operationParameters = {
+            type: "object",
+            required: ["description", "tool_name", "arguments"],
+            additionalProperties: false,
+            properties: {
+                description: { type: "string", minLength: 1, maxLength: 2000 },
+                tool_name: {
+                    type: "string",
+                    enum: operationToolNames,
+                    description: "选择完整的原生MCP工具名，必须带mcp__playwright__前缀；不要只填browser_click等短名称。",
+                },
+                arguments: { type: "object" },
+            },
+        };
+        const validateOperation = ajv.compile(operationParameters);
+        own(scope.tools.register({
+            name: "test_execute_operation",
+            description: "保存当前一个实际浏览器动作的简短说明，再经同一Agent原生管线执行工具。常规点击、输入、提交必须分别选对应动作工具，不得用脚本合并；脚本只用于原子工具无法表达的复合操作并需复核。不接受成功声明或断言实际值。",
+            parameters: operationParameters,
+            output: {
+                schema: {
+                    type: "object",
+                    required: ["content"],
+                    properties: { content: { type: "array" } },
+                },
+                render: (_, value) => value
+                    .content,
+            },
+            execute: async (args, exec) => {
+                if (!validateOperation(args))
+                    throw new Error("操作参数无效：" +
+                        ajv.errorsText(validateOperation.errors) +
+                        "。请仅提供description、tool_name、arguments；tool_name须使用完整名称，例如mcp__playwright__browser_click，arguments填写该原生工具的参数对象。");
+                const input = args;
+                this.requireSettled(exec);
+                if (!this.current?.step.action ||
+                    this.current.step.action.capability !== "browser")
+                    throw new Error("当前步骤没有浏览器操作范围");
+                if (!input.description.trim())
+                    throw new Error("请说明当前操作的对象与动作");
+                if (!operationTool(input.tool_name, input.arguments))
+                    throw new Error("此入口只转交浏览器业务操作；tool_name必须是完整名称，例如mcp__playwright__browser_click。观察用原生工具，API用test_capture");
+                const response = await this.call(input.tool_name, input.arguments, exec, {
+                    description: input.description.trim(),
+                    description_source: "model",
+                });
+                if (response.result.isError)
+                    this.delegatedFailures.set(exec.callId, response.result);
+                else {
+                    for (const context of response.result.additionalContexts ?? [])
+                        exec.deferContext(context);
+                    if (response.result.concludesTurn)
+                        exec.concludeTurn();
+                }
+                return {
+                    tool_call_id: response.callId,
+                    content: response.result.content,
+                    ...(!response.result.isError
+                        ? { result: response.result.value }
+                        : {}),
+                };
+            },
+        }));
         tool("test_define_step", "仅在执行当前文字步骤时确定能力与目标；观察页面后直接test_capture，输出由采集方式自动登记。", {
             type: "object",
             required: ["capability", "allowed_targets", "reason"],
@@ -391,7 +461,7 @@ export class NativeTest {
                         operator: assertionSchema.properties.operator,
                         expected_value: {
                             type: "string",
-                            description: "用户预期原文。例如agent、dsh、0或200；不加JSON引号、不包数组或value对象。数字/布尔按检查和观察类型解析；仅对象、数组或range预期写JSON。与expected_observation_ref二选一",
+                            description: '用户预期原文。例如agent、dsh、0或200；不加JSON引号、不包数组或value对象。正文/文本不为空用neq及expected_value:""（空字符串）。数字/布尔按检查和观察类型解析；仅对象、数组或range预期写JSON。与expected_observation_ref二选一',
                         },
                         expected_observation_ref: assertionSchema.properties.expected_observation_ref,
                         unit: assertionSchema.properties.unit,
@@ -700,16 +770,40 @@ export class NativeTest {
                 if (this.review && !this.planned && exec.name === "exit_plan_mode")
                     this.reviewCall = exec.callId;
                 const call = this.calls.get(exec.callId);
+                if (exec.name === "mcp__playwright__browser_evaluate" &&
+                    !this.isTrusted(exec) &&
+                    this.current) {
+                    const notes = (this.current.result.actual_operation_notes ??= []);
+                    const note = "存在直接页面分析脚本，其内部是否包含操作尚未逐项确认";
+                    if (!notes.includes(note))
+                        notes.push(note);
+                }
                 if (call)
                     this.recorder.event("tool_dispatched", { call_id: exec.callId, name: exec.name }, call.binding);
+                const operation = this.operations.get(exec.callId);
+                if (operation &&
+                    !operation.dispatch_observed &&
+                    operation.state === "REGISTERED") {
+                    operation.dispatch_observed = true;
+                    operation.dispatched_at = new Date().toISOString();
+                    operation.state = "DISPATCHED";
+                    this.recorder.event("operation_dispatched", operation, operation.binding, "operation-dispatched:" + exec.callId);
+                    this.save();
+                }
             }
-            return next();
+            const result = await next();
+            // 公开SDK允许around-dispatch返回规范失败；保留子调用的错误、内容和上下文。
+            // 不能将子调用失败仅放进成功JSON，也不能覆盖外层管线自身的失败。
+            return exec.name === "test_execute_operation" && !result.isError
+                ? (this.delegatedFailures.get(exec.callId) ?? result)
+                : result;
         }));
         own(scope.on("tools/result", (exec, result) => {
             if (exec.agent?.id !== this.id)
                 return;
             this.pendingTools.delete(exec.callId);
-            this.settle(exec.callId, result);
+            this.settle(exec.callId, result, exec.signal.aborted);
+            this.delegatedFailures.delete(exec.callId);
             if (exec.callId === this.reviewCall) {
                 this.reviewCall = undefined;
                 this.reviewDismissed = result.isError;
@@ -773,6 +867,19 @@ export class NativeTest {
                 return "请在当前步骤调用test_define_step确定操作目标；不需要提前定义未来步骤";
             if (this.planned && exec.name === "test_api_get" && !exec.parent)
                 return "HTTP请求由test_capture发送并记录，请勿预先直接请求；用一个response对象观察供多个断言引用";
+            if (this.planned &&
+                exec.name === "test_api_get" &&
+                !this.isTrusted(exec))
+                return "HTTP请求仅由test_capture的受信子调用发送";
+            if (this.planned &&
+                operationTool(exec.name, exec.arguments) &&
+                exec.name !== "mcp__playwright__browser_evaluate" &&
+                !this.isTrusted(exec))
+                return "请使用test_execute_operation携带当前动作说明，再转交此浏览器工具；观察与可信采集保持原入口";
+            if (this.planned &&
+                operationTool(exec.name, exec.arguments) &&
+                this.current?.step.action?.capability !== "browser")
+                return "当前步骤不允许浏览器业务操作";
             if (this.planned && typeof exec.arguments?.url === "string") {
                 const url = exec.arguments.url;
                 if (url !== "about:blank" &&
@@ -1107,11 +1214,14 @@ export class NativeTest {
         this.current.result.calls.push(call);
         this.recorder.event("tool_bound", call, call.binding, "bound:" + id);
     }
-    settle(id, result) {
+    isTrusted(exec) {
+        return !!exec.parent && this.trustedCalls.get(exec.callId) === exec.parent;
+    }
+    settle(id, result, aborted = false) {
         const call = this.calls.get(id);
         if (!call || call.finished_at)
             return;
-        if (this.closed) {
+        if (this.closed || (this.reportReady && this.operations.has(id))) {
             this.recorder.event("late_tool_result", { call_id: id, result }, call.binding);
             return;
         }
@@ -1119,26 +1229,78 @@ export class NativeTest {
         call.isError = result.isError;
         call.result = this.recorder.sanitize(result);
         this.recorder.event("tool_finished", call, call.binding, "finished:" + id);
+        const operation = this.operations.get(id);
+        if (operation && ["REGISTERED", "DISPATCHED"].includes(operation.state)) {
+            operation.finished_at = call.finished_at;
+            const code = result.isError ? result.error?.info?.code : undefined;
+            operation.state =
+                !operation.dispatch_observed || code === "ABORTED_BEFORE_DISPATCH"
+                    ? "NOT_DISPATCHED"
+                    : code === "ABORTED" || aborted
+                        ? "UNKNOWN"
+                        : result.isError
+                            ? "ERROR"
+                            : "SUCCEEDED";
+            if (result.isError)
+                operation.reason = String(this.recorder.sanitize(result.error?.message ??
+                    result.content
+                        .filter((b) => b.type === "text")
+                        .map((b) => b.text)
+                        .join("\n")));
+            this.recorder.event("operation_finished", operation, operation.binding, "operation-finished:" + id);
+        }
         this.save();
         if (this.reportReady)
             writeReport(this.recorder.directory, this.recorder.sanitize(this.run));
     }
-    async call(name, args, parent) {
+    async call(name, args, parent, explanation) {
         const id = ToolCallId(randomUUID());
         this.bind(id, name, args);
-        const result = await this.agent.ctx.tools.execute({
-            callId: id,
-            rootCallId: parent.rootCallId,
-            parent: parent.token,
-            name,
-            arguments: args,
-            agent: this.agent,
-            signal: parent.signal,
-        });
-        this.settle(id, result);
-        if (this.closed)
-            throw new Error("测试已封存，迟到结果不改变最终事实");
-        return { callId: id, result };
+        if (explanation && this.current) {
+            const records = (this.current.result.actual_operations ??= []);
+            const operation = {
+                operation_id: randomUUID(),
+                order_in_step: records.length + 1,
+                binding: { ...this.current.binding },
+                description: String(this.recorder.sanitize(explanation.description)),
+                description_source: explanation.description_source,
+                parent_call_id: parent.callId,
+                tool_call_id: id,
+                granularity: compositeOperation(name, args) ? "composite" : "atomic",
+                dispatch_observed: false,
+                state: "REGISTERED",
+                created_at: new Date().toISOString(),
+            };
+            records.push(operation);
+            this.operations.set(id, operation);
+            this.recorder.event("operation_registered", operation, operation.binding);
+            this.recorder.event("operation_linked", {
+                operation_id: operation.operation_id,
+                tool_call_id: id,
+                parent_call_id: parent.callId,
+            }, operation.binding);
+            // 必需记录落盘后才进入原生派发；写入失败不能执行未记录动作。
+            this.save();
+        }
+        this.trustedCalls.set(id, parent.token);
+        try {
+            const result = await this.agent.ctx.tools.execute({
+                callId: id,
+                rootCallId: parent.rootCallId,
+                parent: parent.token,
+                name,
+                arguments: args,
+                agent: this.agent,
+                signal: parent.signal,
+            });
+            this.settle(id, result, parent.signal.aborted);
+            if (this.closed)
+                throw new Error("测试已封存，迟到结果不改变最终事实");
+            return { callId: id, result };
+        }
+        finally {
+            this.trustedCalls.delete(id);
+        }
     }
     stop(reason = "用户停止") {
         if (this.closed || this.reportReady)
@@ -1269,6 +1431,7 @@ export class NativeTest {
     }
     finish() {
         if (!this.reportReady) {
+            sealOperations(this.run, "测试已封存，在途操作未获得最终结果");
             for (const i of this.run.instances) {
                 if (this.run.incomplete) {
                     i.incomplete = true;
@@ -1284,6 +1447,7 @@ export class NativeTest {
             this.run.lifecycle = "FINISHED";
             this.run.finished_at = new Date().toISOString();
             this.save();
+            this.exportManualCases();
             writeReport(this.recorder.directory, this.recorder.sanitize(this.run));
             this.owner.reports.select(this.run);
             this.reportReady = true;
@@ -1308,6 +1472,9 @@ export class NativeTest {
                 url: this.owner.reports.url(this.run.suite_run_id),
                 markdown: `[查看测试报告](${this.owner.reports.url(this.run.suite_run_id)})`,
             },
+            actual_steps: join(this.recorder.directory, "actual-steps.json"),
+            manual_cases: join(this.recorder.directory, "manual-cases.md"),
+            actual_steps_export_error: this.run.manifest.actual_steps_export_error,
             message: "请在正常最终回复中提供以上统计、断言实际/预期、保存位置和Markdown报告链接。报告为静态HTML，可离线打开。",
         };
     }
@@ -1327,9 +1494,15 @@ export class NativeTest {
         const action = this.current?.phase === "cleanup" ? this.current.step.action : undefined;
         if (!action)
             return false;
+        if (exec.name === "test_execute_operation") {
+            const input = exec.arguments;
+            return (!!input.tool_name &&
+                operationTool(input.tool_name, input.arguments) &&
+                this.cleanupAllowed({ ...exec, name: input.tool_name }));
+        }
         if (action.capability === "browser") {
             if (Object.values(action.capture ?? {}).every((c) => c.kind === "browser_close"))
-                return !!exec.parent && exec.name === "mcp__playwright__browser_close";
+                return (this.isTrusted(exec) && exec.name === "mcp__playwright__browser_close");
             return (exec.name.startsWith("mcp__playwright__") &&
                 ![
                     "mcp__playwright__browser_run_code",
@@ -1347,6 +1520,18 @@ export class NativeTest {
             this.owner.quarantine(this.run, "停止等待在途操作超时，禁止启动清理");
             this.emergency("在途操作未在取消宽限期内结算，请人工确认外部停止并重置环境");
         }, this.owner.config.cancelGraceMs);
+    }
+    exportManualCases() {
+        try {
+            writeManualCases(this.recorder.directory, this.recorder.sanitize(this.run));
+        }
+        catch (error) {
+            const message = "实际步骤文件导出失败；已保存的运行数据可通过报告重建重新生成：" +
+                String(this.recorder.sanitize(String(error)));
+            this.run.manifest.actual_steps_export_error = message;
+            this.owner.ctx.logger?.warn(message);
+            this.save();
+        }
     }
     save() {
         this.recorder.snapshot(this.run);
