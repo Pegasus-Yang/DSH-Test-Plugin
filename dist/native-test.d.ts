@@ -53,6 +53,7 @@ export declare class NativeTest {
     private cleanupTurn;
     private finalizing;
     private nudges;
+    private planningQuestion;
     private cursor;
     private entries;
     private current?;

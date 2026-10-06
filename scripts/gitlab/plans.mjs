@@ -35,13 +35,17 @@ const check = (id, observation, expected, description) => ({
   },
 });
 
-export function createPlans(config, state) {
+export function validateBinding(config, state) {
   if (config.origin !== state.origin)
     throw new Error(
       "配置与准备记录的 GitLab 地址不同，请使用对应配置或重新准备",
     );
   if (state.account?.secret !== config.username)
     throw new Error("配置账号与准备记录不同，请重新准备该账号的测试数据");
+}
+
+export function createPlans(config, state) {
+  validateBinding(config, state);
   const origin = config.origin;
   const path = (role) => "/projects/" + state.projects[role].id;
   const issue = (role, index) =>
@@ -159,7 +163,7 @@ export function createPlans(config, state) {
             },
           ]
         : [],
-      // secret 键复用 Recorder 的已知敏感值保护；账号和密码均在账本、报告与导出中脱敏。
+      // secret 键登记审计中的已知敏感值；手工资料使用独立保存的真实输入。
       datasets: [
         {
           data_id: "baseline",

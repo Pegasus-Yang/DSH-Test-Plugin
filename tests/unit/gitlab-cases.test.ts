@@ -1,4 +1,4 @@
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import {
   mkdirSync,
   readFileSync,
@@ -15,11 +15,15 @@ import {
   privatePath,
   readState,
   writePrivate,
+  writePrivateText,
 } from "../../scripts/gitlab/config.mjs";
 import { createPlans, seeds } from "../../scripts/gitlab/plans.mjs";
+import { createMarkdownPlans } from "../../scripts/gitlab/markdown.mjs";
+import { generate } from "../../scripts/gitlab.mjs";
 import { assertOwned } from "../../scripts/gitlab/client.mjs";
 import { parsePlan } from "../../src/contracts.js";
 import { Recorder } from "../../src/recorder.js";
+import { parseCases, loadTextInput } from "../../src/case-input.js";
 
 const directories: string[] = [];
 function directory() {
@@ -175,6 +179,96 @@ it("业务预期冻结为种子常量，分页覆盖前三页与越界空数组"
       .find((c) => c.case_id === "anonymous_user")
       .steps.some((s) => s.assertion?.literal === 401),
   ).toBe(true);
+});
+
+it("用户 Markdown 含两条 UI 和三条接口用例，通过真实文字入口读取", () => {
+  const output = createMarkdownPlans(config(), state());
+  expect(parseCases(output.ui, ".md").templates).toHaveLength(2);
+  expect(parseCases(output.api, ".md").templates).toHaveLength(3);
+  expect(parseCases(output.all, ".md").templates).toHaveLength(5);
+  expect(output.ui).toContain(credentials.username);
+  expect(output.ui).toContain(credentials.password);
+  expect(output.api).not.toContain(credentials.password);
+  expect(output.api).not.toMatch(/\$\{[^}]+\}/);
+  expect(output.all).not.toMatch(
+    /test_capture|test_finish_step|test_execute_operation|observation_ref|capture_mode/,
+  );
+  const dir = directory();
+  const file = join(dir, "all.md");
+  writePrivateText(file, output.all);
+  const input = loadTextInput(localRoot, file);
+  expect(input.instances).toHaveLength(5);
+  expect(input.instances[0].task).toContain("组合筛选");
+  expect(input.instances[2].task).toContain("按专用名称检索");
+  expect(statSync(file).mode & 0o777).toBe(0o600);
+  for (const filename of [
+    "ui_filters",
+    "ui_draft_cancel",
+    "api_project_search",
+    "api_pagination",
+    "api_missing_project",
+  ])
+    expect(parseCases(output[filename], ".md").templates).toHaveLength(1);
+});
+
+it("Markdown 预期沿用固定种子，URL 和分页绑定本次资源，配置不能串用", () => {
+  const output = createMarkdownPlans(config(), state());
+  expect(output.api_pagination).toContain(seeds[0].title);
+  expect(output.api_pagination).toContain(seeds[1].title);
+  expect(output.api_pagination).toContain(seeds[2].title);
+  for (const page of [1, 2, 3, 4])
+    expect(output.api_pagination).toContain(
+      "/api/v4/projects/30/issues?order_by=created_at&sort=asc&per_page=1&page=" +
+        page,
+    );
+  expect(output.api_pagination).toContain("长度 0 的空数组");
+  expect(output.api_missing_project).toContain("HTTP 状态码等于 404");
+  expect(output.api_missing_project).toContain(
+    encodeURIComponent(
+      state().namespace_path + "/" + state().marker + "-missing",
+    ),
+  );
+  expect(output.ui_filters).toContain(
+    "/api/v4/projects/31/issues?state=closed&labels=dsh-smoke",
+  );
+  expect(() =>
+    createMarkdownPlans({ ...config(), username: "other" }, state()),
+  ).toThrow("账号与准备记录不同");
+});
+
+it("生成脚本同时保存内部回归与用户 Markdown，终端只推荐 Markdown", () => {
+  const dir = directory();
+  const record = join(dir, "state.json");
+  writePrivate(record, state());
+  const output = vi.spyOn(console, "log").mockImplementation(() => {});
+  try {
+    generate(config(), record);
+    const commands = output.mock.calls
+      .map((args) => args.join(" "))
+      .filter((text) => text.startsWith("/test-run "));
+    expect(commands).toHaveLength(3);
+    expect(commands.every((command) => command.endsWith(".md"))).toBe(true);
+  } finally {
+    output.mockRestore();
+  }
+  for (const name of ["api", "ui", "all"]) {
+    expect(
+      parsePlan(JSON.parse(readFileSync(join(dir, name + ".json"), "utf8")))
+        .cases.length,
+    ).toBeGreaterThan(0);
+    expect(
+      parseCases(readFileSync(join(dir, name + ".md"), "utf8"), ".md").templates
+        .length,
+    ).toBeGreaterThan(0);
+    expect(statSync(join(dir, name + ".md")).mode & 0o777).toBe(0o600);
+  }
+  symlinkSync(
+    new URL("../../examples/gitlab", import.meta.url).pathname,
+    join(dir, "public-md"),
+  );
+  expect(() =>
+    writePrivateText(join(dir, "public-md", "cases.md"), "text"),
+  ).toThrow(".local/gitlab");
 });
 
 it("配置绑定在事件、计划及任意工具说明中都保护账号和密码", () => {

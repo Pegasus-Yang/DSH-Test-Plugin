@@ -1,6 +1,6 @@
 {
   "name": "dsh-test-plugin",
-  "version": "0.11.1",
+  "version": "0.11.2",
   "description": "DeepSeek Harness 原生测试计划、执行、断言和报告插件",
   "type": "module",
   "license": "MIT",
@@ -17,6 +17,8 @@
     "examples",
     "doc/user-guide",
     "doc/deployment",
+    "doc/reference/开发者JSON用例与调试.md",
+    "doc/reference/开发者JSON用例与调试.en.md",
     "cordis.patch.yml",
     "locale/*.json",
     "icon.svg"

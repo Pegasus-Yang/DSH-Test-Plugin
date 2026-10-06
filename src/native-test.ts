@@ -318,6 +318,7 @@ export class NativeTest {
   private cleanupTurn = false;
   private finalizing = false;
   private nudges = 0;
+  private planningQuestion = false;
   private cursor = 0;
   private entries: Entry[] = [];
   private current?: Entry & { result: StepResult; binding: Binding };
@@ -373,7 +374,7 @@ export class NativeTest {
       incomplete: false,
       resource_quarantined: false,
       manifest: {
-        plugin_version: "0.11.1",
+        plugin_version: "0.11.2",
         plan_review: review,
         execution: "native-conversation",
         origin_session_id: agent.id,
@@ -642,7 +643,11 @@ export class NativeTest {
             required: ["observation_ref", "operator"],
             additionalProperties: false,
             properties: {
-              observation_ref: assertionSchema.properties.observation_ref,
+              observation_ref: {
+                ...assertionSchema.properties.observation_ref,
+                description:
+                  "点分隔的可信观察路径，例如step_1.response.status或step_1.response.body.0.iid；数组使用数字路径段，不使用[0]语法。",
+              },
               operator: assertionSchema.properties.operator,
               expected_value: {
                 type: "string",
@@ -667,6 +672,15 @@ export class NativeTest {
         if (c.instance.effective_steps.some((s) => s.step_id === id))
           throw new Error("检查点已经绑定，不能改写预期");
         const { expected_value, ...definition } = args.assertion;
+        if (
+          [
+            definition.observation_ref,
+            definition.expected_observation_ref,
+          ].some((ref) => typeof ref === "string" && /\[\d+\]/.test(ref))
+        )
+          throw new Error(
+            "观察引用使用点分隔路径，数组索引用数字路径段，例如step_1.response.body.0.iid；不能使用body[0]。修正字段引用，不修改用户预期。",
+          );
         const [producer, outputName, ...path] = String(
           definition.observation_ref,
         ).split(".");
@@ -767,7 +781,9 @@ export class NativeTest {
                           ? "boolean"
                           : "string",
                     }
-                  : {};
+                  : value.kind === "http" && !value.field
+                    ? { type: "object" }
+                    : {};
             }
             const nextAction = {
               ...action,
@@ -1044,7 +1060,13 @@ export class NativeTest {
             .filter((b) => b.type === "text")
             .map((b) => (b as { text: string }).text)
             .join("\n");
+          if (!this.review && this.planningQuestion)
+            this.timer = setTimeout(
+              () => this.stop("规划执行超时"),
+              this.owner.config.stepTimeoutMs,
+            );
           if (text !== this.task) this.task += "\n" + text;
+          this.planningQuestion = false;
         }
         if (event.type === "turn/end")
           void this.turnEnded(event.data.reason.kind === "aborted").catch(
@@ -1070,6 +1092,8 @@ export class NativeTest {
     own(
       scope.on("tools/execute", async (exec, next) => {
         if (exec.agent?.id === this.id) {
+          if (!this.planned && exec.name === "ask_user_question")
+            this.planningQuestion = true;
           if (this.review && !this.planned && exec.name === "exit_plan_mode")
             this.reviewCall = exec.callId;
           const call = this.calls.get(exec.callId);
@@ -1107,6 +1131,13 @@ export class NativeTest {
           }
         }
         const result = await next();
+        if (
+          exec.agent?.id === this.id &&
+          !this.planned &&
+          exec.name === "ask_user_question" &&
+          result.isError
+        )
+          this.planningQuestion = false;
         // 公开SDK允许around-dispatch返回规范失败；保留子调用的错误、内容和上下文。
         // 不能将子调用失败仅放进成功JSON，也不能覆盖外层管线自身的失败。
         return exec.name === "test_execute_operation" && !result.isError
@@ -1796,8 +1827,26 @@ export class NativeTest {
         return;
       }
       if (!aborted && !this.planned) {
+        if (this.review || this.planningQuestion) {
+          if (this.timer) clearTimeout(this.timer);
+          return;
+        }
+        if (this.nudges++ === 0) {
+          this.recorder.event("planning_retry_requested", {
+            reason: "轮次结束但未提交计划",
+          });
+          this.agent.followup(
+            notice(
+              "本次测试尚未提交执行计划，业务没有开始。请按当前test_submit_plan工具Schema保存文字规划；文件用例按planning_input的每个instance_id提交，不要只回复文字分析。保留原文中的动作、输入和预期；提交后按test_current继续。缺少必要信息时使用ask_user_question。",
+            ),
+          );
+          // 保留最初的规划计时，不因提醒重新获得完整预算。
+          return;
+        }
         if (this.timer) clearTimeout(this.timer);
-        return;
+        this.run.incomplete = true;
+        this.run.manifest.stop_reason =
+          "模型结束规划轮次但未提交有效计划，测试未执行";
       }
       if (aborted) {
         this.cancelled = true;

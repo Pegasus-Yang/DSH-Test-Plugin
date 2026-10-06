@@ -901,6 +901,7 @@ it("释放步骤明确失败后立即隔离，不派发下一实例业务", asyn
 it("允许正常追问并等待同一会话补充；其他会话不继承测试上下文", async () => {
   const t = setup();
   await t.manager.start(t.agent, "检查点赞");
+  await t.call("ask_user_question");
   await t.end();
   expect(t.manager.sessions.get("origin")!.closed).toBe(false);
   expect(t.sections.size).toBe(1);
@@ -1096,6 +1097,90 @@ it("自然语言计划由插件补齐固定字段，不要求模型编造版本�
   expect(frozen.schema_version).toBe("1");
   expect(frozen.cases[0].cleanup).toEqual([]);
   expect(frozen.source_refs[0].excerpt).toBe("点赞不为0");
+});
+
+it("普通规划只输出文字时提醒一次，再次结束未提交则明确 ERROR 并释放会话", async () => {
+  const t = setup();
+  await t.manager.start(t.agent, "访问站点，检查标题");
+  const run = t.manager.sessions.get("origin")!;
+  await t.end();
+  expect(t.followups).toHaveLength(2);
+  expect(t.followups[1].source.kind).toBe("plugin:test");
+  expect(JSON.stringify(t.followups[1])).toContain("test_submit_plan");
+  expect(run.closed).toBe(false);
+  await t.end();
+  expect(run.closed).toBe(true);
+  expect(run.run.instances[0].status).toBe("ERROR");
+  expect(run.run.manifest.stop_reason).toContain("未提交有效计划");
+  expect(t.followups).toHaveLength(2);
+  expect(t.dispatched).toEqual([]);
+});
+
+it("规划提醒保留原始超时预算，不重新延长且不会派发业务", async () => {
+  vi.useFakeTimers();
+  const t = setup();
+  try {
+    t.manager.config.stepTimeoutMs = 40;
+    await t.manager.start(t.agent, "查询接口并核对状态");
+    const run = t.manager.sessions.get("origin")!;
+    const first = t.end();
+    await vi.advanceTimersByTimeAsync(0);
+    await first;
+    expect(t.followups).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(41);
+    expect(run.run.manifest.stop_reason).toBe("规划执行超时");
+    const stopped = t.end(true);
+    await vi.advanceTimersByTimeAsync(0);
+    await stopped;
+    expect(run.run.instances[0].status).toBe("ERROR");
+    expect(t.dispatched).toEqual([]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("规划阶段已经追问时等待用户，不把待补充信息判为缺少计划", async () => {
+  const t = setup();
+  await t.manager.start(t.agent, "登录但没有提供账号");
+  await t.call("ask_user_question");
+  await t.end();
+  expect(t.followups).toHaveLength(1);
+  expect(t.manager.sessions.get("origin")!.closed).toBe(false);
+});
+
+it("必要信息等待不计预算，用户补充后恢复规划超时", async () => {
+  vi.useFakeTimers();
+  const t = setup();
+  try {
+    t.manager.config.stepTimeoutMs = 40;
+    await t.manager.start(t.agent, "登录但没有账号");
+    const run = t.manager.sessions.get("origin")!;
+    await t.call("ask_user_question");
+    const waiting = t.end();
+    await vi.advanceTimersByTimeAsync(0);
+    await waiting;
+    await vi.advanceTimersByTimeAsync(80);
+    expect(run.run.manifest.stop_reason).toBeUndefined();
+    await t.emit(
+      "session/event",
+      { id: t.agent.id },
+      {
+        type: "user/message",
+        data: {
+          source: { kind: "user" },
+          content: [{ type: "text", text: "必要信息已补充" }],
+        },
+      },
+    );
+    await vi.advanceTimersByTimeAsync(41);
+    expect(run.run.manifest.stop_reason).toBe("规划执行超时");
+    expect(run.run.instances[0].status).toBe("ERROR");
+    expect(t.dispatched.filter((name) => name !== "ask_user_question")).toEqual(
+      [],
+    );
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 it("规划超时记录ERROR，且没有执行或清理浏览器", async () => {
@@ -1567,6 +1652,200 @@ it("文字计划只冻结短句，运行时按采集方式登记输出；缺少�
   expect(run.run.plan).toEqual(frozen);
   expect(await rebuild(run.recorder.directory)).toEqual(run.run);
   await t.end();
+});
+
+it.each([false, true])(
+  "完整 HTTP 响应与状态码不能直接绑定，修正字段后复用同一观察（后续步骤=%s）",
+  async (laterStep) => {
+    const t = setup();
+    const spy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        new Response(JSON.stringify({ amount: 100 }), { status: 200 }),
+      );
+    try {
+      await t.manager.start(t.agent, "GET 请求并检查状态码为200");
+      const submitted = await t.call("test_submit_plan", {
+        name: "HTTP 字段绑定",
+        steps: laterStep
+          ? [
+              { description: "发送请求" },
+              { description: "检查响应", checks: ["HTTP 状态码等于200"] },
+            ]
+          : [
+              {
+                description: "发送请求并检查响应",
+                checks: ["HTTP 状态码等于200"],
+              },
+            ],
+      });
+      await t.announce(submitted.value.plan_summary);
+      await t.call("test_define_step", {
+        capability: "api",
+        allowed_targets: ["https://httpbin.org"],
+        reason: "按用户原文发送 GET",
+      });
+      await t.call("test_capture", {
+        capture: {
+          response: { kind: "http", url: "https://httpbin.org/get", field: "" },
+        },
+        reason: "保存完整 HTTP 响应供状态码检查复用",
+      });
+      if (laterStep) await t.call("test_finish_step");
+      const run = t.manager.sessions.get("origin")!;
+      const rejected = await t.call("test_bind_check", {
+        check_index: 0,
+        assertion: {
+          observation_ref: "step_1.response",
+          operator: "eq",
+          expected_value: "200",
+        },
+      });
+      expect(rejected.isError).toBe(true);
+      expect(
+        run.run.instances[0].effective_steps.filter((s) => s.assertion),
+      ).toHaveLength(0);
+      expect(
+        (
+          await t.call("test_bind_check", {
+            check_index: 0,
+            assertion: {
+              observation_ref: "step_1.response.status",
+              operator: "eq",
+              expected_value: "200",
+            },
+          })
+        ).isError,
+      ).toBe(false);
+      await t.call("test_finish_step");
+      expect((await t.call("test_finish")).value.statistics.PASS).toBe(1);
+      expect(spy).toHaveBeenCalledOnce();
+      await t.end();
+    } finally {
+      spy.mockRestore();
+    }
+  },
+);
+
+it("数组观察引用在冻结前拒绝错误括号语法，点分隔索引复用已采集响应", async () => {
+  const t = setup();
+  const spy = vi
+    .spyOn(globalThis, "fetch")
+    .mockResolvedValue(
+      new Response(JSON.stringify([{ iid: 3 }]), { status: 200 }),
+    );
+  try {
+    await t.manager.start(t.agent, "查询 Issue 并检查第一条 iid 等于3");
+    const submitted = await t.call("test_submit_plan", {
+      name: "数组引用",
+      steps: [
+        { description: "查询并检查 Issue", checks: ["第一条 iid 等于3"] },
+      ],
+    });
+    await t.announce(submitted.value.plan_summary);
+    await t.call("test_define_step", {
+      capability: "api",
+      allowed_targets: ["https://httpbin.org"],
+      reason: "查询列表",
+    });
+    await t.call("test_capture", {
+      capture: {
+        response: { kind: "http", url: "https://httpbin.org/get", field: "" },
+      },
+      reason: "保存列表响应",
+    });
+    expect(
+      (
+        await t.call("test_bind_check", {
+          check_index: 0,
+          assertion: {
+            observation_ref: "step_1.response.body[0].iid",
+            operator: "eq",
+            expected_value: "3",
+          },
+        })
+      ).isError,
+    ).toBe(true);
+    const run = t.manager.sessions.get("origin")!;
+    expect(
+      run.run.instances[0].effective_steps.filter((s) => s.assertion),
+    ).toHaveLength(0);
+    expect(
+      (
+        await t.call("test_bind_check", {
+          check_index: 0,
+          assertion: {
+            observation_ref: "step_1.response.body.0.iid",
+            operator: "eq",
+            expected_value: "3",
+          },
+        })
+      ).isError,
+    ).toBe(false);
+    await t.call("test_finish_step");
+    expect((await t.call("test_finish")).value.statistics.PASS).toBe(1);
+    expect(spy).toHaveBeenCalledOnce();
+    await t.end();
+  } finally {
+    spy.mockRestore();
+  }
+});
+
+it("正文子字段类型异常仍保留业务 FAIL，不以完整响应保护拒绝业务观察", async () => {
+  const t = setup();
+  const spy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(JSON.stringify({ amount: { unexpected: true } }), {
+      status: 200,
+    }),
+  );
+  try {
+    await t.manager.start(t.agent, "GET 后检查金额等于100");
+    const submitted = await t.call("test_submit_plan", {
+      name: "正文类型异常",
+      steps: [{ description: "发送请求并核对金额", checks: ["金额等于100"] }],
+    });
+    await t.announce(submitted.value.plan_summary);
+    await t.call("test_define_step", {
+      capability: "api",
+      allowed_targets: ["https://httpbin.org"],
+      reason: "请求接口",
+    });
+    await t.call("test_capture", {
+      capture: {
+        amount: {
+          kind: "http",
+          url: "https://httpbin.org/get",
+          field: "body.amount",
+        },
+      },
+      reason: "读取金额字段",
+    });
+    expect(
+      (
+        await t.call("test_bind_check", {
+          check_index: 0,
+          assertion: {
+            observation_ref: "step_1.amount",
+            operator: "eq",
+            expected_value: "100",
+          },
+        })
+      ).isError,
+    ).toBe(false);
+    await t.call("test_finish_step");
+    const run = t.manager.sessions.get("origin")!;
+    const result = run.run.instances[0].steps.find(
+      (s) => s.assertion,
+    )!.assertion!;
+    expect(result.status).toBe("FAIL");
+    expect(result.expected).toBe(100);
+    expect(result.actual).toEqual({ unexpected: true });
+    expect((await t.call("test_finish")).value.statistics.FAIL).toBe(1);
+    expect(spy).toHaveBeenCalledOnce();
+    await t.end();
+  } finally {
+    spy.mockRestore();
+  }
 });
 
 it("纯接口文字步骤运行时确定响应结构，下一步只核对已采集响应，不重复请求", async () => {

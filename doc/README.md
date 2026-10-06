@@ -10,16 +10,18 @@ The English guides describe the current implementation. Historical design and ac
 
 ## 当前版本
 
+- [Markdown 用户入口验收](project/Markdown用户入口验收.md)：0.11.2 的用户帮助、开发格式边界、GitLab Markdown 网页/接口用例及真实对话验收。
+
 - [手工用例调整验收](project/手工用例调整验收.md)：0.11.1 的五部分模板、真实数据、原始描述、空预期、Markdown 与下载/重建验证。
 
 - [0.11.0 版本发布验收](project/0.11.0版本发布验收.md)：汇总 v0.10.0 之后的功能、修复与优化，记录新版本构建、回归、安装包与本地标签核对；历史真实失败和复测边界继续保留。
 - [收尾约束与账本报告优化验收](project/收尾约束与账本报告优化验收.md)：释放准入、检查点提交、流式重建与下载、报告去重；记录大日志量化比较、完整 GitLab 批次及定位失败的单独复测边界。
 - [工作区文件路径验收](project/工作区文件路径验收.md)：修复纳入 0.11.0；文件命令按发起对话工作区读取，保留越界限制，公开 SDK 回归及实际 JSON 读取验证。
-- [GitLab 复杂用例](user-guide/GitLab复杂用例.md)：本地私有配置、17 条 UI/接口场景、独立固定基线、逐步运行、重跑与专用项目清理；[场景表](../examples/gitlab/README.md)。
+- [GitLab 用户用例](user-guide/GitLab复杂用例.md)：本机私有配置、2 条网页及 3 条接口 Markdown 场景、固定基线、逐步运行及清理；[场景表](../examples/gitlab/README.md)。
 - [GitLab 复杂用例验收](project/GitLab复杂用例验收.md)：公开 SDK 回归、真实 DSH 分轮执行、100 个业务检查点、脱敏、接口无媒体和清理核对；保留失败及规模边界。
 
 - [实际步骤与手工用例验收](project/实际步骤与手工用例验收.md)：公开 SDK 回归、真实网页、接口/CSV、错误/拒绝/取消、导出和媒体核对。
-- [实际步骤与手工用例](user-guide/实际步骤与手工用例.md)：0.11.0 新增功能；运行时操作说明、真实输入、实例编号、状态含义及 Markdown／JSON 导出。
+- [实际步骤与手工用例](user-guide/实际步骤与手工用例.md)：运行时操作说明、真实输入、实例编号、状态含义、Markdown 手工用例与运行记录。
 
 - [0.10.0 历史版本发布验收](project/0.10.0版本发布验收.md)：版本与运行记录同步、公开 SDK 重建、安装包和远端标签核对。
 
@@ -73,6 +75,8 @@ The English guides describe the current implementation. Historical design and ac
 | [方案审核与修复记录](design/方案审核与修复记录.md) | 本轮七项问题、用户确认决策、修订映射与静态复审边界 |
 
 ## 参考
+
+- [开发者 JSON 用例与调试](reference/开发者JSON用例与调试.md)：内部执行格式、校验约束、样例、完整 GitLab 开发回归及文字计划边界；[English](reference/开发者JSON用例与调试.en.md)。
 
 - [上游接口与验证记录](reference/上游接口与验证记录.md)：调研来源、接口风险和本次文档交付检查。
 - [前期纯插件调研](reference/前期纯插件调研.md)：可行性依据，当前实施以设计与实施文档为准。

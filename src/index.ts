@@ -206,10 +206,10 @@ export function apply(ctx: Context, config: PluginConfig = {}): void {
   );
   register(
     "test-run",
-    "执行TXT、Markdown文字用例或完整JSON测试集合",
+    "执行TXT或Markdown测试用例",
     ({ agent, rawInput }) => {
       const usage =
-        "请提供工作区内的TXT、Markdown或JSON测试集合文件路径，例如 /test-run examples/cases.txt；自然语言任务请使用 /test <任务描述>。";
+        "请提供工作区内的TXT或Markdown用例文件路径，例如 /test-run examples/cases.md；自然语言任务请使用 /test <任务描述>。";
       if (!rawInput.trim()) throw new Error(usage);
       const workspace = commandWorkspace(agent);
       const input = fileArgument(rawInput);
@@ -246,7 +246,7 @@ export function apply(ctx: Context, config: PluginConfig = {}): void {
         plan,
       );
     },
-    "TXT、Markdown或JSON文件路径；自然语言请使用 /test",
+    "TXT或Markdown文件路径；自然语言请使用 /test",
   );
   register(
     "test-data",

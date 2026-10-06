@@ -330,7 +330,7 @@ export function parsePlan(input, allowIntents = false) {
                                     type +
                                     "，预期类型=" +
                                     typeof expected +
-                                    "。保持正确输出类型，修正literal或data.expected中的JSON值。");
+                                    "。请核对观察引用是否指向正确字段、输出类型及预期JSON类型；不得根据实际结果改写用户预期。");
                         }
                     }
                 }

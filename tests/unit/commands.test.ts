@@ -223,7 +223,7 @@ it.each([
   "missing.json",
   "访问ceshiren.com，搜索 agent，断言点赞数不为0",
 ])(
-  "/test-run 输入 %j 时提示JSON路径与自然语言入口，不启动运行",
+  "/test-run 输入 %j 时提示文字文件路径与自然语言入口，不启动运行",
   async (input) => {
     const { execute, runner } = setup();
     const result = await execute("test-run", input);

@@ -9,9 +9,11 @@ import {
   privatePath,
   readState,
   writePrivate,
+  writePrivateText,
 } from "./gitlab/config.mjs";
 import { assertOwned, gitlabClient, publicGet } from "./gitlab/client.mjs";
 import { comment, createPlans, seeds } from "./gitlab/plans.mjs";
+import { createMarkdownPlans } from "./gitlab/markdown.mjs";
 
 function options(args) {
   const values = {};
@@ -38,9 +40,12 @@ function latestState() {
 export function generate(config, stateFile) {
   const state = readState(stateFile);
   const plans = createPlans(config, state);
+  const markdown = createMarkdownPlans(config, state);
   const directory = resolve(stateFile, "..");
   for (const [name, plan] of Object.entries(plans))
     writePrivate(join(directory, name + ".json"), plan);
+  for (const [name, content] of Object.entries(markdown))
+    writePrivateText(join(directory, name + ".md"), content);
   // 可分别验收单一 UI 流程；不需要编辑含凭据的完整文件。
   for (const item of plans.ui.cases)
     writePrivate(join(directory, item.case_id + ".json"), {
@@ -48,10 +53,12 @@ export function generate(config, stateFile) {
       suite_id: item.case_id,
       cases: [item],
     });
-  console.log("已生成 4 条 UI 场景、13 条纯接口场景（包括分页的四次请求）。");
-  console.log("/test-run " + join(directory, "api.json"));
-  console.log("/test-run " + join(directory, "ui.json"));
-  console.log("/test-run " + join(directory, "all.json"));
+  console.log(
+    "已生成用户 Markdown 用例：2 条 UI 场景、3 条纯接口场景；内部开发回归资料另存同目录。",
+  );
+  console.log("/test-run " + join(directory, "api.md"));
+  console.log("/test-run " + join(directory, "ui.md"));
+  console.log("/test-run " + join(directory, "all.md"));
   return plans;
 }
 export async function prepare(config) {

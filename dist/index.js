@@ -142,8 +142,8 @@ export function apply(ctx, config = {}) {
             ? loadTextInput(commandWorkspace(agent), fileArgument(file[1]))
             : undefined);
     }, "任务描述或 --file cases.md；规划后先审核，确认后执行");
-    register("test-run", "执行TXT、Markdown文字用例或完整JSON测试集合", ({ agent, rawInput }) => {
-        const usage = "请提供工作区内的TXT、Markdown或JSON测试集合文件路径，例如 /test-run examples/cases.txt；自然语言任务请使用 /test <任务描述>。";
+    register("test-run", "执行TXT或Markdown测试用例", ({ agent, rawInput }) => {
+        const usage = "请提供工作区内的TXT或Markdown用例文件路径，例如 /test-run examples/cases.md；自然语言任务请使用 /test <任务描述>。";
         if (!rawInput.trim())
             throw new Error(usage);
         const workspace = commandWorkspace(agent);
@@ -167,7 +167,7 @@ export function apply(ctx, config = {}) {
             throw new Error(usage);
         const plan = JSON.parse(readFileSync(path, "utf8"));
         return tests.start(agent, `执行测试集合 ${rawInput.trim()}。请在当前对话逐步说明执行情况，按test_current指引使用原生工具完成采集、断言及清理，最后提供报告链接。`, plan);
-    }, "TXT、Markdown或JSON文件路径；自然语言请使用 /test");
+    }, "TXT或Markdown文件路径；自然语言请使用 /test");
     register("test-data", "读取CSV参数与任务模板，先审核每个实例的参数和文字步骤，再执行", ({ agent, rawInput }) => tests.start(agent, rawInput.trim(), undefined, true, loadDataInput(commandWorkspace(agent), rawInput)), "data.csv <包含${参数名}的任务> 或 data.csv --file cases.md");
     ctx.effect(() => async () => {
         await tests.shutdown();

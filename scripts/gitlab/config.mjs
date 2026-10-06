@@ -73,6 +73,10 @@ export function loadConfig(file = resolve(localRoot, "config.json")) {
 }
 
 export function writePrivate(file, value) {
+  return writePrivateText(file, JSON.stringify(value, null, 2) + "\n");
+}
+
+export function writePrivateText(file, text) {
   const full = privatePath(file);
   mkdirSync(dirname(full), { recursive: true, mode: 0o700 });
   // 不覆盖符号链接；已存在文件也重新检查权限。
@@ -80,7 +84,7 @@ export function writePrivate(file, value) {
     throw new Error("私有输出文件不能是符号链接");
   if (existsSync(full) && (statSync(full).mode & 0o077) !== 0)
     throw new Error("本地文件权限过宽，请先设为 600：" + full);
-  writeFileSync(full, JSON.stringify(value, null, 2) + "\n", { mode: 0o600 });
+  writeFileSync(full, text, { mode: 0o600 });
   return full;
 }
 
