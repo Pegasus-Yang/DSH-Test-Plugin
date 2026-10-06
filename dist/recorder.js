@@ -1,9 +1,9 @@
 /** 单进程串行账本、原子快照及证据归档；写失败立即交给测试作用域终止。 */
-import { appendFileSync, closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, writeFileSync, } from "node:fs";
+import { appendFileSync, closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, writeFileSync, unlinkSync, } from "node:fs";
 import { randomUUID, createHash } from "node:crypto";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { field, } from "./contracts.js";
-import { sealOperations } from "./actual-operations.js";
+export { rebuild, ledgerEvents } from "./ledger-rebuild.js";
 export function redact(value) {
     if (value === undefined)
         return null;
@@ -92,6 +92,8 @@ export class Recorder {
     seq = 0;
     failed;
     seen = new Set();
+    checkpoints = [];
+    obsolete = new Set();
     constructor(root, runId, onEvent) {
         this.runId = runId;
         this.onEvent = onEvent;
@@ -107,7 +109,7 @@ export class Recorder {
             return;
         try {
             const event = {
-                schema_version: "1",
+                schema_version: "2",
                 seq: this.seq,
                 event_id: randomUUID(),
                 timestamp: new Date().toISOString(),
@@ -141,8 +143,30 @@ export class Recorder {
     }
     snapshot(run) {
         try {
-            this.event("state_saved", run);
-            atomicJson(join(this.directory, "results.json"), this.sanitize(run));
+            if (this.failed)
+                throw this.failed;
+            const contents = JSON.stringify(this.sanitize(run), null, 2) + "\n";
+            const path = `checkpoints/state-${this.seq}.json`;
+            atomicWrite(safePath(this.directory, path), contents);
+            this.event("state_checkpoint", {
+                relative_path: path,
+                through_seq: this.seq - 1,
+                bytes: Buffer.byteLength(contents),
+                sha256: createHash("sha256").update(contents).digest("hex"),
+            });
+            this.checkpoints.push(path);
+            atomicWrite(join(this.directory, "results.json"), contents);
+            while (this.checkpoints.length > 2)
+                this.obsolete.add(this.checkpoints.shift());
+            for (const old of this.obsolete) {
+                try {
+                    unlinkSync(safePath(this.directory, old));
+                    this.obsolete.delete(old);
+                }
+                catch (error) {
+                    console.warn("旧测试快照回收失败：", String(this.sanitize(String(error))));
+                }
+            }
         }
         catch (error) {
             this.failed = error instanceof Error ? error : new Error(String(error));
@@ -175,105 +199,4 @@ export class Recorder {
             redacted,
         };
     }
-}
-/** 从保存的最后状态重建；尾部损坏可标中断，中间损坏拒绝。 */
-export function rebuild(directory) {
-    const eventFile = join(directory, "events.jsonl");
-    const lines = readFileSync(eventFile, "utf8").split("\n");
-    let state;
-    let incomplete = false;
-    const pending = new Map();
-    const applied = new Set();
-    const revisions = new Set();
-    const operationEvents = [];
-    let stateSeq = -1;
-    let seq = 0;
-    for (let i = 0; i < lines.length; i++) {
-        if (!lines[i] && i === lines.length - 1)
-            continue;
-        let e;
-        try {
-            e = JSON.parse(lines[i]);
-        }
-        catch {
-            if (i >= lines.length - 2) {
-                incomplete = true;
-                break;
-            }
-            throw new Error("JSONL中间损坏，拒绝重建");
-        }
-        if (e.seq !== seq++)
-            throw new Error("事件序列不连续");
-        if (e.type === "state_saved") {
-            state = e.payload;
-            stateSeq = e.seq;
-        }
-        if ([
-            "operation_registered",
-            "operation_dispatched",
-            "operation_finished",
-        ].includes(e.type))
-            operationEvents.push(e);
-        if (e.type === "plan_revised")
-            revisions.add(e.payload.revision);
-        if (e.type === "revision_applied")
-            applied.add(e.payload.case_run_id + ":" + e.payload.revision);
-        if (e.type === "tool_bound")
-            pending.set(e.payload.call_id, e.binding);
-        if (e.type === "tool_finished" || e.type === "late_tool_result")
-            pending.delete(e.payload.call_id);
-    }
-    if (!state)
-        throw new Error("没有可重建的状态快照");
-    for (const event of operationEvents.filter((e) => e.seq > stateSeq)) {
-        const op = event.payload;
-        const step = state.instances
-            .find((i) => i.case_run_id === op.binding.case_run_id)
-            ?.steps.find((s) => s.step_id === op.binding.step_id && s.phase === op.binding.phase);
-        if (!step)
-            continue;
-        const records = (step.actual_operations ??= []);
-        const index = records.findIndex((r) => r.operation_id === op.operation_id);
-        if (index < 0)
-            records.push(op);
-        else if (!["UNKNOWN", "NOT_DISPATCHED", "SUCCEEDED", "ERROR"].includes(records[index].state))
-            records[index] = op;
-    }
-    for (const instance of state.instances)
-        for (const revision of instance.applied_revisions)
-            if (revision !== 0 &&
-                (!revisions.has(revision) ||
-                    !applied.has(instance.case_run_id + ":" + revision))) {
-                incomplete = true;
-                instance.incomplete = true;
-                instance.integrity_error = true;
-                instance.status = "ERROR";
-                instance.issues.push("修订应用记录缺失");
-            }
-    if (state.lifecycle !== "FINISHED" || incomplete) {
-        state.incomplete = true;
-        state.lifecycle = "INTERRUPTED";
-        for (const instance of state.instances)
-            if (instance.lifecycle !== "FINISHED") {
-                instance.status = "ERROR";
-                instance.lifecycle = "INTERRUPTED";
-                instance.incomplete = true;
-                instance.issues.push("进程中断，仅重建已保存事实");
-            }
-    }
-    for (const [callId, binding] of pending) {
-        const instance = state.instances.find((i) => i.case_run_id === binding.case_run_id);
-        if (instance) {
-            instance.unsettled_call_ids = [
-                ...new Set([...instance.unsettled_call_ids, callId]),
-            ];
-            instance.resource_quarantined = true;
-            instance.incomplete = true;
-            instance.status = "ERROR";
-        }
-        state.resource_quarantined = true;
-        state.incomplete = true;
-    }
-    sealOperations(state, "只读重建：进程中断或在途操作未获得最终结果");
-    return state;
 }

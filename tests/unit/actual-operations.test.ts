@@ -185,7 +185,7 @@ it("未知、复合、错误归属与旧记录不伪装成完整说明", () => {
   expect(manualCasesMarkdown(run)).toContain("不根据旧调用事后补写");
 });
 
-it("Markdown转义特殊字符，原与只读重建导出一致且不覆盖原文件", () => {
+it("Markdown转义特殊字符，原与只读重建导出一致且不覆盖原文件", async () => {
   const { run, i, step } = fixture();
   const root = mkdtempSync(join(tmpdir(), "manual-case-"));
   roots.push(root);
@@ -209,7 +209,7 @@ it("Markdown转义特殊字符，原与只读重建导出一致且不覆盖原�
   expect(markdown).toContain("&#124;");
   expect(markdown).toContain("<br>");
   expect(markdown).toContain("&#42;&#42;");
-  const regenerated = rebuild(recorder.directory);
+  const regenerated = await rebuild(recorder.directory);
   writeManualCases(recorder.directory, regenerated, true);
   expect(
     readFileSync(join(recorder.directory, "actual-steps-rebuilt.json"), "utf8"),
@@ -221,7 +221,7 @@ it("Markdown转义特殊字符，原与只读重建导出一致且不覆盖原�
   expect(() => parsePlan(JSON.parse(json))).toThrow();
 });
 
-it("中断重建封存未知结果，并保留快照后已保存的派发事件", () => {
+it("中断重建封存未知结果，并保留快照后已保存的派发事件", async () => {
   const { run, step } = fixture();
   const root = mkdtempSync(join(tmpdir(), "operation-crash-"));
   roots.push(root);
@@ -236,7 +236,7 @@ it("中断重建封存未知结果，并保留快照后已保存的派发事件"
     dispatch_observed: true,
   };
   recorder.event("operation_dispatched", dispatched, dispatched.binding);
-  const rebuilt = rebuild(recorder.directory);
+  const rebuilt = await rebuild(recorder.directory);
   const op = rebuilt.instances[0]!.steps[0]!.actual_operations![0]!;
   expect(op.state).toBe("UNKNOWN");
   expect(op.dispatch_observed).toBe(true);

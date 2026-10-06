@@ -17,18 +17,18 @@ export const reportPrefix = "/test-reports";
 export class ReportAccess {
   origin?: () => string;
   private mediaKey = randomBytes(32);
-  private videoToken(path: string, expires: number): string {
+  private fileToken(path: string, expires: number): string {
     return createHmac("sha256", this.mediaKey)
       .update(`${path}:${expires}`)
       .digest("hex");
   }
-  /** 已认证的报告签发仅限一个录像文件的只读票据，兼容 sandbox 下的严格 Cookie。 */
-  authorizeVideo(req: IncomingMessage): boolean {
+  /** 已认证报告签发单个录像或账本文件票据，兼容 sandbox 下的严格 Cookie。 */
+  authorizeFile(req: IncomingMessage): boolean {
     if (!["GET", "HEAD"].includes(req.method ?? "")) return false;
     try {
       const url = new URL(req.url ?? "/", "http://local");
       if (
-        !/^\/test-reports\/run-[\w-]+\/evidence\/browser-[\w-]+\.mp4$/.test(
+        !/^\/test-reports\/run-[\w-]+\/(?:evidence\/browser-[\w-]+\.mp4|events\.jsonl(?:\.gz)?)$/.test(
           url.pathname,
         )
       )
@@ -47,7 +47,7 @@ export class ReportAccess {
         expiry <= Date.now() + 86400000 &&
         timingSafeEqual(
           Buffer.from(token[1]!, "hex"),
-          Buffer.from(this.videoToken(url.pathname, expiry), "hex"),
+          Buffer.from(this.fileToken(url.pathname, expiry), "hex"),
         )
       );
     } catch {
@@ -147,16 +147,22 @@ export class ReportAccess {
       const suffix = pathname.slice(reportPrefix.length + 1);
       if (
         !pathname.startsWith(reportPrefix + "/") ||
-        !/^run-[\w-]+\/(?:report(?:-rebuilt)?\.html|results(?:-rebuilt)?\.json|actual-steps(?:-rebuilt)?\.json|manual-cases(?:-rebuilt)?\.md|plan\.json|events\.jsonl|evidence\/[\w.-]+)$/.test(
+        !/^run-[\w-]+\/(?:report(?:-rebuilt)?\.html|results(?:-rebuilt)?\.json|actual-steps(?:-rebuilt)?\.json|manual-cases(?:-rebuilt)?\.md|plan\.json|events\.jsonl(?:\.gz)?|evidence\/[\w.-]+)$/.test(
           suffix,
         )
       )
         throw new Error("不支持的报告路径");
       const target = realpathSync(join(this.outputRoot, suffix));
       const rel = relative(realpathSync(this.outputRoot), target);
+      const runRel = relative(
+        realpathSync(join(this.outputRoot, suffix.split("/")[0]!)),
+        target,
+      );
       if (
         rel === ".." ||
         rel.startsWith(".." + sep) ||
+        runRel === ".." ||
+        runRel.startsWith(".." + sep) ||
         !statSync(target).isFile()
       )
         throw new Error("路径逃逸");
@@ -167,12 +173,13 @@ export class ReportAccess {
         ".png": "image/png",
         ".mp4": "video/mp4",
         ".md": "text/markdown; charset=utf-8",
+        ".gz": "application/gzip",
       };
       res.setHeader(
         "Content-Type",
         types[extname(target)] ?? "application/octet-stream",
       );
-      if (extname(target) === ".md")
+      if (extname(target) === ".md" || /events\.jsonl(?:\.gz)?$/.test(target))
         res.setHeader(
           "Content-Disposition",
           `attachment; filename="${target.split(sep).at(-1)}"`,
@@ -227,18 +234,27 @@ export class ReportAccess {
         }
         return;
       }
+      if (extname(target) !== ".html")
+        res.setHeader("Content-Length", statSync(target).size);
       if (req.method === "HEAD") res.end();
       else if (extname(target) === ".html") {
         const base = pathname.slice(0, pathname.lastIndexOf("/") + 1);
         const html = readFileSync(target, "utf8").replace(
-          /(src|href)="(evidence\/browser-[\w-]+\.mp4)(\?download=1)?"/g,
+          /(src|href)="(evidence\/browser-[\w-]+\.mp4|events\.jsonl(?:\.gz)?)(\?download=1)?"/g,
           (_match, attribute, file: string, download: string) => {
             const expires = Date.now() + 86400000;
-            return `${attribute}="${file}?${download ? "download=1&amp;" : ""}media=${expires}.${this.videoToken(base + file, expires)}"`;
+            if (!existsSync(join(target, "..", file))) return _match;
+            return `${attribute}="${file}?${download ? "download=1&amp;" : ""}media=${expires}.${this.fileToken(base + file, expires)}"`;
           },
         );
         res.end(html);
-      } else res.end(readFileSync(target));
+      } else {
+        res.setHeader("Content-Length", statSync(target).size);
+        const stream = createReadStream(target);
+        res.once("close", () => stream.destroy());
+        stream.on("error", () => res.destroy());
+        stream.pipe(res);
+      }
     } catch {
       res.writeHead(404);
       res.end("报告或附件不存在");

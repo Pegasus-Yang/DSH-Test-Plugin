@@ -115,18 +115,18 @@ it("适用必要清理失败遮蔽主状态但保留原FAIL", () => {
   expect(aggregate(run.instances[0])).toBe("ERROR");
   expect(a.status).toBe("FAIL");
 });
-it("修订应用记录缺失即使最终快照PASS也必须ERROR", () => {
+it("修订应用记录缺失即使最终快照PASS也必须ERROR", async () => {
   const { run, recorder } = fixture();
   run.instances[0].applied_revisions = [0, 1];
   run.instances[0].status = "PASS";
   run.instances[0].lifecycle = "FINISHED";
   run.lifecycle = "FINISHED";
   recorder.snapshot(run);
-  const restored = rebuild(recorder.directory);
+  const restored = await rebuild(recorder.directory);
   expect(restored.incomplete).toBe(true);
   expect(restored.instances[0].status).toBe("ERROR");
 });
-it("在途派发后中断恢复隔离而不重放", () => {
+it("在途派发后中断恢复隔离而不重放", async () => {
   const { run, recorder } = fixture();
   recorder.snapshot(run);
   recorder.event(
@@ -140,7 +140,7 @@ it("在途派发后中断恢复隔离而不重放", () => {
       attempt_id: "1",
     },
   );
-  const restored = rebuild(recorder.directory);
+  const restored = await rebuild(recorder.directory);
   expect(restored.resource_quarantined).toBe(true);
   expect(restored.instances[0].unsettled_call_ids).toEqual(["never"]);
 });

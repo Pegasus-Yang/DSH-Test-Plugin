@@ -124,7 +124,7 @@ export function apply(ctx: Context, config: PluginConfig = {}): void {
         path: reportPrefix,
         handler: (req, res) => {
           if (
-            tests.reports.authorizeVideo(req) ||
+            tests.reports.authorizeFile(req) ||
             web.connection.authorizeIndex(req, res)
           )
             tests.reports.serve(req, res);

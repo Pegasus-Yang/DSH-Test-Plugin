@@ -91,7 +91,8 @@ export class TestUiAccess {
           throw new Error("当前测试尚未结束，不能重建报告。");
         const directory = join(this.tests.config.outputRoot, id);
         if (!existsSync(directory)) throw new Error("运行记录不存在");
-        const run = rebuild(directory);
+        const run = await rebuild(directory, controller.signal);
+        controller.signal.throwIfAborted();
         writeManualCases(directory, run, true);
         atomicJson(join(directory, "results-rebuilt.json"), run);
         writeReport(directory, run, "report-rebuilt.html");

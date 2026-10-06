@@ -359,6 +359,8 @@ export class NativeTest {
                         "。请仅提供description、tool_name、arguments；tool_name须使用完整名称，例如mcp__playwright__browser_click，arguments填写该原生工具的参数对象。");
                 const input = args;
                 this.requireSettled(exec);
+                if (this.releaseStep())
+                    throw new Error("当前只允许释放浏览器，请调用test_capture({})");
                 if (!this.current?.step.action ||
                     this.current.step.action.capability !== "browser")
                     throw new Error("当前步骤没有浏览器操作范围");
@@ -826,7 +828,10 @@ export class NativeTest {
                 return "停止后禁止新业务动作，等待在途结算";
             if (exec.agent?.id !== this.id)
                 return;
-            if (this.cleanupTurn && !this.cleanupAllowed(exec))
+            if (this.releaseStep() && !this.releaseAllowed(exec))
+                return "当前只允许释放浏览器，请调用test_capture({})，取得释放证据后test_finish_step";
+            if ((this.cleanupTurn || this.current?.phase === "cleanup") &&
+                !this.cleanupAllowed(exec))
                 return "收尾轮次仅允许当前冻结清理步骤的预授权工具";
             if (!exec.parent &&
                 this.pendingTools.size &&
@@ -1111,6 +1116,14 @@ export class NativeTest {
         c.result.duration_ms = Date.now() - Date.parse(c.result.started_at);
         this.recorder.event("step_finished", c.result, c.binding);
         this.current = undefined;
+        if (c.phase === "cleanup" &&
+            this.releaseStep(c.step) &&
+            !["SUCCEEDED", "SKIPPED"].includes(status) &&
+            !this.cancelled) {
+            this.owner.quarantine(this.run, "浏览器释放失败，禁止后续业务");
+            c.instance.incomplete = true;
+            this.stop("浏览器释放失败，禁止后续业务");
+        }
     }
     state() {
         const c = this.current;
@@ -1121,7 +1134,7 @@ export class NativeTest {
             phase: this.reportReady
                 ? "finished"
                 : this.planned
-                    ? this.cleanupTurn
+                    ? this.cleanupTurn || c?.phase === "cleanup"
                         ? "cleanup"
                         : "executing"
                     : this.draft
@@ -1168,9 +1181,13 @@ export class NativeTest {
                     ? "将review_markdown原样传入exit_plan_mode的plan参数，由原生审核等待用户批准；修改时重新test_submit_plan"
                     : "理解任务并提交test_submit_plan；信息不足时正常追问"
                 : c
-                    ? c.step.checks !== undefined
-                        ? "只执行当前文字步骤：test_define_step确定本步目标，观察操作后test_capture；逐项test_bind_check，最后test_finish_step"
-                        : "完成当前动作、test_capture、test_finish_step"
+                    ? this.releaseStep()
+                        ? "当前进入浏览器释放阶段：test_capture({})取得释放证据后test_finish_step；已完成检查保持冻结，随后按test_current进入下一实例或生成报告"
+                        : c.phase === "cleanup"
+                            ? "只完成当前冻结清理步骤及可信采集，再test_finish_step；已完成业务及检查保持冻结"
+                            : c.step.checks !== undefined
+                                ? "只执行当前文字步骤：test_define_step确定本步目标，观察操作后test_capture；逐项test_bind_check，最后test_finish_step"
+                                : "完成当前动作、test_capture、test_finish_step"
                     : "调用test_finish生成报告并在回复中给出链接",
         };
     }
@@ -1483,6 +1500,8 @@ export class NativeTest {
             throw new Error("其他工具尚未结算");
     }
     cleanupAllowed(exec) {
+        if (this.releaseStep())
+            return this.releaseAllowed(exec);
         if ([
             "test_capture",
             "test_current",
@@ -1510,6 +1529,23 @@ export class NativeTest {
                 ].includes(exec.name));
         }
         return action.capability === "api" && exec.name === "test_api_get";
+    }
+    releaseStep(step = this.current?.step) {
+        const action = step?.action;
+        const capture = Object.values(action?.capture ?? {});
+        return (action?.capability === "browser" &&
+            capture.length > 0 &&
+            capture.every((item) => item.kind === "browser_close"));
+    }
+    releaseAllowed(exec) {
+        return ([
+            "test_capture",
+            "test_current",
+            "test_finish_step",
+            "test_fail_step",
+            "test_finish",
+        ].includes(exec.name) ||
+            (exec.name === "mcp__playwright__browser_close" && this.isTrusted(exec)));
     }
     armStopDeadline() {
         if (this.stoppingTimer)

@@ -2,6 +2,7 @@ import { it, expect } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Writable } from "node:stream";
 import { ReportAccess } from "../../src/report-access.js";
 import type { SuiteRun } from "../../src/contracts.js";
 function setup() {
@@ -23,24 +24,30 @@ function setup() {
   const access = new ReportAccess(root);
   return { root, run, access };
 }
-function get(access: ReportAccess, url: string, method = "GET") {
+async function get(access: ReportAccess, url: string, method = "GET") {
   let status = 200,
     body: unknown;
   const headers: Record<string, string> = {};
-  access.serve(
-    { url, method } as never,
-    {
-      setHeader: (k: string, v: string) => {
-        headers[k] = v;
-      },
-      writeHead: (s: number) => {
-        status = s;
-      },
-      end: (b: unknown) => {
-        body = b;
-      },
-    } as never,
-  );
+  const chunks: Buffer[] = [];
+  const res: any = new Writable({
+    write(chunk, _encoding, done) {
+      chunks.push(Buffer.from(chunk));
+      done();
+    },
+  });
+  res.setHeader = (k: string, v: string) => {
+    headers[k] = String(v);
+  };
+  res.writeHead = (s: number) => {
+    status = s;
+  };
+  const pending = new Promise<void>((done, reject) => {
+    res.once("finish", done);
+    res.once("error", reject);
+  });
+  access.serve({ url, method } as never, res);
+  await pending;
+  body = chunks.length ? Buffer.concat(chunks) : undefined;
   return { status, body, headers };
 }
 it("重启后不需要运行ID即可恢复最近报告；运行中不提供未完成报告", () => {
@@ -52,21 +59,21 @@ it("重启后不需要运行ID即可恢复最近报告；运行中不提供未�
   access.finish(run);
   expect(access.state()?.ready).toBe(true);
 });
-it("读取报告和证据，拒绝写入、目录和符号链接逃逸", () => {
+it("读取报告和证据，拒绝写入、目录和符号链接逃逸", async () => {
   const { access, root } = setup();
   expect(
-    String(get(access, "/test-reports/run-example/report.html").body),
+    String((await get(access, "/test-reports/run-example/report.html")).body),
   ).toContain("报告");
   expect(
-    get(access, "/test-reports/run-example/report.html", "POST").status,
+    (await get(access, "/test-reports/run-example/report.html", "POST")).status,
   ).toBe(405);
-  expect(get(access, "/test-reports/run-example/../../secret").status).toBe(
-    404,
-  );
-  expect(get(access, "/test-reports/run-example/%2e%2e%2fsecret").status).toBe(
-    404,
-  );
-  expect(get(access, "/test-reports/run-example/").status).toBe(404);
+  expect(
+    (await get(access, "/test-reports/run-example/../../secret")).status,
+  ).toBe(404);
+  expect(
+    (await get(access, "/test-reports/run-example/%2e%2e%2fsecret")).status,
+  ).toBe(404);
+  expect((await get(access, "/test-reports/run-example/")).status).toBe(404);
   const outside = mkdtempSync(join(tmpdir(), "outside-report-"));
   writeFileSync(join(outside, "secret.json"), "secret");
   symlinkSync(
@@ -74,17 +81,18 @@ it("读取报告和证据，拒绝写入、目录和符号链接逃逸", () => {
     join(root, "run-example/evidence/secret.json"),
   );
   expect(
-    get(access, "/test-reports/run-example/evidence/secret.json").status,
+    (await get(access, "/test-reports/run-example/evidence/secret.json"))
+      .status,
   ).toBe(404);
 });
-it("旧批次迟到通知不能覆盖当前报告，HTML采用隔离策略", () => {
+it("旧批次迟到通知不能覆盖当前报告，HTML采用隔离策略", async () => {
   const { access, run } = setup();
   const later = { ...run, suite_run_id: "run-later" };
   access.select(later, "report.html", false);
   access.finish(run);
   expect(access.state()?.ready).toBe(false);
   expect(
-    get(access, "/test-reports/run-example/report.html").headers[
+    (await get(access, "/test-reports/run-example/report.html")).headers[
       "Content-Security-Policy"
     ],
   ).toContain("sandbox");
@@ -98,7 +106,7 @@ it("网页报告使用宿主HTTP地址，避免相对链接被聊天渲染器解
   );
 });
 
-it("实际步骤及手工用例文件仅开放规定名称，Markdown以附件下载", () => {
+it("实际步骤及手工用例文件仅开放规定名称，Markdown以附件下载", async () => {
   const { access, root } = setup();
   for (const suffix of ["", "-rebuilt"]) {
     writeFileSync(
@@ -109,13 +117,13 @@ it("实际步骤及手工用例文件仅开放规定名称，Markdown以附件�
       join(root, `run-example/manual-cases${suffix}.md`),
       "# 手工用例",
     );
-    const json = get(
+    const json = await get(
       access,
       `/test-reports/run-example/actual-steps${suffix}.json`,
     );
     expect(json.status).toBe(200);
     expect(json.headers["Content-Type"]).toContain("application/json");
-    const md = get(
+    const md = await get(
       access,
       `/test-reports/run-example/manual-cases${suffix}.md`,
     );
@@ -123,14 +131,26 @@ it("实际步骤及手工用例文件仅开放规定名称，Markdown以附件�
     expect(md.headers["Content-Type"]).toBe("text/markdown; charset=utf-8");
     expect(md.headers["Content-Disposition"]).toContain("attachment");
     expect(
-      get(access, `/test-reports/run-example/manual-cases${suffix}.md`, "HEAD")
-        .body,
+      (
+        await get(
+          access,
+          `/test-reports/run-example/manual-cases${suffix}.md`,
+          "HEAD",
+        )
+      ).body,
     ).toBeUndefined();
     expect(
-      get(access, `/test-reports/run-example/manual-cases${suffix}.md`, "POST")
-        .status,
+      (
+        await get(
+          access,
+          `/test-reports/run-example/manual-cases${suffix}.md`,
+          "POST",
+        )
+      ).status,
     ).toBe(405);
   }
   writeFileSync(join(root, "run-example/private.md"), "private");
-  expect(get(access, "/test-reports/run-example/private.md").status).toBe(404);
+  expect(
+    (await get(access, "/test-reports/run-example/private.md")).status,
+  ).toBe(404);
 });

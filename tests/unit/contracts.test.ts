@@ -100,7 +100,7 @@ describe("文件账本", () => {
     symlinkSync(tmpdir(), join(root, "link"));
     expect(() => safePath(root, "link/escape")).toThrow();
   });
-  it("尾部损坏标中断，中间损坏拒绝", () => {
+  it("尾部损坏标中断，中间损坏拒绝", async () => {
     const root = mkdtempSync(join(tmpdir(), "dsh-test-")),
       r = new Recorder(root, "run");
     const plan = parsePlan(sample());
@@ -118,9 +118,9 @@ describe("文件账本", () => {
       manifest: {},
     });
     appendFileSync(join(r.directory, "events.jsonl"), "{bad");
-    expect(rebuild(r.directory).incomplete).toBe(true);
+    expect((await rebuild(r.directory)).incomplete).toBe(true);
     appendFileSync(join(r.directory, "events.jsonl"), "\n{}\n");
-    expect(() => rebuild(r.directory)).toThrow("中间损坏");
+    await expect(rebuild(r.directory)).rejects.toThrow("中间损坏");
   });
 });
 

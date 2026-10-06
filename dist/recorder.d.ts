@@ -1,4 +1,5 @@
 import { type Binding, type Evidence, type Json, type SuiteRun } from "./contracts.js";
+export { rebuild, ledgerEvents } from "./ledger-rebuild.js";
 export interface RecordedEvent {
     type: string;
     binding: Binding | {
@@ -20,11 +21,11 @@ export declare class Recorder {
     private seq;
     failed?: Error;
     private seen;
+    private checkpoints;
+    private obsolete;
     constructor(root: string, runId: string, onEvent?: ((event: RecordedEvent) => void) | undefined);
     event(type: string, payload: unknown, binding?: Binding, key?: string): void;
     snapshot(run: SuiteRun): void;
     json(name: string, value: unknown): void;
     evidence(name: string, content: string | Buffer, mediaType: string, redacted?: boolean): Evidence;
 }
-/** 从保存的最后状态重建；尾部损坏可标中断，中间损坏拒绝。 */
-export declare function rebuild(directory: string): SuiteRun;

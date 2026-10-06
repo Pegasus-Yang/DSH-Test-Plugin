@@ -7,18 +7,18 @@ export class ReportAccess {
     outputRoot;
     origin;
     mediaKey = randomBytes(32);
-    videoToken(path, expires) {
+    fileToken(path, expires) {
         return createHmac("sha256", this.mediaKey)
             .update(`${path}:${expires}`)
             .digest("hex");
     }
-    /** 已认证的报告签发仅限一个录像文件的只读票据，兼容 sandbox 下的严格 Cookie。 */
-    authorizeVideo(req) {
+    /** 已认证报告签发单个录像或账本文件票据，兼容 sandbox 下的严格 Cookie。 */
+    authorizeFile(req) {
         if (!["GET", "HEAD"].includes(req.method ?? ""))
             return false;
         try {
             const url = new URL(req.url ?? "/", "http://local");
-            if (!/^\/test-reports\/run-[\w-]+\/evidence\/browser-[\w-]+\.mp4$/.test(url.pathname))
+            if (!/^\/test-reports\/run-[\w-]+\/(?:evidence\/browser-[\w-]+\.mp4|events\.jsonl(?:\.gz)?)$/.test(url.pathname))
                 return false;
             const token = url.searchParams.get("media")?.split(".");
             if (!token ||
@@ -29,7 +29,7 @@ export class ReportAccess {
             const expiry = Number(token[0]);
             return (expiry > Date.now() &&
                 expiry <= Date.now() + 86400000 &&
-                timingSafeEqual(Buffer.from(token[1], "hex"), Buffer.from(this.videoToken(url.pathname, expiry), "hex")));
+                timingSafeEqual(Buffer.from(token[1], "hex"), Buffer.from(this.fileToken(url.pathname, expiry), "hex")));
         }
         catch {
             return false;
@@ -122,12 +122,15 @@ export class ReportAccess {
             }
             const suffix = pathname.slice(reportPrefix.length + 1);
             if (!pathname.startsWith(reportPrefix + "/") ||
-                !/^run-[\w-]+\/(?:report(?:-rebuilt)?\.html|results(?:-rebuilt)?\.json|actual-steps(?:-rebuilt)?\.json|manual-cases(?:-rebuilt)?\.md|plan\.json|events\.jsonl|evidence\/[\w.-]+)$/.test(suffix))
+                !/^run-[\w-]+\/(?:report(?:-rebuilt)?\.html|results(?:-rebuilt)?\.json|actual-steps(?:-rebuilt)?\.json|manual-cases(?:-rebuilt)?\.md|plan\.json|events\.jsonl(?:\.gz)?|evidence\/[\w.-]+)$/.test(suffix))
                 throw new Error("不支持的报告路径");
             const target = realpathSync(join(this.outputRoot, suffix));
             const rel = relative(realpathSync(this.outputRoot), target);
+            const runRel = relative(realpathSync(join(this.outputRoot, suffix.split("/")[0])), target);
             if (rel === ".." ||
                 rel.startsWith(".." + sep) ||
+                runRel === ".." ||
+                runRel.startsWith(".." + sep) ||
                 !statSync(target).isFile())
                 throw new Error("路径逃逸");
             const types = {
@@ -137,9 +140,10 @@ export class ReportAccess {
                 ".png": "image/png",
                 ".mp4": "video/mp4",
                 ".md": "text/markdown; charset=utf-8",
+                ".gz": "application/gzip",
             };
             res.setHeader("Content-Type", types[extname(target)] ?? "application/octet-stream");
-            if (extname(target) === ".md")
+            if (extname(target) === ".md" || /events\.jsonl(?:\.gz)?$/.test(target))
                 res.setHeader("Content-Disposition", `attachment; filename="${target.split(sep).at(-1)}"`);
             if (extname(target) === ".html")
                 res.setHeader("Content-Security-Policy", "sandbox allow-scripts allow-downloads allow-popups allow-popups-to-escape-sandbox; default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; media-src 'self'");
@@ -184,18 +188,27 @@ export class ReportAccess {
                 }
                 return;
             }
+            if (extname(target) !== ".html")
+                res.setHeader("Content-Length", statSync(target).size);
             if (req.method === "HEAD")
                 res.end();
             else if (extname(target) === ".html") {
                 const base = pathname.slice(0, pathname.lastIndexOf("/") + 1);
-                const html = readFileSync(target, "utf8").replace(/(src|href)="(evidence\/browser-[\w-]+\.mp4)(\?download=1)?"/g, (_match, attribute, file, download) => {
+                const html = readFileSync(target, "utf8").replace(/(src|href)="(evidence\/browser-[\w-]+\.mp4|events\.jsonl(?:\.gz)?)(\?download=1)?"/g, (_match, attribute, file, download) => {
                     const expires = Date.now() + 86400000;
-                    return `${attribute}="${file}?${download ? "download=1&amp;" : ""}media=${expires}.${this.videoToken(base + file, expires)}"`;
+                    if (!existsSync(join(target, "..", file)))
+                        return _match;
+                    return `${attribute}="${file}?${download ? "download=1&amp;" : ""}media=${expires}.${this.fileToken(base + file, expires)}"`;
                 });
                 res.end(html);
             }
-            else
-                res.end(readFileSync(target));
+            else {
+                res.setHeader("Content-Length", statSync(target).size);
+                const stream = createReadStream(target);
+                res.once("close", () => stream.destroy());
+                stream.on("error", () => res.destroy());
+                stream.pipe(res);
+            }
         }
         catch {
             res.writeHead(404);

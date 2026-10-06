@@ -127,6 +127,8 @@ export declare class NativeTest {
     private finish;
     private requireSettled;
     private cleanupAllowed;
+    private releaseStep;
+    private releaseAllowed;
     private armStopDeadline;
     private exportManualCases;
     private save;

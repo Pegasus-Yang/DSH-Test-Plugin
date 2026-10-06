@@ -1,12 +1,12 @@
 /** 自包含离线报告：总览、用例详情、断言和附件均来自已持久化事实。 */
 import { existsSync, readFileSync, statSync } from "node:fs";
-import { gzipSync } from "node:zlib";
 import { statistics, type SuiteRun, type StepResult } from "./contracts.js";
 import { atomicWrite, redact, safePath } from "./recorder.js";
 import { reportStyle } from "./report-style.js";
 import { reportInteractions } from "./report-client.js";
 import { reportIcons } from "./report-icons.js";
 import { recordingMedia } from "./report-media.js";
+import { ReportData } from "./report-data.js";
 import {
   projectActualCase,
   inputText,
@@ -60,8 +60,13 @@ export function writeReport(
   filename = "report.html",
 ): void {
   const stats = statistics(run);
+  const data = new ReportData();
   const download = (name: string, bytes: Buffer, mime: string, label: string) =>
-    `<a href="data:${mime};base64,${bytes.toString("base64")}" download="${escape(name)}">${escape(label)}</a>`;
+    `<a href="#" data-report-download="${data.download(bytes, mime)}" download="${escape(name)}">${escape(label)}</a>`;
+  const callDetails = (id: string, value: unknown) => {
+    data.call(id, value);
+    return `<details class="inspect" data-report-call="${escape(id)}"><summary>查看原生调用依据（脱敏）</summary><pre></pre></details>`;
+  };
   const totalMs = run.finished_at
     ? Date.parse(run.finished_at) - Date.parse(run.created_at)
     : NaN;
@@ -84,14 +89,19 @@ export function writeReport(
     } catch {}
     if (!path)
       return `<p class="missing">附件缺失：${escape(e.relative_path)}</p>`;
-    const url = `data:${e.media_type};base64,${readFileSync(path).toString("base64")}`;
+    const bytes = readFileSync(path);
+    const url = `data:${e.media_type};base64,${bytes.toString("base64")}`;
     const image = e.media_type.startsWith("image/");
     let content = "";
     if (image)
-      content = `<button class="image-open" data-preview aria-label="放大页面截图"><img class="preview" src="${escape(url)}" alt="本次测试实际采集的页面截图" loading="lazy"></button>`;
+      content = `<button class="image-open" data-preview aria-label="放大页面截图"><img class="preview" data-report-asset="${escape(id)}" src="${escape(url)}" alt="本次测试实际采集的页面截图" loading="lazy"></button>`;
     else if (statSync(path).size <= 262144)
-      content = `<details class="inspect"><summary>查看原始响应</summary><pre>${escape(readFileSync(path, "utf8"))}</pre></details>`;
-    return `<section class="attachment" id="evidence-${caseIndex}-${escape(id)}"><div class="attachment-header"><h3>${image ? "页面截图" : "工具响应"}</h3><a href="${escape(url)}" download="${escape(e.relative_path.split("/").at(-1))}">下载附件 ${icon("external-link")}</a></div>${content}<div class="hash">${escape(e.relative_path)}<br>SHA256 ${escape(e.sha256)}</div></section>`;
+      content = `<details class="inspect" data-report-text="${data.download(bytes, e.media_type)}"><summary>查看原始响应</summary><pre></pre></details>`;
+    const name = e.relative_path.split("/").at(-1)!;
+    const link = image
+      ? `<a href="#" data-report-image-download="${escape(id)}" download="${escape(name)}">下载附件 ${icon("external-link")}</a>`
+      : download(name, bytes, e.media_type, "下载附件");
+    return `<section class="attachment" id="evidence-${caseIndex}-${escape(id)}"><div class="attachment-header"><h3>${image ? "页面截图" : "工具响应"}</h3>${link}</div>${content}<div class="hash">${escape(e.relative_path)}<br>SHA256 ${escape(e.sha256)}</div></section>`;
   };
   const compare = (s: StepResult, caseIndex: number) => {
     const a = s.assertion!;
@@ -117,7 +127,7 @@ export function writeReport(
             const call = actual.call_records.find(
               (c) => c.call_id === row.tool_call_id,
             );
-            return `<section class="actual-row" data-actual-id="${escape(row.id)}"><div class="actual-heading">${row.number ? `<span class="number">${row.number}</span>` : ""}<h3>${escape(row.description)}</h3><span class="badge ${escape(row.state)}">${escape(operationLabels[row.state] ?? row.state)}</span></div><div class="actual-source">来源：${escape(row.source_step_id)} · ${escape(row.source_description)}${row.operation?.granularity === "composite" ? " · 复合操作，内部动作需复核" : ""}</div><dl class="actual-values"><dt>实际输入</dt><dd>${escape(inputText(row))}</dd><dt>原有预期</dt><dd>${escape(expectedText(row))}</dd></dl>${row.operation?.reason ? `<p class="reason">${escape(row.operation.reason)}</p>` : ""}${row.assertion ? `<p>本次实际值：<code>${escape(JSON.stringify(row.assertion.actual))}</code></p>` : ""}${row.evidence_refs[0] ? `<button class="evidence-button" data-evidence="evidence-${index}-${escape(row.evidence_refs[0])}">查看本次采集证据</button>` : ""}${call ? `<details class="inspect"><summary>查看原生调用依据（脱敏）</summary><pre>${json(call)}</pre></details>` : ""}</section>`;
+            return `<section class="actual-row" data-actual-id="${escape(row.id)}"><div class="actual-heading">${row.number ? `<span class="number">${row.number}</span>` : ""}<h3>${escape(row.description)}</h3><span class="badge ${escape(row.state)}">${escape(operationLabels[row.state] ?? row.state)}</span></div><div class="actual-source">来源：${escape(row.source_step_id)} · ${escape(row.source_description)}${row.operation?.granularity === "composite" ? " · 复合操作，内部动作需复核" : ""}</div><dl class="actual-values"><dt>实际输入</dt><dd>${escape(inputText(row))}</dd><dt>原有预期</dt><dd>${escape(expectedText(row))}</dd></dl>${row.operation?.reason ? `<p class="reason">${escape(row.operation.reason)}</p>` : ""}${row.assertion ? `<p>本次实际值：<code>${escape(JSON.stringify(row.assertion.actual))}</code></p>` : ""}${row.evidence_refs[0] ? `<button class="evidence-button" data-evidence="evidence-${index}-${escape(row.evidence_refs[0])}">查看本次采集证据</button>` : ""}${call ? callDetails(`${i.case_run_id}:${call.call_id}`, call) : ""}</section>`;
           })
           .join("")}</div>`;
       const actualPanel = hasActual
@@ -151,7 +161,7 @@ export function writeReport(
       const steps = i.steps
         .map(
           (s, n) =>
-            `<details class="step"${focus === s ? " open" : ""}><summary><span class="number">${n + 1}</span><span class="step-copy"><strong>${escape(s.description)}</strong><small>${{ setup: "准备", test: "业务", cleanup: "清理" }[s.phase]} · ${s.required ? "必需" : "可选"} · ${escape(s.step_id)}</small></span><span class="duration">${duration(s.duration_ms)}</span>${badge(s.status)}${icon("chevron-down", "chevron")}</summary><div class="step-content">${s.reason ? `<p class="reason">${escape(s.reason)}</p>` : ""}${s.assertion ? compare(s, index) : ""}${s.observations.map((o) => `<div class="observation-line">${escape(o.output_name)} = <code>${escape(JSON.stringify(o.value))}</code>${o.evidence_refs[0] ? ` <button class="evidence-button" data-evidence="evidence-${index}-${escape(o.evidence_refs[0])}">查看证据</button>` : ""}</div>`).join("")}${s.capture_attempts?.length ? `<details class="inspect"><summary>采集方式与调整记录 · ${s.capture_attempts.length} 次</summary><pre>${json(s.capture_attempts)}</pre></details>` : ""}${s.calls.length ? `<details class="inspect"><summary>${s.calls.length} 次工具调用 · 展开执行记录</summary>${s.calls.map((c) => `<div class="call"><strong>${escape(c.name)}</strong><small>${c.finished_at ? (c.isError ? "错误" : "已结算") : "未结算"}</small><pre>${json(c.args_redacted)}</pre><details class="inspect"><summary>原始结果（脱敏）</summary><pre>${json(c.result)}</pre></details></div>`).join("")}</details>` : ""}</div></details>`,
+            `<details class="step"${focus === s ? " open" : ""}><summary><span class="number">${n + 1}</span><span class="step-copy"><strong>${escape(s.description)}</strong><small>${{ setup: "准备", test: "业务", cleanup: "清理" }[s.phase]} · ${s.required ? "必需" : "可选"} · ${escape(s.step_id)}</small></span><span class="duration">${duration(s.duration_ms)}</span>${badge(s.status)}${icon("chevron-down", "chevron")}</summary><div class="step-content">${s.reason ? `<p class="reason">${escape(s.reason)}</p>` : ""}${s.assertion ? compare(s, index) : ""}${s.observations.map((o) => `<div class="observation-line">${escape(o.output_name)} = <code>${escape(JSON.stringify(o.value))}</code>${o.evidence_refs[0] ? ` <button class="evidence-button" data-evidence="evidence-${index}-${escape(o.evidence_refs[0])}">查看证据</button>` : ""}</div>`).join("")}${s.capture_attempts?.length ? `<details class="inspect"><summary>采集方式与调整记录 · ${s.capture_attempts.length} 次</summary><pre>${json(s.capture_attempts)}</pre></details>` : ""}${s.calls.length ? `<details class="inspect"><summary>${s.calls.length} 次工具调用 · 展开执行记录</summary>${s.calls.map((c) => `<div class="call"><strong>${escape(c.name)}</strong><small>${c.finished_at ? (c.isError ? "错误" : "已结算") : "未结算"}</small><pre>${json(c.args_redacted)}</pre>${callDetails(`${i.case_run_id}:${c.call_id}`, c)}</div>`).join("")}</details>` : ""}</div></details>`,
         )
         .join("");
       const assertions = i.steps.filter(
@@ -194,7 +204,7 @@ export function writeReport(
     )
     .join("");
   const eventPath = safePath(directory, "events.jsonl");
-  const links = `<div class="footer-links">${download("actual-steps.json", Buffer.from(JSON.stringify(actualStepsDocument(run), null, 2)), "application/json", "下载完整批次实际步骤")}${download("manual-cases.md", Buffer.from(manualCasesMarkdown(run)), "text/markdown", "下载完整批次手工用例")}${download("results.json", Buffer.from(JSON.stringify(redact(run), null, 2)), "application/json", "下载运行数据")}${download("plan.json", Buffer.from(JSON.stringify(redact(run.plan), null, 2)), "application/json", "下载冻结计划")}${existsSync(eventPath) ? download("events.jsonl.gz", gzipSync(readFileSync(eventPath)), "application/gzip", "下载事件账本（压缩）") : ""}</div>`;
+  const links = `<div class="footer-links">${download("actual-steps.json", Buffer.from(JSON.stringify(actualStepsDocument(run), null, 2)), "application/json", "下载完整批次实际步骤")}${download("manual-cases.md", Buffer.from(manualCasesMarkdown(run)), "text/markdown", "下载完整批次手工用例")}${download("results.json", Buffer.from(JSON.stringify(redact(run), null, 2)), "application/json", "下载运行数据")}${download("plan.json", Buffer.from(JSON.stringify(redact(run.plan), null, 2)), "application/json", "下载冻结计划")}${existsSync(eventPath) ? `<a href="events.jsonl?download=1" download="events.jsonl">下载事件账本</a>` : ""}</div>`;
   const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escape(run.name)} · 测试报告</title><style>${reportStyle}</style></head><body><nav class="rail" aria-label="报告导航"><div class="brand">DSH / TEST REPORT</div>${[
     ["overview", "home", "概览"],
     ["cases", "list-details", "测试用例"],
@@ -216,6 +226,6 @@ export function writeReport(
     )
     .join(
       "",
-    )}</div><h2>测试套件与用例</h2><div class="table-wrap"><table><thead><tr><th>用例名称</th><th>数据集</th><th>状态</th><th>断言通过 / 已执行</th><th>步骤耗时</th></tr></thead><tbody>${run.instances.map((i, index) => `<tr><td><button class="case-link" data-open-case="case-${index}">${escape(i.name)}</button></td><td>${escape(i.data_id)}</td><td>${badge(i.status)}</td><td>${i.steps.filter((s) => s.assertion?.status === "PASS").length} / ${i.steps.filter((s) => s.assertion).length}</td><td>${duration(i.steps.reduce((n, s) => n + s.duration_ms, 0))}</td></tr>`).join("")}</tbody></table></div><p class="note">通过率以全部用例实例为分母。取消、阻塞和未确定不会计为通过。断言统计仅计入真实比较记录；未执行的断言可在用例详情中查看。</p>${links}</section><section class="run-info" data-view="info" hidden><h2>运行信息</h2><dl><dt>运行 ID</dt><dd>${escape(run.suite_run_id)}</dd><dt>开始时间</dt><dd>${escape(time(run.created_at))}</dd><dt>结束时间</dt><dd>${escape(time(run.finished_at))}</dd><dt>执行模式</dt><dd>${escape(run.manifest.execution ?? run.manifest.tools_mode ?? "未记录")}</dd><dt>发起会话</dt><dd>${escape(run.manifest.origin_session_id ?? "未记录")}</dd><dt>插件版本</dt><dd>${escape(run.manifest.plugin_version ?? "未记录")}</dd></dl><details class="inspect"><summary>完整运行配置与预算</summary><pre>${json(run.manifest)}</pre></details><p>本报告依据冻结计划、绑定的实际观察和确定性比较结果生成。采集定位的运行时调整保存在对应步骤中，原始预期保持不变。</p>${links}</section></main>${run.evidence.some((e) => e.media_type.startsWith("image/")) ? '<dialog id="image-dialog" aria-label="页面截图预览"><button id="close-image" class="text-button">关闭预览</button><img id="full-image" alt="实际页面截图完整预览"></dialog>' : ""}<script>(${reportInteractions.toString()})();</script></body></html>`;
+    )}</div><h2>测试套件与用例</h2><div class="table-wrap"><table><thead><tr><th>用例名称</th><th>数据集</th><th>状态</th><th>断言通过 / 已执行</th><th>步骤耗时</th></tr></thead><tbody>${run.instances.map((i, index) => `<tr><td><button class="case-link" data-open-case="case-${index}">${escape(i.name)}</button></td><td>${escape(i.data_id)}</td><td>${badge(i.status)}</td><td>${i.steps.filter((s) => s.assertion?.status === "PASS").length} / ${i.steps.filter((s) => s.assertion).length}</td><td>${duration(i.steps.reduce((n, s) => n + s.duration_ms, 0))}</td></tr>`).join("")}</tbody></table></div><p class="note">通过率以全部用例实例为分母。取消、阻塞和未确定不会计为通过。断言统计仅计入真实比较记录；未执行的断言可在用例详情中查看。</p>${links}</section><section class="run-info" data-view="info" hidden><h2>运行信息</h2><dl><dt>运行 ID</dt><dd>${escape(run.suite_run_id)}</dd><dt>开始时间</dt><dd>${escape(time(run.created_at))}</dd><dt>结束时间</dt><dd>${escape(time(run.finished_at))}</dd><dt>执行模式</dt><dd>${escape(run.manifest.execution ?? run.manifest.tools_mode ?? "未记录")}</dd><dt>发起会话</dt><dd>${escape(run.manifest.origin_session_id ?? "未记录")}</dd><dt>插件版本</dt><dd>${escape(run.manifest.plugin_version ?? "未记录")}</dd></dl><details class="inspect"><summary>完整运行配置与预算</summary><pre>${json(run.manifest)}</pre></details><p>本报告依据冻结计划、绑定的实际观察和确定性比较结果生成。采集定位的运行时调整保存在对应步骤中，原始预期保持不变。</p>${links}</section></main>${run.evidence.some((e) => e.media_type.startsWith("image/")) ? '<dialog id="image-dialog" aria-label="页面截图预览"><button id="close-image" class="text-button">关闭预览</button><img id="full-image" alt="实际页面截图完整预览"></dialog>' : ""}<script type="application/json" id="report-data">${data.script()}</script><script>(${reportInteractions.toString()})();</script></body></html>`;
   atomicWrite(safePath(directory, filename), html);
 }

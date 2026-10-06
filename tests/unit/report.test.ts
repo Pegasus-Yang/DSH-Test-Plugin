@@ -207,7 +207,8 @@ it("附件预览与下载自包含，不发起会丢失宿主登录态的请求"
   expect(html).toContain('src="data:image/png;base64,');
   expect(html).not.toContain('href="evidence/a.png"');
   expect(html).toContain('download="a.png"');
-  expect(html).toContain('download="events.jsonl.gz"');
+  expect(html).toContain('href="events.jsonl?download=1"');
+  expect(html).not.toContain("data:application/gzip;base64,");
   expect(html).toContain('download="results.json"');
 });
 

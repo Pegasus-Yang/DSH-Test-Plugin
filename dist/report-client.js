@@ -1,5 +1,34 @@
 /** 静态报告的本地交互；只读取页面已包含的事实，不联网、不写运行数据。 */
 export function reportInteractions() {
+    const data = JSON.parse(document.getElementById("report-data").textContent);
+    const bytes = (id) => Uint8Array.from(atob(data.downloads[id].base64), (char) => char.charCodeAt(0));
+    const urls = new Map();
+    for (const link of document.querySelectorAll("[data-report-download]"))
+        link.onclick = () => {
+            const id = link.dataset.reportDownload;
+            if (!urls.has(id))
+                urls.set(id, URL.createObjectURL(new Blob([bytes(id)], { type: data.downloads[id].mime })));
+            link.href = urls.get(id);
+        };
+    window.addEventListener("pagehide", () => {
+        for (const url of urls.values())
+            URL.revokeObjectURL(url);
+        urls.clear();
+    });
+    const assets = new Map([...document.querySelectorAll("[data-report-asset]")].map((img) => [img.dataset.reportAsset, img.src]));
+    for (const link of document.querySelectorAll("[data-report-image-download]"))
+        link.href = assets.get(link.dataset.reportImageDownload) ?? "#";
+    for (const detail of document.querySelectorAll("[data-report-call], [data-report-text]"))
+        detail.ontoggle = () => {
+            const pre = detail.querySelector("pre");
+            if (!detail.open) {
+                pre.textContent = "";
+                return;
+            }
+            pre.textContent = detail.dataset.reportCall
+                ? (data.calls[detail.dataset.reportCall] ?? "调用依据缺失")
+                : new TextDecoder().decode(bytes(detail.dataset.reportText));
+        };
     const cases = [...document.querySelectorAll("article.case")];
     const rows = [
         ...document.querySelectorAll("[data-select-case]"),

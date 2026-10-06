@@ -5,17 +5,26 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import assert from "node:assert/strict";
 import { chromium } from "playwright";
-import { rebuild } from "../dist/recorder.js";
+import { rebuild, ledgerEvents } from "../dist/recorder.js";
 import { mcpResult } from "../dist/adapters.js";
 import { field } from "../dist/contracts.js";
 const dir = resolve(process.argv[2]);
 const run = JSON.parse(await readFile(join(dir, "results.json"), "utf8"));
-assert.deepEqual(rebuild(dir), run);
-const events = (await readFile(join(dir, "events.jsonl"), "utf8"))
-  .trim()
-  .split("\n")
-  .map((l) => JSON.parse(l));
-events.forEach((e, i) => assert.equal(e.seq, i));
+assert.deepEqual(await rebuild(dir), run);
+const producers = new Set(
+  run.instances.flatMap((i) =>
+    i.steps.flatMap((s) => s.observations.map((o) => o.producer.call_id)),
+  ),
+);
+const boundCalls = new Map(),
+  finishedCalls = new Map();
+for await (const event of ledgerEvents(dir)) {
+  if (!producers.has(event.payload?.call_id)) continue;
+  if (event.type === "tool_bound")
+    boundCalls.set(event.payload.call_id, event.seq);
+  if (event.type === "tool_finished")
+    finishedCalls.set(event.payload.call_id, event.seq);
+}
 for (const e of run.evidence) {
   const bytes = await readFile(join(dir, e.relative_path));
   assert.equal(createHash("sha256").update(bytes).digest("hex"), e.sha256);
@@ -24,16 +33,9 @@ for (const instance of run.instances)
   for (const step of instance.steps) {
     for (const o of step.observations) {
       assert.equal(o.binding.case_run_id, instance.case_run_id);
-      const bound = events.find(
-        (e) =>
-          e.type === "tool_bound" && e.payload.call_id === o.producer.call_id,
-      );
-      const settled = events.find(
-        (e) =>
-          e.type === "tool_finished" &&
-          e.payload.call_id === o.producer.call_id,
-      );
-      assert(bound && settled && bound.seq < settled.seq);
+      const bound = boundCalls.get(o.producer.call_id);
+      const settled = finishedCalls.get(o.producer.call_id);
+      assert(bound !== undefined && settled !== undefined && bound < settled);
       const evidence = run.evidence.find(
         (e) => e.evidence_id === o.evidence_refs[0],
       );

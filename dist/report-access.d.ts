@@ -6,9 +6,9 @@ export declare class ReportAccess {
     readonly outputRoot: string;
     origin?: () => string;
     private mediaKey;
-    private videoToken;
-    /** 已认证的报告签发仅限一个录像文件的只读票据，兼容 sandbox 下的严格 Cookie。 */
-    authorizeVideo(req: IncomingMessage): boolean;
+    private fileToken;
+    /** 已认证报告签发单个录像或账本文件票据，兼容 sandbox 下的严格 Cookie。 */
+    authorizeFile(req: IncomingMessage): boolean;
     private selected?;
     constructor(outputRoot: string);
     select(run: SuiteRun, filename?: string, settled?: boolean): void;

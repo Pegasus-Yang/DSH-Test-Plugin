@@ -493,8 +493,10 @@ it("取消宽限截止封存未知操作，迟到结果只入审计，不改写�
     readFileSync(join(test.recorder.directory, "events.jsonl"), "utf8"),
   ).toContain("late_tool_result");
   expect(
-    projectActualCase(rebuild(test.recorder.directory), test.run.instances[0]!)
-      .steps[0]!.state,
+    projectActualCase(
+      await rebuild(test.recorder.directory),
+      test.run.instances[0]!,
+    ).steps[0]!.state,
   ).toBe("UNKNOWN");
 });
 
@@ -636,7 +638,9 @@ it("派生文件导出失败提示重建，保留已结算断言和原生运行�
     expect(final.value.actual_steps_export_error).toContain("重建");
     const test = t.manager.sessions.get("origin")!;
     expect(test.recorder.failed).toBeUndefined();
-    expect(rebuild(test.recorder.directory).instances[0]!.status).toBe("PASS");
+    expect((await rebuild(test.recorder.directory)).instances[0]!.status).toBe(
+      "PASS",
+    );
     expect(
       readFileSync(join(test.recorder.directory, "report.html"), "utf8"),
     ).toContain("实际步骤文件导出失败");
@@ -678,7 +682,9 @@ it.each([
     expect(t.guards.size).toBe(0);
     expect(run.run.instances[0].session_id).toBe("origin");
     expect(run.run.instances[0].cleanup_session_id).toBe("origin");
-    expect(rebuild(run.recorder.directory).instances[0].status).toBe(expected);
+    expect((await rebuild(run.recorder.directory)).instances[0].status).toBe(
+      expected,
+    );
     expect(
       run.run.instances[0].steps
         .flatMap((s) => s.calls)
@@ -722,6 +728,104 @@ it("固定采集与清理接受空capture而不允许覆盖冻结定义", async 
   expect(
     run.run.instances[0].steps.find((s) => s.step_id === "__close")?.status,
   ).toBe("SUCCEEDED");
+});
+
+it.each(["setup", "pass-close", "fail-close"])(
+  "纯释放阶段 %s 拒绝业务工具与伪造子调用，可信关闭仍可完成",
+  async (phase) => {
+    const t = setup(phase === "fail-close" ? 0 : 3);
+    await t.manager.start(t.agent, "点赞不为0", sample());
+    if (phase !== "setup") {
+      await t.step();
+      await t.step();
+    }
+    const run = t.manager.sessions.get("origin")!;
+    expect(run.state().next).toContain("浏览器释放阶段");
+    const before = t.dispatched.length;
+    for (const name of [
+      "mcp__playwright__browser_click",
+      "mcp__playwright__browser_snapshot",
+      "mcp__playwright__browser_evaluate",
+      "mcp__playwright__browser_run_code",
+      "mcp__playwright__browser_close",
+      "test_api_get",
+      "shell",
+    ])
+      expect((await t.call(name)).isError).toBe(true);
+    expect(
+      (
+        await t.call("test_execute_operation", {
+          description: "修改旧正文",
+          tool_name: "mcp__playwright__browser_click",
+          arguments: { ref: "old" },
+        })
+      ).isError,
+    ).toBe(true);
+    expect(
+      (
+        await t.execute({
+          name: "mcp__playwright__browser_close",
+          parent: {},
+        })
+      ).isError,
+    ).toBe(true);
+    expect(t.dispatched.length).toBe(before);
+    await t.step();
+    if (phase === "setup") {
+      await t.step();
+      await t.step();
+    }
+    const result = await t.call("test_finish");
+    expect(result.isError).toBe(false);
+    expect(
+      result.value.statistics[phase === "fail-close" ? "FAIL" : "PASS"],
+    ).toBe(1);
+    expect(run.run.resource_quarantined).toBe(false);
+  },
+);
+
+it("默认失败收尾完成后继续下一实例，前一实例FAIL保持冻结", async () => {
+  const t = setup(0);
+  const plan = sample();
+  plan.cases[0]!.datasets.push({
+    ...structuredClone(plan.cases[0]!.datasets[0]!),
+    data_id: "second",
+  });
+  await t.manager.start(t.agent, "逐实例核对点赞", plan);
+  await t.step();
+  await t.step();
+  expect(t.manager.sessions.get("origin")!.state().phase).toBe("cleanup");
+  await t.step();
+  t.setDomResult({ values: { likes: 3 } });
+  await t.step();
+  await t.step();
+  await t.step();
+  expect((await t.call("test_finish")).value.statistics).toMatchObject({
+    FAIL: 1,
+    PASS: 1,
+  });
+});
+
+it("释放步骤明确失败后立即隔离，不派发下一实例业务", async () => {
+  const t = setup();
+  const plan = sample();
+  plan.cases[0]!.datasets.push({
+    ...structuredClone(plan.cases[0]!.datasets[0]!),
+    data_id: "second",
+  });
+  await t.manager.start(t.agent, "资源释放失败", plan);
+  await t.step();
+  await t.step();
+  await t.call("test_fail_step", { reason: "浏览器关闭未获得确认" });
+  expect(existsSync(join(t.root, "quarantine.json"))).toBe(true);
+  expect((await t.call("mcp__playwright__browser_click")).isError).toBe(true);
+  expect(
+    t.manager.sessions
+      .get("origin")!
+      .run.instances[1]!.steps.filter((s) => s.phase === "test")
+      .every((s) => s.status === "SKIPPED"),
+  ).toBe(true);
+  await t.end(true);
 });
 
 it("允许正常追问并等待同一会话补充；其他会话不继承测试上下文", async () => {
@@ -1013,7 +1117,7 @@ it("JSON运行时采集可修正定位且不改预期", async () => {
     run.run.instances[0].steps.find((s) => s.step_id === "read")!
       .capture_attempts,
   ).toHaveLength(2);
-  expect(rebuild(run.recorder.directory)).toEqual(run.run);
+  expect(await rebuild(run.recorder.directory)).toEqual(run.run);
   await t.end();
 });
 
@@ -1293,7 +1397,7 @@ it.each([
         expected,
         status,
       });
-      expect(rebuild(run.recorder.directory)).toEqual(run.run);
+      expect(await rebuild(run.recorder.directory)).toEqual(run.run);
       const html = readFileSync(
         join(run.recorder.directory, "report.html"),
         "utf8",
@@ -1391,7 +1495,7 @@ it("文字计划只冻结短句，运行时按采集方式登记输出；缺少�
   await t.step();
   expect((await t.call("test_finish")).value.statistics.PASS).toBe(1);
   expect(run.run.plan).toEqual(frozen);
-  expect(rebuild(run.recorder.directory)).toEqual(run.run);
+  expect(await rebuild(run.recorder.directory)).toEqual(run.run);
   await t.end();
 });
 
@@ -1616,7 +1720,7 @@ it("文件与CSV四实例只在完整原生审核后执行，参数、证据和�
       false,
     );
     expect(run.run.plan).toEqual(frozen);
-    expect(rebuild(run.recorder.directory)).toEqual(run.run);
+    expect(await rebuild(run.recorder.directory)).toEqual(run.run);
     const html = readFileSync(
       join(run.recorder.directory, "report.html"),
       "utf8",

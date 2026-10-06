@@ -28,6 +28,7 @@ function setup() {
     join(root, "run-one/report.html"),
     '<video src="evidence/browser-one.mp4" controls></video><a href="evidence/browser-one.mp4?download=1" download>下载视频</a>',
   );
+  writeFileSync(join(root, "run-one/events.jsonl"), '{"seq":0}\n');
   return {
     access: new ReportAccess(root),
     bytes: readFileSync(join(dir, "browser-one.mp4")),
@@ -121,7 +122,7 @@ it("下载链接给出附件响应，并持有同一个文件的只读票据", a
     .match(/href="([^"]+)"/)![1]
     .replaceAll("&amp;", "&");
   const req = { url: "/test-reports/run-one/" + url, method: "GET" } as never;
-  expect(t.access.authorizeVideo(req)).toBe(true);
+  expect(t.access.authorizeFile(req)).toBe(true);
   const r = await request(t.access, (req as any).url);
   expect(r.headers["Content-Disposition"]).toBe(
     'attachment; filename="browser-one.mp4"',
@@ -133,24 +134,24 @@ it("报告在认证后的响应里签发文件专用票据，不能用来访问�
   const report = await request(t.access, "/test-reports/run-one/report.html");
   const url = report.body.toString().match(/src="([^"]+)"/)![1];
   const req = { url: "/test-reports/run-one/" + url, method: "GET" } as never;
-  expect(t.access.authorizeVideo(req)).toBe(true);
+  expect(t.access.authorizeFile(req)).toBe(true);
   expect(
-    t.access.authorizeVideo({
+    t.access.authorizeFile({
       ...(req as any),
       url: (req as any).url.replace("browser-one", "browser-other"),
     }),
   ).toBe(false);
-  expect(t.access.authorizeVideo({ ...(req as any), method: "POST" })).toBe(
+  expect(t.access.authorizeFile({ ...(req as any), method: "POST" })).toBe(
     false,
   );
   expect(
-    t.access.authorizeVideo({
+    t.access.authorizeFile({
       ...(req as any),
       url: (req as any).url.replace(".mp4", ".json"),
     }),
   ).toBe(false);
   expect(
-    t.access.authorizeVideo({
+    t.access.authorizeFile({
       ...(req as any),
       url: (req as any).url.replace(/media=.*/, "media=1." + "a".repeat(64)),
     }),
@@ -158,5 +159,40 @@ it("报告在认证后的响应里签发文件专用票据，不能用来访问�
   expect(report.headers["Content-Security-Policy"]).toContain("sandbox");
   expect(report.headers["Content-Security-Policy"]).toContain(
     "media-src 'self'",
+  );
+});
+
+it("账本以独立流式附件下载，票据只准入指定运行文件和GET/HEAD", async () => {
+  const t = setup();
+  const directory = join(roots.at(-1)!, "run-one");
+  writeFileSync(
+    join(directory, "report.html"),
+    '<a href="events.jsonl?download=1" download>账本</a>',
+  );
+  const report = await request(t.access, "/test-reports/run-one/report.html");
+  const link = report.body
+    .toString()
+    .match(/href="([^"]+)"/)![1]
+    .replaceAll("&amp;", "&");
+  const url = "/test-reports/run-one/" + link;
+  expect(t.access.authorizeFile({ url, method: "GET" } as never)).toBe(true);
+  expect(t.access.authorizeFile({ url, method: "HEAD" } as never)).toBe(true);
+  for (const invalid of [
+    url.replace("run-one", "run-other"),
+    url.replace("events.jsonl", "results.json"),
+    url.replace("events.jsonl", "events.jsonl.gz"),
+  ])
+    expect(
+      t.access.authorizeFile({ url: invalid, method: "GET" } as never),
+    ).toBe(false);
+  expect(t.access.authorizeFile({ url, method: "POST" } as never)).toBe(false);
+  const download = await request(t.access, url);
+  expect(download.body.toString()).toBe('{"seq":0}\n');
+  expect(download.headers["Content-Disposition"]).toContain("attachment");
+  const head = await request(t.access, url, undefined, "HEAD");
+  expect(head.body.length).toBe(0);
+  expect(Number(head.headers["Content-Length"])).toBe(download.body.length);
+  expect(readFileSync(join(directory, "report.html"), "utf8")).not.toContain(
+    "media=",
   );
 });
