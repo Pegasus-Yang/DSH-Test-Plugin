@@ -1,197 +1,144 @@
 # DSH Test Plugin
 
-**在 DeepSeek Harness 对话中，用自然语言完成测试规划、执行、证据采集和报告。**
+**在 DeepSeek Harness 对话中，用自然语言完成测试规划、执行和结果交付。**
 
-简体中文 · [English](README.en.md)
+简体中文 · [English](README.en.md) · [快速开始](#快速开始) · [完整文档](doc/README.md) · [更新日志](changelog.md) · [问题反馈](https://github.com/Pegasus-Yang/DSH-Test-Plugin/issues)
 
-[版本 v0.11.2](https://github.com/Pegasus-Yang/DSH-Test-Plugin/tree/v0.11.2) · [更新日志](changelog.md) · [MIT 许可证](LICENSE) · [文档](doc/README.md) · [问题反馈](https://github.com/Pegasus-Yang/DSH-Test-Plugin/issues)
+DSH Test Plugin 是 DeepSeek Harness（DSH）的原生测试插件。描述想验证的业务流程，插件会拆解计划，结合真实页面或接口响应执行检查，并在同一对话中展示进度、证据和结果。它复用当前对话的模型、工具、审批和会话记录，支持网页 UI 测试与 GET JSON 接口测试。
 
-DSH Test Plugin 是 DeepSeek Harness（DSH）的原生 TypeScript 插件，支持网页和 GET JSON 接口测试。它复用当前对话的模型、工具、审批及会话记录，通过可信观察与确定性比较给出断言结果，并生成可离线查看的 HTML 报告。
+从一次探索到重复执行：可以直接输入测试任务，也可以维护 TXT、Markdown 用例和 CSV 参数数据；执行后获得可复查的 HTML 报告，以及供其他执行人复用的 Markdown 手工用例。
 
-在 DSH 输入框中描述一条测试：
+## 功能亮点
 
-```text
-/test 访问 http://127.0.0.1:8929/users/sign_in，断言页面存在用户名输入框、密码输入框和 Sign in 登录按钮
-```
-
-这是已有 GitLab 登录页的入门检查，不需要账号。GitLab 的部署与启动请查阅[官方 Docker 文档](https://docs.gitlab.com/install/docker/)；被测系统条件、测试账号权限及本插件用法见[测试指导](doc/user-guide/GitLab测试要求与本地调试.md)。插件会展示文字计划，逐步执行、更新进度，最后给出测试结果和报告链接。需要先确认计划时，将 `/test` 改为 `/test-plan`。
-
-> 当前为开发版本，适配 DSH `0.2.1-alpha.1`。从下方 GitHub 地址安装即可，发行版本包含构建产物。网页内容和模型执行可能变化，最终结果以报告中的观察、断言及清理状态为准。
-
-## 功能
-
-| 功能 | 说明 |
+| 能力 | 可以做什么 |
 | --- | --- |
-| 自然语言规划 | 将任务拆成业务步骤和文字检查点；支持原生计划审核与修改 |
-| 网页与接口测试 | 通过专用 Playwright MCP 操作网页；采集 GET JSON 响应并校验状态码和字段 |
-| 实际步骤与手工用例 | 随运行逐条保存操作说明和真实输入，按实例编号展示；下载 Markdown 手工用例和运行记录，保留失败和重试 |
-| 可信断言 | 记录实际观察、预期及来源，用确定性比较判断结果 |
-| 文件与参数化 | 导入 TXT、Markdown 用例；CSV 数据展开后先审核再执行 |
-| 执行进度 | 展示当前操作、已结算数量和耗时；完整列表按需展开，支持长文字和多实例编号 |
-| 浏览器实时画面 | 通过 Browscreen 显示无头浏览器画面；仅在当前页面 CDP 和有效首帧就绪后打开浮窗 |
-| 浏览器录像 | 独立开关默认关闭；按浏览器实例归档 MP4，在报告中播放、拖动及下载；接口实例无媒体入口 |
-| 报告与收尾 | 静态 HTML 报告包含步骤、断言及附件；支持停止、资源清理和隔离环境处置 |
-
-0.11.2 以 TXT、Markdown 和 CSV 参数化作为用户入口，GitLab 提供可阅读的 Markdown 网页与接口用例。手工用例保留执行所需的真实数据和地址；运行状态、失败与证据在报告中查看。详细操作见[实际步骤与手工用例](doc/user-guide/实际步骤与手工用例.md)，完整变化见[更新日志](changelog.md)。复杂回归可使用[GitLab 样例](doc/user-guide/GitLab复杂用例.md)。
+| 自然语言规划与审核 | 将任务拆成业务步骤和检查点；直接执行，或先审核、修改计划再运行 |
+| 网页与接口测试 | 通过 Playwright MCP 操作网页，执行时结合页面情况确定具体操作；采集 GET JSON 响应，检查状态码与响应字段 |
+| 文件用例与参数化 | 使用 TXT、Markdown 保存用例，用 CSV 展开多组数据，逐项审核后串行执行 |
+| 执行进度与耗时 | 在输入框上方查看当前步骤、已结算数量和耗时；按需展开完整步骤，适应长文字与多实例 |
+| 实时画面与录像 | 在同一页面观看无头浏览器画面；可独立开启录像，在报告中回看、拖动和下载 MP4 |
+| 证据与测试报告 | 保存实际观察、预期及来源，通过程序比较给出断言结果；生成含步骤、断言和附件的静态 HTML 报告，支持离线保存与重建 |
+| 实际步骤与手工用例 | 逐条记录真实操作，按序号整理操作和预期结果，导出包含前置、实际步骤及收尾的 Markdown 手工用例 |
 
 ## 实际效果
 
-以下截图来自 **0.11.2 的真实 GitLab 运行**：登录页控件检查展示进度和浏览器画面，Markdown 接口用例展示报告与实际步骤。复杂 UI 用例的验证边界见[验收记录](doc/project/Markdown用户入口验收.md)，步骤拆分和耗时会随实际运行变化。
+以下截图展示使用 GitLab 作为被测系统时的实际运行效果。
 
-**正在做哪一步，一眼就能看到。** 进度区显示当前操作、已结算数量、总耗时和本步用时；完整步骤可以按需展开。
+**随时知道正在做什么。** 进度区显示当前操作、已结算数量、总耗时和本步用时；展开后可以查看完整步骤。
 
 ![GitLab 登录页检查的当前步骤、结算进度和耗时](doc/user-guide/images/GitLab当前步骤.png)
 
-**在同一对话里看执行过程和浏览器画面。** 当前页面 CDP 和有效首帧就绪后，浮窗自动展示无头浏览器的实时画面；窗口可以移动、缩放和关闭。下图展示完整 DSH 页面，浮窗、对话记录和步骤进度同时可见。
+**在对话中观看浏览器执行。** 实时画面浮窗与对话记录、步骤进度一起展示，可以移动、缩放，也可以显示或隐藏。
 
 ![完整 DSH 页面：实时浮窗展示 GitLab 登录页，同时可见对话执行记录与步骤进度](doc/user-guide/images/GitLab浏览器实时画面.png)
 
-**结果有实际值、预期和证据。** 报告按用例、步骤、断言及附件组织，能够核对 GitLab 项目搜索、分页和预期错误响应，也可离线查看。
+**用证据核对测试结果。** 报告按用例组织实际步骤、断言和附件，展示实际值与预期；浏览器用例可附带录像，接口用例只展示相应的请求与检查。
 
-![GitLab Markdown 接口报告：三例通过，展示实际步骤、状态码检查和证据入口，接口实例没有媒体区域](doc/user-guide/images/GitLab接口测试报告.png)
+![GitLab Markdown 接口报告：实际步骤、状态码检查和证据入口](doc/user-guide/images/GitLab接口测试报告.png)
 
-计划审核、完整步骤、预览设置和断言细节的截图见[使用说明](doc/user-guide/使用说明.md#用截图认识功能)。
+更多计划审核、步骤展开和报告截图见[使用说明](doc/user-guide/使用说明.md#用截图认识功能)。
 
 ## 快速开始
 
-### 1. 准备环境
+### 1. 准备 DSH 与测试工具
 
-- Node.js **22.19+**，pnpm **11.7.0**。
-- 已安装并配置可用模型的 DeepSeek Harness **0.2.1-alpha.1**，独立 CLI 或源码安装均可。
-- 网页测试需要专用 Playwright MCP 和 Chromium；仅做接口测试可跳过浏览器安装。
+- Node.js **22.19+**，已安装并配置可用模型的 DeepSeek Harness **0.2.1-alpha.1**。
+- 在 DSH 中使用 **native 工具模式**；网页测试还需要专用 Playwright MCP 和匹配的 Chromium。
+- 仅做接口测试时无需安装浏览器；源码开发需要 pnpm **11.7.0**。
 
-宿主安装先按 DSH 自身文档完成。更换宿主或 MCP 版本后需要重新验证兼容性。
+宿主安装按 DSH 自身文档完成，插件和浏览器工具的具体配置见[安装与运维](doc/deployment/安装与运维.md#配置)。
 
-### 2. 从 GitHub 安装并启用
+### 2. 安装并启用插件
 
-在 DSH 插件管理页填写下面的仓库地址，安装后启用插件：
+在 DSH 插件管理页填写下面的仓库地址，安装后启用：
 
 ```text
 https://github.com/Pegasus-Yang/DSH-Test-Plugin.git#v0.11.2
 ```
 
-也可以在 **DSH 源码目录** 使用终端安装：
+也可以使用独立 DSH CLI 安装：
 
 ```sh
-pnpm dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.11.2
-pnpm dsh web
+dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.11.2
+dsh web
 ```
 
-已有独立 CLI 时，使用 `dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.11.2` 和 `dsh web`。CLI 安装前正常停止原服务，随后启动同一 profile 并刷新网页。使用自定义 `DSH_HOME` 时，安装与启动须使用同一个目录。
+命令行安装前先正常停止正在运行的 DSH，安装与后续启动使用同一 profile 和 `DSH_HOME`，启动后刷新页面。从 DSH 源码目录运行时，将 `dsh` 替换为 `pnpm dsh`。仓库发行版本包含构建产物，可以直接安装。
 
-Git 发行版本包含 `dist`，安装不执行插件构建脚本，不需要克隆源码、`link-host` 或本机调试文件。随后按[安装与运维](doc/deployment/安装与运维.md#配置)配置 native 工具模式及专用 Playwright MCP；设置页可选启用实时预览。
+升级、卸载和本地安装包的操作见[安装与运维](doc/deployment/安装与运维.md)。
 
-### 3. 卸载和源码开发
+### 3. 在对话中运行第一条测试
 
-停用或卸载可在插件管理页进行。终端卸载时，先正常停止宿主，再执行：
-
-```sh
-pnpm dsh plugin --profile web remove dsh-test-plugin
-```
-
-0.9.1 的预览接入只影响 MCP 运行参数；停用恢复原始浏览器配置，卸载后重启不再引用插件文件。工作区报告和用户保存的偏好保留。旧版已经写入的预览覆盖，按[故障速查](doc/deployment/常见问题速查与处理.md#f15-卸载后的预览配置残留)一次恢复。
-
-需要修改源码或生成本地安装包时再执行：
-
-```sh
-git clone https://github.com/Pegasus-Yang/DSH-Test-Plugin.git
-cd DSH-Test-Plugin
-pnpm install
-pnpm build
-pnpm pack --out artifacts/package/dsh-test-plugin.tgz
-```
-
-开发依赖使用公开 npm 的 DSH SDK，可直接构建。调试未发布的宿主改动时，才可选运行 `node scripts/link-host.mjs /绝对路径/deepseek-harness`；本机路径保存在被 Git 忽略的 `.local/` 中。每次源码修改后重建并提交 `dist`，CI 会核对源码与发行产物一致。
-
-网页测试还需在插件根目录执行：
-
-```sh
-node scripts/install-browser.mjs
-```
-
-本地 tgz 仍支持通过公开 CLI 安装：
-
-```sh
-pnpm dsh plugin --profile web add /绝对路径/DSH-Test-Plugin/artifacts/package/dsh-test-plugin.tgz
-```
-
-使用本地 tgz 时保留安装包文件；profile 使用 `file:` 依赖。同路径升级按[更新流程](doc/deployment/安装与运维.md#构建与打包)先 remove 再 add，完成安装后再启动。
-
-### 4. 在对话中执行测试
-
-以下命令输入 **DSH 对话框**，不是终端。请逐条执行：
+准备一个可访问的 GitLab 登录页，在 **DSH 对话框**中输入：
 
 ```text
-/test-plan 访问 http://127.0.0.1:8929/users/sign_in，断言页面存在用户名输入框、密码输入框和 Sign in 登录按钮
-/test-run .local/gitlab/本次标记/api.md
-/test-data .local/gitlab/本次标记/pagination.csv --file examples/gitlab/pagination-parameterized.md
+/test 访问 http://127.0.0.1:8929/users/sign_in，断言页面存在用户名输入框、密码输入框和 Sign in 登录按钮
 ```
 
-后两条需先按[GitLab 指导文档](doc/user-guide/GitLab测试要求与本地调试.md)准备数据，使用脚本打印的真实目录替换“本次标记”，并填写 CSV 的本轮接口项目 ID。不要直接执行含占位符的命令或公开模板。文件路径相对于发起命令的当前对话工作区；以插件源码根目录为工作区时，生成文件和模板都在边界内。没有工作目录信息的历史会话才使用插件配置的 `workspace`。完整输入格式、审核过程和参数规则见[使用说明](doc/user-guide/使用说明.md)。
+将地址替换成自己的 GitLab 地址。这条用例不需要账号；GitLab 部署请查阅[官方 Docker 文档](https://docs.gitlab.com/install/docker/)，系统条件与测试账号要求见[GitLab 测试指南](doc/user-guide/GitLab测试要求与本地调试.md)。
 
-## 浏览器实时预览与录像
+插件会展示计划、逐步执行并更新进度，结束后提供结果和报告链接。希望先确认计划时，使用 `/test-plan`。执行文件用例前，将文件所在目录设为当前对话工作区，路径按该工作区读取。
 
-0.11.2 提供独立录像开关及报告视频回放，可直接使用上方 GitHub 标签安装。已有安装先移除旧包，再安装新标签并重启同一 profile。
+### 4. 按需开启画面与录像
 
-先在 DSH 宿主安装 PyPI 的 `browscreen[video]==0.3.0`（Python ≥3.14，支持稳定版本 `>=0.3.0,<0.4.0`）。在 **设置 → 测试插件 → 浏览器预览与录像** 中启用、检测安装、选择采集端口及专用 Playwright MCP 并保存。命令默认是 `browscreen`，高级设置可填完整可执行文件路径；无需下载源码或提前启动服务。
+安装本机 Browscreen 命令，在 **设置 → 测试插件 → 浏览器预览与录像** 中开启所需的预览或录像、检测安装、选择专用 Playwright MCP，并保存设置。之后使用正常测试命令即可，采集服务由插件按需启动。
 
-录像开关与实时预览独立，默认关闭。勾选“录制浏览器操作视频”后，关闭浮窗或 DSH 网页也会继续后台录制，宿主需保持运行。MP4 按实例保存到运行目录，报告提供“操作录像”和下载；纯接口及混合批次中的接口实例不显示媒体区域。缺少视频依赖时提示原因与安装命令。[录像安装与使用](doc/user-guide/浏览器录像与报告.md)。
+实时画面只在当前浏览器的 CDP 连接和有效首帧就绪后显示。录像有独立开关，默认关闭；隐藏浮窗不会停止已启用的录像。接口实例不显示浏览器画面或视频区域。
 
-浮窗等待当前页面 CDP 和有效首帧；接口测试、没有 CDP 或画面尚未就绪时，不出现空浮窗。首次依赖准备、可编辑 MCP 注册及设置步骤见[逐步配置指南](doc/user-guide/浏览器实时预览一步一步配置.md)。
+安装要求和操作步骤见[实时预览配置](doc/user-guide/浏览器实时预览一步一步配置.md)与[浏览器录像与报告](doc/user-guide/浏览器录像与报告.md)。
 
-## 常用命令与报告
+## 命令与用例
 
-以下为 0.11.2 的命令与界面操作；历史变化见[版本变更记录](changelog.md)。
+以下命令都在 DSH 对话框中使用：
 
 | 命令 | 用途 |
 | --- | --- |
 | `/test <任务>` | 展示计划后直接执行 |
-| `/test-plan <任务>` | 先审核计划，再执行 |
-| `/test-run <文件>` | 执行 TXT 或 Markdown 用例 |
-| `/test-data <CSV> --file <用例文件>` | 展开参数数据，审核后执行 |
+| `/test-plan <任务>` | 先审核、修改计划，再执行 |
+| `/test-run <文件>` | 从当前工作区读取 TXT 或 Markdown 用例并执行 |
+| `/test-data <CSV> --file <用例文件>` | 按 CSV 展开参数，审核后执行 |
 
-命令只保留上面的四个入口。输入框上方显示步骤与耗时；需要中途停止时，点击 DSH 原生“停止生成”。实时画面按钮在“显示实时画面”和“隐藏实时画面”之间切换，同一对话最多显示一个画面浮窗。
+需要中途停止时，使用 DSH 原生停止按钮；运行完成后可从进度区或设置页重建报告。完整输入规则和界面操作见[使用说明](doc/user-guide/使用说明.md)。
 
-最终回复提供报告链接及保存位置。运行结束后可在进度区点击“重建报告”；历史运行也可进入 **设置 → 测试插件 → 测试报告**，填写运行 ID 后重建，留空使用当前所选对话的报告。报告为静态 HTML，可通过 DSH 登录态在线查看，也可随运行目录离线保存。[进度说明](doc/user-guide/执行步骤与进度显示.md) · [报告与运行数据](doc/user-guide/使用说明.md#查看测试报告) · [常见问题速查](doc/deployment/常见问题速查与处理.md)
+想体验更完整的流程，可以使用[GitLab 样例](examples/gitlab/README.md)：两条 UI 用例覆盖组合筛选和草稿预览取消，三条接口用例覆盖搜索、分页和错误响应，另有 CSV 参数化模板。按[测试指南](doc/user-guide/GitLab测试要求与本地调试.md)准备专用账号和本轮数据，账号保存在不提交的本机配置中。
 
-环境未释放时，先进入 **设置 → 测试插件 → 测试环境**，确认旧操作已停止后按提示处置，再重新提交用例。无法自动关闭浏览器时，在同一设置页展开“高级处置：提交实际处置证据”，填写工作区内的 JSON 文件路径，确认后提交。详见[环境恢复指南](doc/user-guide/测试环境卡住怎么办.md)。
+## 支持范围
 
-## 当前支持范围
+- 运行于 DSH native 工具模式，共享测试环境按串行方式执行；多对话独立浏览器并行运行属于[后续优化](doc/design/多对话并行测试优化方案.md)。
+- 接口测试支持 **GET JSON** 采集；自动预览使用本机 Chromium Playwright MCP，当前支持单活动页面。
+- 自然语言和文件用例执行都使用当前对话的模型；报告重建从已保存记录生成，不重新执行用例。
+- 测试结果保留失败、取消和清理状态；证据缺失、工具错误或必要清理失败不会算作通过。报告界面及部分提示以中文为主。
 
-- 仅支持 DSH native 工具模式；共享环境串行运行。多对话独立浏览器并行执行属于[后续优化](doc/design/多对话并行测试优化方案.md)。
-- 接口可信采集目前支持 **GET JSON**；浏览器自动预览使用本机 Chromium Playwright MCP，当前支持单活动页面。
-- 文件用例执行仍参与模型循环；报告重建可以不调用模型，不代表无模型测试回放。
-- 报告界面及部分命令提示以中文为主。取消、证据缺失、工具错误或必要清理失败不会算作通过。
+## 文档与帮助
+
+| 从这里开始 | 内容 |
+| --- | --- |
+| [完整文档导航](doc/README.md) | 使用、部署、架构、设计和验收记录 |
+| [使用说明](doc/user-guide/使用说明.md) | 命令、文件、参数、计划审核与报告 |
+| [GitLab 测试要求与本地调试](doc/user-guide/GitLab测试要求与本地调试.md) | 系统与账号要求、复杂用例、数据准备及插件调试 |
+| [执行步骤与进度](doc/user-guide/执行步骤与进度显示.md) | 步骤展开、运行阶段和耗时 |
+| [实际步骤与手工用例](doc/user-guide/实际步骤与手工用例.md) | 操作记录及可复用的手工用例导出 |
+| [预览配置](doc/user-guide/浏览器实时预览一步一步配置.md) · [录像与报告](doc/user-guide/浏览器录像与报告.md) | 实时画面、视频依赖、回看和下载 |
+| [安装与运维](doc/deployment/安装与运维.md) · [故障速查](doc/deployment/常见问题速查与处理.md) | 安装、升级、卸载、环境恢复和常见问题 |
+| [当前架构](doc/architecture/当前实现.md) | 模块职责与执行链路 |
 
 ## 开发与贡献
 
-项目提供[GitLab 测试要求与本地调试指南](doc/user-guide/GitLab测试要求与本地调试.md)：说明被测系统条件、测试账号权限、DSH/MCP 配置、数据准备、五条 Markdown 用例、CSV 参数化、预览录像、报告及本轮项目清理。两条 UI 场景覆盖组合筛选及草稿预览取消，三条接口场景覆盖搜索、分页及错误响应，网页结果通过独立接口核对。账号从被 Git 忽略的配置读取；[场景表](examples/gitlab/README.md)与[开发回归说明](doc/reference/开发者JSON用例与调试.md)分别说明用户集合和完整开发集合。
+欢迎通过 [Issues](https://github.com/Pegasus-Yang/DSH-Test-Plugin/issues) 反馈问题或提交改进。反馈时请附上插件、DSH、Node.js 和 MCP 版本，复现步骤及已脱敏的错误信息。
 
-完成依赖安装后，在插件根目录运行；只有调试未发布宿主改动才需要可选的 `link-host`：
+源码开发：
 
 ```sh
+git clone https://github.com/Pegasus-Yang/DSH-Test-Plugin.git
+cd DSH-Test-Plugin
+pnpm install --frozen-lockfile
 pnpm typecheck
 pnpm build
 pnpm test:unit
 pnpm test:integration
 ```
 
-隔离开发服务和真实验收方法见[安装与运维](doc/deployment/安装与运维.md#隔离开发环境)。提交问题时请说明插件、DSH、Node.js 和 MCP 版本、复现步骤及已脱敏的错误信息；提交改动前完成相关检查并更新受影响文档。
-
-本地凭据、认证地址、日志、未脱敏截图和原始运行报告应保存在 `.local/` 或 `artifacts/`，不要加入公开提交。公开说明截图经过检查后放在 `doc/user-guide/images/`，文档使用相对路径引用。发布新版本时按[版本发布与 Git 标签](doc/deployment/版本发布与Git标签.md)创建附注标签。
-
-## 文档
-
-| 文档 | 内容 |
-| --- | --- |
-| [完整文档导航](doc/README.md) | 使用、部署、设计和历史验收记录 |
-| [使用说明](doc/user-guide/使用说明.md) | 命令、输入、参数、断言和报告 |
-| [GitLab 测试要求与本地调试](doc/user-guide/GitLab测试要求与本地调试.md) | 被测系统条件、账号权限、复杂用例、完整功能体验及插件源码调试 |
-| [浏览器录像与报告](doc/user-guide/浏览器录像与报告.md) | 安装视频依赖、开关、回看、下载与离线保存 |
-| [安装与运维](doc/deployment/安装与运维.md) | 构建、安装、配置、升级及独立开发环境 |
-| [常见问题速查](doc/deployment/常见问题速查与处理.md) | 环境残留、预览、安装和报告问题 |
-| [当前架构](doc/architecture/当前实现.md) | 模块职责与执行链路 |
-| [开发与验收记录](doc/project/开发进度.md) | 实测范围和历史问题 |
+本地打包与隔离调试见[安装与运维](doc/deployment/安装与运维.md)，真实测试范围见[开发与验收记录](doc/project/开发进度.md)。提交改动前完成相关检查并同步文档；凭据、日志和原始运行资料保存在不提交的本机目录中。
 
 ## 许可证
 
