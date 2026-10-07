@@ -10,8 +10,8 @@ The English guides describe the current implementation. Historical design and ac
 
 ## 当前版本
 
-- [GitLab 本地搭建与测试调试](deployment/GitLab本地搭建与测试调试.md)：从零启动被测服务、配置账号与 DSH、运行 Markdown/CSV、观察画面与录像、读取报告、本地改包调试和清理；初次体验从这里开始。
-- [GitLab 测试指导文档验证](project/GitLab测试指导文档验证.md)：Compose、样例解析、27 项回归、真实登录页执行/审核/预览/录像截图、隐私与收尾；保留新环境安装及 CSV 真实运行未验证边界。
+- [GitLab 测试要求与本地调试](user-guide/GitLab测试要求与本地调试.md)：被测系统条件、账号权限、私有配置、Markdown/CSV、画面与录像、报告、本地改包调试和本轮项目清理；GitLab 部署引导官方文档。
+- [GitLab 测试指导文档验证](project/GitLab测试指导文档验证.md)：前轮样例解析、27 项回归、真实登录页执行/审核/预览/录像截图、隐私与收尾，以及文档职责调整后的检查。
 
 - [Markdown 用户入口验收](project/Markdown用户入口验收.md)：0.11.2 的用户帮助、开发格式边界、GitLab Markdown 网页/接口用例及真实对话验收。
 

@@ -14,7 +14,7 @@ DSH Test Plugin 是 DeepSeek Harness（DSH）的原生 TypeScript 插件，支�
 /test 访问 http://127.0.0.1:8929/users/sign_in，断言页面存在用户名输入框、密码输入框和 Sign in 登录按钮
 ```
 
-这是本机 GitLab 登录页的入门检查，不需要账号。先按[GitLab 本地搭建与测试调试](doc/deployment/GitLab本地搭建与测试调试.md)启动服务。插件会展示文字计划，逐步执行、更新进度，最后给出测试结果和报告链接。需要先确认计划时，将 `/test` 改为 `/test-plan`。
+这是已有 GitLab 登录页的入门检查，不需要账号。GitLab 的部署与启动请查阅[官方 Docker 文档](https://docs.gitlab.com/install/docker/)；被测系统条件、测试账号权限及本插件用法见[测试指导](doc/user-guide/GitLab测试要求与本地调试.md)。插件会展示文字计划，逐步执行、更新进度，最后给出测试结果和报告链接。需要先确认计划时，将 `/test` 改为 `/test-plan`。
 
 > 当前为开发版本，适配 DSH `0.2.1-alpha.1`。从下方 GitHub 地址安装即可，发行版本包含构建产物。网页内容和模型执行可能变化，最终结果以报告中的观察、断言及清理状态为准。
 
@@ -127,7 +127,7 @@ pnpm dsh plugin --profile web add /绝对路径/DSH-Test-Plugin/artifacts/packag
 /test-data .local/gitlab/本次标记/pagination.csv --file examples/gitlab/pagination-parameterized.md
 ```
 
-后两条需先按[GitLab 指导文档](doc/deployment/GitLab本地搭建与测试调试.md)准备数据，使用脚本打印的真实目录替换“本次标记”，并填写 CSV 的本轮接口项目 ID。不要直接执行含占位符的命令或公开模板。文件路径相对于发起命令的当前对话工作区；以插件源码根目录为工作区时，生成文件和模板都在边界内。没有工作目录信息的历史会话才使用插件配置的 `workspace`。完整输入格式、审核过程和参数规则见[使用说明](doc/user-guide/使用说明.md)。
+后两条需先按[GitLab 指导文档](doc/user-guide/GitLab测试要求与本地调试.md)准备数据，使用脚本打印的真实目录替换“本次标记”，并填写 CSV 的本轮接口项目 ID。不要直接执行含占位符的命令或公开模板。文件路径相对于发起命令的当前对话工作区；以插件源码根目录为工作区时，生成文件和模板都在边界内。没有工作目录信息的历史会话才使用插件配置的 `workspace`。完整输入格式、审核过程和参数规则见[使用说明](doc/user-guide/使用说明.md)。
 
 ## 浏览器实时预览与录像
 
@@ -165,7 +165,7 @@ pnpm dsh plugin --profile web add /绝对路径/DSH-Test-Plugin/artifacts/packag
 
 ## 开发与贡献
 
-项目提供[GitLab 本地搭建与测试调试指南](doc/deployment/GitLab本地搭建与测试调试.md)：从 Docker 启动、测试账号、DSH/MCP 配置到数据准备、五条 Markdown 用例、CSV 参数化、预览录像、报告和清理。两条 UI 场景覆盖组合筛选及草稿预览取消，三条接口场景覆盖搜索、分页及错误响应，网页结果通过独立接口核对。账号从被 Git 忽略的配置读取；[场景表](examples/gitlab/README.md)与[开发回归说明](doc/reference/开发者JSON用例与调试.md)分别说明用户集合和完整开发集合。
+项目提供[GitLab 测试要求与本地调试指南](doc/user-guide/GitLab测试要求与本地调试.md)：说明被测系统条件、测试账号权限、DSH/MCP 配置、数据准备、五条 Markdown 用例、CSV 参数化、预览录像、报告及本轮项目清理。两条 UI 场景覆盖组合筛选及草稿预览取消，三条接口场景覆盖搜索、分页及错误响应，网页结果通过独立接口核对。账号从被 Git 忽略的配置读取；[场景表](examples/gitlab/README.md)与[开发回归说明](doc/reference/开发者JSON用例与调试.md)分别说明用户集合和完整开发集合。
 
 完成依赖安装后，在插件根目录运行；只有调试未发布宿主改动才需要可选的 `link-host`：
 
@@ -186,7 +186,7 @@ pnpm test:integration
 | --- | --- |
 | [完整文档导航](doc/README.md) | 使用、部署、设计和历史验收记录 |
 | [使用说明](doc/user-guide/使用说明.md) | 命令、输入、参数、断言和报告 |
-| [GitLab 本地搭建与测试调试](doc/deployment/GitLab本地搭建与测试调试.md) | 从零搭建被测服务、运行复杂用例、体验完整功能及本地源码调试 |
+| [GitLab 测试要求与本地调试](doc/user-guide/GitLab测试要求与本地调试.md) | 被测系统条件、账号权限、复杂用例、完整功能体验及插件源码调试 |
 | [浏览器录像与报告](doc/user-guide/浏览器录像与报告.md) | 安装视频依赖、开关、回看、下载与离线保存 |
 | [安装与运维](doc/deployment/安装与运维.md) | 构建、安装、配置、升级及独立开发环境 |
 | [常见问题速查](doc/deployment/常见问题速查与处理.md) | 环境残留、预览、安装和报告问题 |

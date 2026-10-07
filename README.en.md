@@ -14,7 +14,7 @@ Describe a test in the DSH input:
 /test Visit http://127.0.0.1:8929/users/sign_in and verify that the page has a username field, a password field, and a Sign in button.
 ```
 
-This local GitLab login-page check needs no account. Start the service using the [local GitLab setup and debugging guide (Chinese)](doc/deployment/GitLab本地搭建与测试调试.md). The plugin presents a text plan, executes each step with progress updates, and returns the result and report link. Use `/test-plan` to review the plan before execution.
+This check uses an available GitLab login page and needs no account. For GitLab deployment and startup, follow the [official Docker documentation](https://docs.gitlab.com/install/docker/). See the [test requirements and local debugging guide (Chinese)](doc/user-guide/GitLab测试要求与本地调试.md) for system conditions, account permissions, and plugin usage. The plugin presents a text plan, executes each step with progress updates, and returns the result and report link. Use `/test-plan` to review the plan before execution.
 
 > This development release targets DSH `0.2.1-alpha.1`. Git releases include built artifacts and can be installed directly. Website content and model execution can change; recorded observations, assertions, and cleanup status determine the final result.
 
@@ -127,7 +127,7 @@ Enter these commands in the **DSH input**, not a terminal. Run them separately:
 /test-data .local/gitlab/<run-marker>/pagination.csv --file examples/gitlab/pagination-parameterized.md
 ```
 
-For the last two commands, prepare GitLab data, replace `<run-marker>` with the generated directory, and fill the CSV's current API project ID using the [setup guide (Chinese)](doc/deployment/GitLab本地搭建与测试调试.md). Do not run unresolved public templates. File paths resolve against the invoking conversation's workspace. Using the plugin source root keeps both private generated cases and public templates within that boundary. Older sessions without a working directory fall back to the configured plugin `workspace`. The included cases are Chinese; English descriptions use the same format. See the [user guide](doc/user-guide/使用说明.en.md) for approval and parameter rules.
+For the last two commands, prepare GitLab data, replace `<run-marker>` with the generated directory, and fill the CSV's current API project ID using the [test guide (Chinese)](doc/user-guide/GitLab测试要求与本地调试.md). Do not run unresolved public templates. File paths resolve against the invoking conversation's workspace. Using the plugin source root keeps both private generated cases and public templates within that boundary. Older sessions without a working directory fall back to the configured plugin `workspace`. The included cases are Chinese; English descriptions use the same format. See the [user guide](doc/user-guide/使用说明.en.md) for approval and parameter rules.
 
 ## Live browser preview and recording
 
@@ -165,7 +165,7 @@ If the environment is quarantined, open **Settings → 测试插件 → 测试�
 
 ## Development and contributing
 
-The [local GitLab setup and debugging guide (Chinese)](doc/deployment/GitLab本地搭建与测试调试.md) covers Docker, accounts, DSH/MCP setup, five Markdown cases, CSV parameters, preview, recordings, reports, and cleanup. The two UI cases cover filtering and draft cancellation; three API cases cover search, pagination, and errors. See the [scenario table](examples/gitlab/README.md) and the separate [developer regression guide (Chinese)](doc/reference/开发者JSON用例与调试.md).
+The [GitLab test requirements and local debugging guide (Chinese)](doc/user-guide/GitLab测试要求与本地调试.md) covers system conditions, account permissions, DSH/MCP configuration, five Markdown cases, CSV parameters, preview, recordings, reports, and per-run project cleanup. The two UI cases cover filtering and draft cancellation; three API cases cover search, pagination, and errors. See the [scenario table](examples/gitlab/README.md) and the separate [developer regression guide (Chinese)](doc/reference/开发者JSON用例与调试.md).
 
 After installing dependencies, run from the plugin root; host linking is optional for unpublished host changes:
 
@@ -186,7 +186,7 @@ Keep local credentials, authenticated URLs, logs, unredacted screenshots, and ra
 | --- | --- |
 | [Documentation index](doc/README.md) | English entry points, deployment, design, and historical acceptance records |
 | [User guide](doc/user-guide/使用说明.en.md) | Commands, inputs, parameters, assertions, and reports |
-| [Local GitLab setup and debugging (Chinese)](doc/deployment/GitLab本地搭建与测试调试.md) | Start the test system, run complex cases, explore plugin features, and debug local source |
+| [GitLab test requirements and local debugging (Chinese)](doc/user-guide/GitLab测试要求与本地调试.md) | System conditions, account permissions, complex cases, plugin features, and source debugging |
 | [Deployment guide](doc/deployment/安装与运维.en.md) | Build, install, configure, update, and run an isolated host |
 | [Troubleshooting (Chinese)](doc/deployment/常见问题速查与处理.md) | Environment, preview, installation, and report problems |
 | [Architecture (Chinese)](doc/architecture/当前实现.md) | Module responsibilities and execution flow |
