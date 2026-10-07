@@ -2,6 +2,8 @@
 
 这套用户集合通过 /test-run 读取 Markdown，模拟真实用户的规划和运行。包含 2 条 UI、3 条接口场景：组合筛选、草稿预览与取消、项目搜索、分页及不存在项目的错误响应。模板见[网页用例](../../examples/gitlab/ui-cases.md)和[接口用例](../../examples/gitlab/api-cases.md)。
 
+还没有本机 GitLab 时，先读[从零搭建与测试调试](../deployment/GitLab本地搭建与测试调试.md)：包含 Docker Compose、服务就绪、管理员和测试账号准备、DSH/MCP、CSV 参数化及源码调试。本文集中说明已有服务后的用例准备、运行与清理；真实结果和未验证边界见[Markdown 用户入口验收](../project/Markdown用户入口验收.md)。
+
 ## 1. 先分清三个地方
 
 | 地方 | 用途 |
@@ -42,7 +44,7 @@ chmod 600 .local/gitlab/config.json
 
 ```json
 {
-  "sign_in_url": "http://localhost:8929/users/sign_in",
+  "sign_in_url": "http://127.0.0.1:8929/users/sign_in",
   "username": "<你自己的测试用户名>",
   "password": "<你自己的测试密码>",
   "browser_channel": "chrome"

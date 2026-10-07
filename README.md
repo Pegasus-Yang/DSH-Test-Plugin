@@ -11,10 +11,10 @@ DSH Test Plugin 是 DeepSeek Harness（DSH）的原生 TypeScript 插件，支�
 在 DSH 输入框中描述一条测试：
 
 ```text
-/test 访问ceshiren.com，搜索 agent，打开第一条搜索结果帖子，断言帖子的点赞数不为0
+/test 访问 http://127.0.0.1:8929/users/sign_in，断言页面存在用户名输入框、密码输入框和 Sign in 登录按钮
 ```
 
-插件会展示文字计划，逐步执行、更新进度，最后给出测试结果和报告链接。需要先确认计划时，将 `/test` 改为 `/test-plan`。
+这是本机 GitLab 登录页的入门检查，不需要账号。先按[GitLab 本地搭建与测试调试](doc/deployment/GitLab本地搭建与测试调试.md)启动服务。插件会展示文字计划，逐步执行、更新进度，最后给出测试结果和报告链接。需要先确认计划时，将 `/test` 改为 `/test-plan`。
 
 > 当前为开发版本，适配 DSH `0.2.1-alpha.1`。从下方 GitHub 地址安装即可，发行版本包含构建产物。网页内容和模型执行可能变化，最终结果以报告中的观察、断言及清理状态为准。
 
@@ -36,19 +36,19 @@ DSH Test Plugin 是 DeepSeek Harness（DSH）的原生 TypeScript 插件，支�
 
 ## 实际效果
 
-以下截图来自 **0.9.1 的真实运行**，示例任务是访问 ceshiren.com、搜索 `agent`、打开第一条结果并检查帖子正文不为空。网页内容、步骤拆分和耗时会随实际运行变化。
+以下截图来自 **0.11.2 的真实 GitLab 运行**：登录页控件检查展示进度和浏览器画面，Markdown 接口用例展示报告与实际步骤。复杂 UI 用例的验证边界见[验收记录](doc/project/Markdown用户入口验收.md)，步骤拆分和耗时会随实际运行变化。
 
 **正在做哪一步，一眼就能看到。** 进度区显示当前操作、已结算数量、总耗时和本步用时；完整步骤可以按需展开。
 
-![执行中的当前步骤面板：正在打开第一条搜索结果，2/3 步已结算，显示总耗时和本步用时](doc/user-guide/images/当前步骤与耗时.jpg)
+![GitLab 登录页检查的当前步骤、结算进度和耗时](doc/user-guide/images/GitLab当前步骤.png)
 
 **在同一对话里看执行过程和浏览器画面。** 当前页面 CDP 和有效首帧就绪后，浮窗自动展示无头浏览器的实时画面；窗口可以移动、缩放和关闭。下图展示完整 DSH 页面，浮窗、对话记录和步骤进度同时可见。
 
-![完整 DSH 页面：左上方的实时浮窗展示社区首页，对话区保留执行记录，输入框上方展开当前步骤、耗时和完整列表](doc/user-guide/images/浏览器实时画面.jpg)
+![完整 DSH 页面：实时浮窗展示 GitLab 登录页，同时可见对话执行记录与步骤进度](doc/user-guide/images/GitLab浏览器实时画面.png)
 
-**结果有实际值、预期和证据。** 报告按用例、步骤、断言及附件组织，能够核对“正文不为空”的实际比较结果，也可离线查看。
+**结果有实际值、预期和证据。** 报告按用例、步骤、断言及附件组织，能够核对 GitLab 项目搜索、分页和预期错误响应，也可离线查看。
 
-![真实测试报告：用例通过，按步骤展示执行结果，正文断言列出实际内容、空字符串预期和证据入口](doc/user-guide/images/测试报告.jpg)
+![GitLab Markdown 接口报告：三例通过，展示实际步骤、状态码检查和证据入口，接口实例没有媒体区域](doc/user-guide/images/GitLab接口测试报告.png)
 
 计划审核、完整步骤、预览设置和断言细节的截图见[使用说明](doc/user-guide/使用说明.md#用截图认识功能)。
 
@@ -122,12 +122,12 @@ pnpm dsh plugin --profile web add /绝对路径/DSH-Test-Plugin/artifacts/packag
 以下命令输入 **DSH 对话框**，不是终端。请逐条执行：
 
 ```text
-/test-plan 发送GET请求到 https://httpbin.org/get?keyword=agent，验证HTTP状态码为200、返回的keyword为agent
-/test-run examples/httpbin-cases.md
-/test-data examples/httpbin-parameters.csv --file examples/httpbin-parameterized.md
+/test-plan 访问 http://127.0.0.1:8929/users/sign_in，断言页面存在用户名输入框、密码输入框和 Sign in 登录按钮
+/test-run .local/gitlab/本次标记/api.md
+/test-data .local/gitlab/本次标记/pagination.csv --file examples/gitlab/pagination-parameterized.md
 ```
 
-文件路径相对于发起命令的当前对话工作区；在 DSH 中选择工作区后，从该工作区的新建或已有对话执行。没有工作目录信息的历史会话才使用插件配置的 `workspace`。将 [examples](examples) 中的文件复制到实际使用的工作区，完整输入格式、审核过程和参数规则见[使用说明](doc/user-guide/使用说明.md)。
+后两条需先按[GitLab 指导文档](doc/deployment/GitLab本地搭建与测试调试.md)准备数据，使用脚本打印的真实目录替换“本次标记”，并填写 CSV 的本轮接口项目 ID。不要直接执行含占位符的命令或公开模板。文件路径相对于发起命令的当前对话工作区；以插件源码根目录为工作区时，生成文件和模板都在边界内。没有工作目录信息的历史会话才使用插件配置的 `workspace`。完整输入格式、审核过程和参数规则见[使用说明](doc/user-guide/使用说明.md)。
 
 ## 浏览器实时预览与录像
 
@@ -165,9 +165,9 @@ pnpm dsh plugin --profile web add /绝对路径/DSH-Test-Plugin/artifacts/packag
 
 ## 开发与贡献
 
-项目提供 [GitLab 复杂回归用例](doc/user-guide/GitLab复杂用例.md)：4 条 UI 场景与 13 条接口场景，覆盖创建、编辑、评论、状态流转、筛选、分页和错误响应，并用独立接口核对界面操作的持久化结果。账号从被 Git 忽略的本地配置读取，测试数据按次准备和清理；[完整场景表](examples/gitlab/README.md)。
+项目提供[GitLab 本地搭建与测试调试指南](doc/deployment/GitLab本地搭建与测试调试.md)：从 Docker 启动、测试账号、DSH/MCP 配置到数据准备、五条 Markdown 用例、CSV 参数化、预览录像、报告和清理。两条 UI 场景覆盖组合筛选及草稿预览取消，三条接口场景覆盖搜索、分页及错误响应，网页结果通过独立接口核对。账号从被 Git 忽略的配置读取；[场景表](examples/gitlab/README.md)与[开发回归说明](doc/reference/开发者JSON用例与调试.md)分别说明用户集合和完整开发集合。
 
-完成依赖安装和 `link-host` 后，在插件根目录运行：
+完成依赖安装后，在插件根目录运行；只有调试未发布宿主改动才需要可选的 `link-host`：
 
 ```sh
 pnpm typecheck
@@ -186,6 +186,7 @@ pnpm test:integration
 | --- | --- |
 | [完整文档导航](doc/README.md) | 使用、部署、设计和历史验收记录 |
 | [使用说明](doc/user-guide/使用说明.md) | 命令、输入、参数、断言和报告 |
+| [GitLab 本地搭建与测试调试](doc/deployment/GitLab本地搭建与测试调试.md) | 从零搭建被测服务、运行复杂用例、体验完整功能及本地源码调试 |
 | [浏览器录像与报告](doc/user-guide/浏览器录像与报告.md) | 安装视频依赖、开关、回看、下载与离线保存 |
 | [安装与运维](doc/deployment/安装与运维.md) | 构建、安装、配置、升级及独立开发环境 |
 | [常见问题速查](doc/deployment/常见问题速查与处理.md) | 环境残留、预览、安装和报告问题 |

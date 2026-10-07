@@ -1,5 +1,5 @@
 {
-  "sign_in_url": "http://localhost:8929/users/sign_in",
+  "sign_in_url": "http://127.0.0.1:8929/users/sign_in",
   "username": "<填写本机测试账号>",
   "password": "<填写本机测试密码>",
   "browser_channel": "chrome"

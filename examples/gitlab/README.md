@@ -2,6 +2,16 @@
 
 通过 Markdown 文档模拟用户的网页和接口测试。账号从不提交的本机配置读取，公开模板只保存占位参数。完整配置、准备、运行及清理见[使用指南](../../doc/user-guide/GitLab复杂用例.md)。
 
+第一次使用先看[GitLab 本地搭建与测试调试](../../doc/deployment/GitLab本地搭建与测试调试.md)：从 Docker 启动和测试账号到 DSH 配置、Markdown/CSV、画面与录像、报告及清理。
+
+| 入门文件 | 用途 |
+| --- | --- |
+| [docker-compose.yml](docker-compose.yml) | 复制到私有目录，搭建本机 GitLab；业务数据使用 Docker 数据卷 |
+| [config.example.json](config.example.json) | 准备脚本的占位配置；真实账号只填在 .local/gitlab/config.json |
+| [login-page.txt](login-page.txt) | 服务启动后即可运行的登录页检查，不需要账号 |
+| [pagination-parameterized.md](pagination-parameterized.md) | 分页参数模板；通过 /test-data 展开并审核 |
+| [parameters.example.csv](parameters.example.csv) | 复制到本轮私有目录后，填写实际地址和接口项目 ID，不填账号 |
+
 | 模板 | 场景 | 固定预期 |
 | --- | --- | --- |
 | [ui-cases.md](ui-cases.md) | Closed 状态与 dsh-smoke 标签组合筛选 | gamma 唯一匹配，详情标题与独立接口身份一致 |

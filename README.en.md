@@ -11,10 +11,10 @@ DSH Test Plugin is a native TypeScript plugin for DeepSeek Harness (DSH), suppor
 Describe a test in the DSH input:
 
 ```text
-/test Visit ceshiren.com, search for agent, open the first search-result post, and assert that its like count is not 0.
+/test Visit http://127.0.0.1:8929/users/sign_in and verify that the page has a username field, a password field, and a Sign in button.
 ```
 
-The plugin presents a text plan, executes each step with progress updates, and returns the result and report link. Use `/test-plan` to review the plan before execution.
+This local GitLab login-page check needs no account. Start the service using the [local GitLab setup and debugging guide (Chinese)](doc/deployment/GitLab本地搭建与测试调试.md). The plugin presents a text plan, executes each step with progress updates, and returns the result and report link. Use `/test-plan` to review the plan before execution.
 
 > This development release targets DSH `0.2.1-alpha.1`. Git releases include built artifacts and can be installed directly. Website content and model execution can change; recorded observations, assertions, and cleanup status determine the final result.
 
@@ -36,19 +36,19 @@ Version 0.11.2 presents TXT, Markdown, and CSV parameters as user inputs, with r
 
 ## Screenshots
 
-These screenshots show **real runs on version 0.9.1**, using the Chinese UI. The example visits ceshiren.com, searches for `agent`, opens the first result, and checks that the post body is not empty. Website content, generated steps, and elapsed time can vary.
+These screenshots show **real GitLab runs on version 0.11.2**, using the Chinese UI: a login-page control check for progress and live preview, and Markdown API cases for reports and actual steps. See the [acceptance record (Chinese)](doc/project/Markdown用户入口验收.md) for complex UI validation boundaries. Generated steps and timings can vary.
 
 **See the current step and elapsed time.** The progress area shows the current action, settled count, total duration, and step duration. Expand the full list when needed.
 
-![Current-step panel while opening the first search result, with 2 of 3 steps settled and elapsed time](doc/user-guide/images/当前步骤与耗时.jpg)
+![Current step, settled progress, and timings for a GitLab login-page check](doc/user-guide/images/GitLab当前步骤.png)
 
 **Watch the execution and browser in the same conversation.** A floating window displays live frames from the headless browser after the current page has usable CDP and a valid first frame. Move, resize, or close it through the host UI. This full-page screenshot shows the preview, conversation records, and step progress together.
 
-![Full DSH page with a live community-homepage window, conversation records, and an expanded progress panel showing the current step, timings, and all steps](doc/user-guide/images/浏览器实时画面.jpg)
+![Full DSH page with a live GitLab login-page window, conversation records, and step progress](doc/user-guide/images/GitLab浏览器实时画面.png)
 
-**Compare actual values with expectations.** The static report organizes cases, steps, assertions, and evidence, including the recorded comparison for the nonempty post body.
+**Compare actual values with expectations.** The static report organizes cases, steps, assertions, and evidence for GitLab project search, pagination, and expected error responses.
 
-![Actual passing test report with step results, the captured post body, the empty-string expectation, and evidence links](doc/user-guide/images/测试报告.jpg)
+![GitLab Markdown API report with three passing cases, actual steps, status checks, and evidence links, without browser media](doc/user-guide/images/GitLab接口测试报告.png)
 
 See the [illustrated user guide](doc/user-guide/使用说明.en.md) for plan review, full steps, preview settings, and assertion details.
 
@@ -122,12 +122,12 @@ Keep local archives because they remain `file:` dependency sources. For same-pat
 Enter these commands in the **DSH input**, not a terminal. Run them separately:
 
 ```text
-/test-plan Send a GET request to https://httpbin.org/get?keyword=agent and verify HTTP status 200 and returned keyword agent.
-/test-run examples/httpbin-cases.md
-/test-data examples/httpbin-parameters.csv --file examples/httpbin-parameterized.md
+/test-plan Visit http://127.0.0.1:8929/users/sign_in and verify that the page has a username field, a password field, and a Sign in button.
+/test-run .local/gitlab/<run-marker>/api.md
+/test-data .local/gitlab/<run-marker>/pagination.csv --file examples/gitlab/pagination-parameterized.md
 ```
 
-File paths resolve against the workspace of the conversation that invokes the command. Select a workspace in DSH and use a conversation belonging to it. Older sessions without a working directory fall back to the configured plugin `workspace`. Copy [examples](examples) into the conversation workspace if needed. The included case files are Chinese examples; you can write your own in English. See the [user guide](doc/user-guide/使用说明.en.md) for input formats, approval, and parameter rules.
+For the last two commands, prepare GitLab data, replace `<run-marker>` with the generated directory, and fill the CSV's current API project ID using the [setup guide (Chinese)](doc/deployment/GitLab本地搭建与测试调试.md). Do not run unresolved public templates. File paths resolve against the invoking conversation's workspace. Using the plugin source root keeps both private generated cases and public templates within that boundary. Older sessions without a working directory fall back to the configured plugin `workspace`. The included cases are Chinese; English descriptions use the same format. See the [user guide](doc/user-guide/使用说明.en.md) for approval and parameter rules.
 
 ## Live browser preview and recording
 
@@ -165,7 +165,9 @@ If the environment is quarantined, open **Settings → 测试插件 → 测试�
 
 ## Development and contributing
 
-After installing dependencies and linking the host, run from the plugin root:
+The [local GitLab setup and debugging guide (Chinese)](doc/deployment/GitLab本地搭建与测试调试.md) covers Docker, accounts, DSH/MCP setup, five Markdown cases, CSV parameters, preview, recordings, reports, and cleanup. The two UI cases cover filtering and draft cancellation; three API cases cover search, pagination, and errors. See the [scenario table](examples/gitlab/README.md) and the separate [developer regression guide (Chinese)](doc/reference/开发者JSON用例与调试.md).
+
+After installing dependencies, run from the plugin root; host linking is optional for unpublished host changes:
 
 ```sh
 pnpm typecheck
@@ -184,6 +186,7 @@ Keep local credentials, authenticated URLs, logs, unredacted screenshots, and ra
 | --- | --- |
 | [Documentation index](doc/README.md) | English entry points, deployment, design, and historical acceptance records |
 | [User guide](doc/user-guide/使用说明.en.md) | Commands, inputs, parameters, assertions, and reports |
+| [Local GitLab setup and debugging (Chinese)](doc/deployment/GitLab本地搭建与测试调试.md) | Start the test system, run complex cases, explore plugin features, and debug local source |
 | [Deployment guide](doc/deployment/安装与运维.en.md) | Build, install, configure, update, and run an isolated host |
 | [Troubleshooting (Chinese)](doc/deployment/常见问题速查与处理.md) | Environment, preview, installation, and report problems |
 | [Architecture (Chinese)](doc/architecture/当前实现.md) | Module responsibilities and execution flow |

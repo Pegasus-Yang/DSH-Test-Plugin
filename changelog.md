@@ -4,7 +4,8 @@
 
 ## 未发布
 
-暂无未发布变更。
+- 增加 GitLab 本地搭建与测试调试指南，以及可复制的 Compose、无需账号的 TXT 入门用例和分页 CSV/Markdown 模板；覆盖服务、账号、DSH/MCP、私有数据准备、完整功能体验、报告、源码调试和清理。
+- README、中英文使用说明及预览、录像、进度和实际步骤说明统一使用 GitLab 示例；替换真实截图，区分五条用户 Markdown 场景、完整开发回归与既有验收边界。
 
 ## [0.11.2](https://github.com/Pegasus-Yang/DSH-Test-Plugin/tree/v0.11.2) — 2026-10-06
 
