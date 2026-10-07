@@ -53,6 +53,7 @@ The English guides describe the current implementation. Historical design and ac
 - [计划审核与接口测试验收](project/计划审核与接口测试验收.md)：0.4.0 原生 plan 审核、修改及真实 HTTP 报告核验。
 - [开发与验收记录](project/开发进度.md)：分步提交、真实运行证据与未完成范围。
 - [当前实现](architecture/当前实现.md)：模块及数据流、支持边界。
+- [单条用例执行与参与者交互](architecture/单条用例执行与参与者交互.md)：插件、DSH、MCP 与 LLM 的职责、命令启动、计划审核、模型与工具循环、可信采集、断言、停止收尾和报告流转，附总览与时序图、源码入口。
 - [安装与运维](deployment/安装与运维.md)：构建、插件安装、MCP、预算及隔离处置。
 - [版本发布与Git标签](deployment/版本发布与Git标签.md)：发布步骤、版本与提交的对应表、历史标签补全及查找方法。
 - [GitHub公开内容检查](project/GitHub公开内容检查.md)：凭据与历史内容检查、本机资料整理及README公开阅读结构。
