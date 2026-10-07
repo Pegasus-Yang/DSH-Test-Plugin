@@ -115,6 +115,7 @@ For a fuller workflow, try the [GitLab examples (Chinese)](examples/gitlab/READM
 | --- | --- |
 | [Documentation index (Chinese)](doc/README.md) | Usage, deployment, architecture, design, and acceptance records |
 | [User guide](doc/user-guide/使用说明.en.md) | Commands, files, parameters, plan review, and reports |
+| [CSV parameter handbook (Chinese)](doc/user-guide/CSV参数文件使用手册.md) | Copyable examples, placeholders, expansion, review, and common errors |
 | [GitLab requirements and local debugging (Chinese)](doc/user-guide/GitLab测试要求与本地调试.md) | System and account requirements, complex cases, data preparation, and plugin debugging |
 | [Steps and progress (Chinese)](doc/user-guide/执行步骤与进度显示.md) | Expanded steps, run phases, and timing |
 | [Actual steps and manual cases (Chinese)](doc/user-guide/实际步骤与手工用例.md) | Operation records and reusable manual-case exports |
