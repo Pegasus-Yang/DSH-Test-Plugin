@@ -4,6 +4,7 @@ import { join, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { createServer } from "node:net";
 import { atomicJson } from "./recorder.js";
+import { RunBridgePreview } from "./runbridge-preview.js";
 import { RecordingSession } from "./recording.js";
 import { checkBrowscreen, normalizeBrowscreenExecutable, } from "./browscreen-command.js";
 function localUrl(value, protocols) {
@@ -16,6 +17,7 @@ function localUrl(value, protocols) {
     return url;
 }
 export class PreviewManager {
+    remote;
     owner;
     generation = 0;
     target;
@@ -77,6 +79,8 @@ export class PreviewManager {
     }
     /** 只有当前运行实际持有浏览器上下文时才交付页面归属。 */
     sync(run, recordingContext) {
+        this.remote?.stop();
+        this.remote = undefined;
         const instance = run.lifecycle !== "FINISHED" && !run.resource_quarantined
             ? run.instances.find((entry) => entry.resources.browser_context?.state === "exists")
             : undefined;
@@ -445,6 +449,8 @@ export class PreviewManager {
         await this.pending;
     }
     async state(runId) {
+        if (this.remote)
+            return this.remote.state(runId);
         if (this.owner?.run_id !== runId)
             return { ready: false };
         if (!this.config)
@@ -478,9 +484,13 @@ export class PreviewManager {
         };
     }
     async screenshot(runId) {
+        if (this.remote)
+            return this.remote.screenshot(runId);
         return (await this.state(runId)).ready ? this.frame : undefined;
     }
     async shutdown() {
+        this.remote?.stop();
+        this.remote = undefined;
         clearTimeout(this.polling);
         this.polling = undefined;
         this.owner = undefined;
@@ -497,5 +507,10 @@ export class PreviewManager {
             if (existsSync(path))
                 unlinkSync(path);
         }
+    }
+    /** 远程后端复用展示接口，不启动本机 Browscreen。 */
+    syncRemote(run, browser) {
+        this.remote ??= new RunBridgePreview();
+        this.remote.bind(run, browser);
     }
 }

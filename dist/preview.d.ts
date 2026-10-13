@@ -1,6 +1,7 @@
 import type { PreviewConfig } from "./config.js";
 import type { SuiteRun } from "./contracts.js";
 import type { PreviewState } from "./progress-model.js";
+import type { RunBridge } from "./runbridge.js";
 import { type RecordingContext } from "./recording.js";
 interface Frame {
     bytes: Buffer;
@@ -8,6 +9,7 @@ interface Frame {
     capturedAt: string;
 }
 export declare class PreviewManager {
+    private remote?;
     private owner?;
     private generation;
     private target?;
@@ -53,5 +55,7 @@ export declare class PreviewManager {
     state(runId: string): Promise<PreviewState>;
     screenshot(runId: string): Promise<Frame | undefined>;
     shutdown(): Promise<void>;
+    /** 远程后端复用展示接口，不启动本机 Browscreen。 */
+    syncRemote(run: SuiteRun, browser: RunBridge): void;
 }
 export {};

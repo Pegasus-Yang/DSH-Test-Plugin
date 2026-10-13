@@ -6,6 +6,12 @@ import { existsSync, readFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import type { SuiteRun } from "./contracts.js";
 import { atomicJson } from "./recorder.js";
+import {
+  RunBridge,
+  runbridgeResult,
+  remoteCleanupComplete,
+} from "./runbridge.js";
+import { browserPreferenceDefaults } from "./browser-preferences.js";
 
 export interface QuarantineState {
   token: string;
@@ -73,7 +79,9 @@ export class RecoveryManager {
           run.suite_run_id === id &&
           run.instances.some(
             (instance) =>
-              instance.resources.browser_context?.state === "exists",
+              instance.resources.browser_context?.state === "exists" ||
+              (instance.resources.browser_context?.remote &&
+                instance.resources.browser_context.state === "unknown"),
           );
       } catch {
         /* 缺少资源归属时保留手工处置入口。 */
@@ -169,8 +177,49 @@ export class RecoveryManager {
       throw new Error("隔离状态已变化，请重新查看并确认");
     if (!state.can_recover) throw new Error(state.unavailable_reason);
     if (signal.aborted) throw new Error("释放已取消，隔离仍保留");
-    const name = "mcp__playwright__browser_close";
-    if (!agent.ctx.tools.get(name, agent))
+    const saved = JSON.parse(
+      readFileSync(
+        join(this.outputRoot, state.run_id!, "results.json"),
+        "utf8",
+      ),
+    ) as SuiteRun;
+    const resource = saved.instances
+      .map((instance) => instance.resources.browser_context)
+      .find(
+        (item) => item?.remote && ["exists", "unknown"].includes(item.state),
+      );
+    let remote: RunBridge | undefined;
+    let unregister: (() => void) | undefined;
+    const name = resource
+      ? "mcp__runbridge__browser_stop"
+      : "mcp__playwright__browser_close";
+    if (resource) {
+      if (!resource.remote?.access_file)
+        throw new Error(
+          "远程恢复记录缺少原私有访问文件，请提交所有者的处置证据",
+        );
+      remote = new RunBridge(
+        {
+          ...browserPreferenceDefaults,
+          backend: "runbridge",
+          accessFile: resource.remote.access_file,
+          resourceId: resource.remote.resource_id,
+          previewEnabled: false,
+        },
+        process.cwd(),
+      );
+      remote.restore(resource);
+      this.busy = true;
+      try {
+        await remote.connect();
+        unregister = remote.register(agent.ctx, ["browser_stop"]);
+      } catch (error) {
+        this.busy = false;
+        await remote.close();
+        throw error;
+      }
+    }
+    if (!remote && !agent.ctx.tools.get(name, agent))
       throw new Error(
         "当前没有可用的 Playwright 关闭工具，请恢复 MCP 连接后重试，或在设置页提交实际处置证据",
       );
@@ -211,6 +260,14 @@ export class RecoveryManager {
         throw new Error(
           "浏览器关闭未成功（可能审批被拒绝或连接失败），隔离仍保留",
         );
+      const remoteProof = remote ? runbridgeResult(result.value) : undefined;
+      if (
+        remote &&
+        (!remoteCleanupComplete(remoteProof?.session) ||
+          remoteProof?.session?.session_id !==
+            remote.resource?.remote?.session_id)
+      )
+        throw new Error("远程会话清理未确认，隔离仍保留");
       await this.stopPreview();
       if (controller.signal.aborted)
         throw new Error("释放未在期限内确认，隔离仍保留");
@@ -228,11 +285,14 @@ export class RecoveryManager {
           started_at: startedAt,
           finished_at: new Date().toISOString(),
           browser_close_is_error: false,
+          ...(remoteProof ? { remote_session: remoteProof.session } : {}),
           preview_stopped: true,
         },
       });
       return "测试环境已释放。请重新发送原测试命令；旧测试结果未修改。";
     })().finally(() => {
+      unregister?.();
+      void remote?.close();
       clearTimeout(timer);
       signal.removeEventListener("abort", abort);
       this.busy = false;

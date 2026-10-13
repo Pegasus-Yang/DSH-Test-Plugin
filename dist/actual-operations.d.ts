@@ -1,6 +1,7 @@
 /** 已保存操作与检查的纯投影；不请求模型，也不补造未执行步骤。 */
 import type { ActualOperation, AssertionResult, CaseRun, Json, Phase, StepResult, SuiteRun } from "./contracts.js";
 export declare const operationSchemaVersion = "1";
+export declare const runbridgeOperationNames: string[];
 /** 模型在同一份支持名单中选择完整名称，避免省略MCP前缀反复失败。 */
 export declare const operationToolNames: string[];
 export declare function operationTool(name: string, args?: unknown): boolean;

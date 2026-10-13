@@ -327,6 +327,15 @@ function ReportSettings(actions) {
   ] });
 }
 
+// src/browser-preferences.ts
+var browserPreferenceDefaults = {
+  backend: "playwright",
+  accessFile: "",
+  resourceId: "chromium",
+  leaseSeconds: 1800,
+  previewEnabled: true
+};
+
 // src/client/preview-settings.tsx
 var import_jsx_runtime3 = require("react/jsx-runtime");
 function PreviewSettingsPage({
@@ -355,11 +364,151 @@ function PreviewSettingsPage({
     /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { children: "\u6D4B\u8BD5\u63D0\u793A\u73AF\u5883\u672A\u91CA\u653E\u65F6\uFF0C\u8BF7\u5148\u5728\u8FD9\u91CC\u5904\u7406\uFF0C\u5B8C\u6210\u540E\u91CD\u65B0\u6267\u884C\u6D4B\u8BD5\u547D\u4EE4\u3002" }),
     /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(RecoveryPanel, { ...recovery }),
     /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(ReportSettings, { rebuildReport }),
+    info && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(
+      BrowserConnectionForm,
+      {
+        form: forms.get(info.namespace),
+        effective: info.browserConnection
+      }
+    ),
     /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("h2", { children: "\u6D4F\u89C8\u5668\u9884\u89C8\u4E0E\u5F55\u50CF" }),
     /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { children: "\u5B9E\u65F6\u67E5\u770B\u6D4B\u8BD5\u7F51\u9875\uFF0C\u6216\u5728\u62A5\u544A\u4E2D\u56DE\u770B\u64CD\u4F5C\u5F55\u50CF\u3002\u63A5\u53E3\u6D4B\u8BD5\u6216\u6CA1\u6709\u6D4F\u89C8\u5668\u753B\u9762\u65F6\uFF0C\u4E0D\u4F1A\u6253\u5F00\u6D6E\u7A97\u3002" }),
     error && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { role: "alert", children: error }),
     info ? /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(PreferencesForm, { info, form: forms.get(info.namespace) }) : !error && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { children: "\u6B63\u5728\u8BFB\u53D6\u8BBE\u7F6E\u2026" })
   ] });
+}
+function BrowserConnectionForm({
+  form,
+  effective
+}) {
+  const state = (0, import_react3.useSyncExternalStore)(
+    form.subscribe.bind(form),
+    form.getSnapshot.bind(form)
+  );
+  const [draft, setDraft] = (0, import_react3.useState)(browserPreferenceDefaults);
+  const [dirty, setDirty] = (0, import_react3.useState)(false);
+  const [revision, setRevision] = (0, import_react3.useState)();
+  const [message, setMessage] = (0, import_react3.useState)("");
+  const [saving, setSaving] = (0, import_react3.useState)(false);
+  (0, import_react3.useEffect)(() => {
+    if (!dirty && state.status === "ready")
+      setDraft({
+        ...browserPreferenceDefaults,
+        ...state.value?.browserConnection ?? state.value?.browser ?? effective
+      });
+  }, [state.value, state.status, dirty, effective]);
+  const edit = (value) => {
+    if (!dirty) setRevision(state.revision);
+    setDraft((current) => ({ ...current, ...value }));
+    setDirty(true);
+    setMessage("");
+  };
+  return /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)(
+    "form",
+    {
+      "data-test-browser-connection": true,
+      onSubmit: (event) => {
+        event.preventDefault();
+        if (draft.backend === "runbridge" && (!draft.accessFile.trim() || !Number.isInteger(draft.leaseSeconds) || draft.leaseSeconds < 1 || draft.leaseSeconds > 3600)) {
+          setMessage(
+            "\u8BF7\u586B\u5199\u5BBF\u4E3B\u79C1\u6709\u8BBF\u95EE\u6587\u4EF6\u8DEF\u5F84\uFF0C\u79DF\u671F\u987B\u4E3A 1 \u5230 3600 \u79D2\u7684\u6574\u6570\u3002"
+          );
+          return;
+        }
+        setSaving(true);
+        void form.mutate(
+          [
+            {
+              op: "set",
+              path: ["browserConnection"],
+              value: {
+                ...draft,
+                accessFile: draft.accessFile.trim(),
+                resourceId: draft.resourceId.trim()
+              }
+            }
+          ],
+          revision
+        ).then((accepted) => {
+          if (accepted) {
+            setDirty(false);
+            setMessage(
+              "\u5DF2\u4FDD\u5B58\uFF0C\u4E0B\u4E00\u6B21\u6D4B\u8BD5\u4F7F\u7528\u6B64\u8FDE\u63A5\uFF1B\u6267\u884C\u4E2D\u7684\u6D4B\u8BD5\u4FDD\u6301\u539F\u8FDE\u63A5\u3002"
+            );
+          } else setMessage("\u8BBE\u7F6E\u5DF2\u53D8\u5316\u6216\u7531\u542F\u52A8\u914D\u7F6E\u56FA\u5B9A\uFF0C\u8BF7\u91CD\u65B0\u8BFB\u53D6\u540E\u4FDD\u5B58\u3002");
+        }).catch(
+          () => setMessage("\u8FDE\u63A5\u8BBE\u7F6E\u4FDD\u5B58\u5931\u8D25\uFF0C\u8BF7\u786E\u8BA4\u5DF2\u767B\u5F55\u4E14\u914D\u7F6E\u53EF\u7F16\u8F91\u3002")
+        ).finally(() => setSaving(false));
+      },
+      children: [
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("h2", { children: "\u6D4F\u89C8\u5668\u6267\u884C" }),
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("fieldset", { disabled: saving || !state.writable, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("label", { htmlFor: "dsh-test-browser-backend", children: "\u6D4F\u89C8\u5668\u4F4D\u7F6E" }),
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)(
+            "select",
+            {
+              id: "dsh-test-browser-backend",
+              value: draft.backend,
+              onChange: (event) => edit({
+                backend: event.target.value
+              }),
+              children: [
+                /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("option", { value: "playwright", children: "\u672C\u673A Playwright MCP" }),
+                /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("option", { value: "runbridge", children: "\u8FDC\u7A0B RunBridge MCP" })
+              ]
+            }
+          ),
+          draft.backend === "runbridge" && /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)(import_jsx_runtime3.Fragment, { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("label", { htmlFor: "dsh-test-runbridge-access", children: "DSH \u5BBF\u4E3B\u4E0A\u7684\u79C1\u6709\u8BBF\u95EE\u6587\u4EF6" }),
+            /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(
+              "input",
+              {
+                id: "dsh-test-runbridge-access",
+                value: draft.accessFile,
+                placeholder: "\u8BBF\u95EE\u6587\u4EF6\u5B8C\u6574\u8DEF\u5F84\uFF0C\u4E0D\u586B\u5199\u4EE4\u724C",
+                onChange: (event) => edit({ accessFile: event.target.value })
+              }
+            ),
+            /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { className: "dsh-test-setting-hint", children: "\u6587\u4EF6\u7531 Node \u6240\u6709\u8005\u7B7E\u53D1\uFF0C\u5305\u542B Hub\u3001\u8282\u70B9\u3001grant \u548C\u8BBF\u95EE\u4EE4\u724C\uFF1B\u4EE4\u724C\u53EA\u5728\u5BBF\u4E3B\u8BFB\u53D6\u3002\u4E1A\u52A1\u7F51\u9875\u7531\u8FDC\u7A0B\u6D4F\u89C8\u5668\u8BBF\u95EE\u3002" }),
+            /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("label", { htmlFor: "dsh-test-runbridge-resource", children: "\u53D7\u7BA1\u7406\u6D4F\u89C8\u5668\u8D44\u6E90" }),
+            /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(
+              "input",
+              {
+                id: "dsh-test-runbridge-resource",
+                value: draft.resourceId,
+                onChange: (event) => edit({ resourceId: event.target.value })
+              }
+            ),
+            /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("label", { htmlFor: "dsh-test-runbridge-lease", children: "\u6BCF\u6761\u7528\u4F8B\u7684\u4F1A\u8BDD\u79DF\u671F \u79D2" }),
+            /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(
+              "input",
+              {
+                id: "dsh-test-runbridge-lease",
+                type: "number",
+                min: 1,
+                max: 3600,
+                value: draft.leaseSeconds,
+                onChange: (event) => edit({ leaseSeconds: Number(event.target.value) })
+              }
+            ),
+            /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("label", { className: "dsh-test-setting-switch", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(
+                "input",
+                {
+                  type: "checkbox",
+                  checked: draft.previewEnabled,
+                  onChange: (event) => edit({ previewEnabled: event.target.checked })
+                }
+              ),
+              "\u663E\u793A\u8FDC\u7A0B\u6D4F\u89C8\u5668\u6301\u7EED\u753B\u9762"
+            ] })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("button", { type: "submit", disabled: !dirty, children: saving ? "\u6B63\u5728\u4FDD\u5B58\u2026" : "\u4FDD\u5B58\u6D4F\u89C8\u5668\u8FDE\u63A5" })
+        ] }),
+        message && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { role: "status", children: message })
+      ]
+    }
+  );
 }
 function PreferencesForm({
   info,
@@ -495,6 +644,8 @@ function PreferencesForm({
     }
   };
   if (state.status === "loading") return /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { children: "\u6B63\u5728\u8BFB\u53D6\u4FDD\u5B58\u7684\u914D\u7F6E\u2026" });
+  if ((state.value?.browserConnection ?? state.value?.browser ?? info.browserConnection)?.backend === "runbridge")
+    return /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { className: "dsh-test-setting-hint", children: "\u8FDC\u7A0B\u753B\u9762\u7531 RunBridge \u4F1A\u8BDD\u63D0\u4F9B\uFF0C\u65E0\u9700\u5B89\u88C5\u672C\u673A Browscreen\u3002\u8FDC\u7A0B\u64CD\u4F5C\u5F55\u50CF\u5C1A\u672A\u63D0\u4F9B\u3002" });
   if (!state.writable || state.status === "unavailable")
     return /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { role: "alert", children: "\u5F53\u524D\u8FDE\u63A5\u4E0D\u80FD\u4FDD\u5B58\u5BBF\u4E3B\u8BBE\u7F6E\u3002\u8BF7\u4ECE\u672C\u673A DSH \u9875\u9762\u6253\u5F00\uFF1B\u81EA\u5B9A\u4E49\u90E8\u7F72\u9700\u63D0\u4F9B settings \u548C config-editor \u670D\u52A1\u3002" });
   return /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)(

@@ -14,6 +14,7 @@ export const previewPreferenceDefaults: PreviewPreferences = {
   mcpId: "",
 };
 export interface PreviewSettingsInfo {
+  browserConnection?: import("./browser-preferences.js").BrowserPreferences;
   namespace: string;
   mcpInstances: { id: string; label: string; compatible: boolean }[];
   message: string;

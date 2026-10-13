@@ -238,3 +238,114 @@ it("缺少浏览器、时间或可用关闭工具时提示实际处置，保留�
   t.manager.release(proof);
   expect(t.manager.status().quarantine).toBeNull();
 });
+
+it.each(["CLOSED", "FAILED", "INTERRUPTED"])(
+  "远程 %s+COMPLETE 按原许可确认释放，保留旧业务结果",
+  async (terminal) => {
+    const { RunBridge } = await import("../../src/runbridge.js");
+    const t = setup();
+    const access = join(t.root, "original-access.json");
+    writeFileSync(
+      access,
+      JSON.stringify({
+        hub_url: "http://hub.test",
+        node_id: "node_own",
+        grant_id: "grant_own",
+        access_token: "x".repeat(48),
+      }),
+    );
+    const resource: any = {
+      id: "session_own",
+      state: "unknown",
+      remote: {
+        hub_url: "http://hub.test",
+        access_file: access,
+        node_id: "node_own",
+        grant_id: "grant_own",
+        resource_id: "chromium",
+        session_id: "session_own",
+      },
+    };
+    t.run.instances[0].resources.browser_context = resource;
+    t.run.instances[0].status = "ERROR";
+    const original = JSON.stringify(t.run);
+    writeFileSync(join(t.root, "run-old/results.json"), original);
+    const definitions = new Map<string, any>();
+    (t.agent.ctx.tools as any).register = (d: any) => {
+      definitions.set(d.name, d);
+      return () => definitions.delete(d.name);
+    };
+    const wire = vi.fn(async () => ({
+      content: [{ type: "text", text: "released" }],
+      structuredContent: {
+        session: { ...resource.remote, state: terminal, cleanup: "COMPLETE" },
+      },
+    }));
+    const spy = vi
+      .spyOn(RunBridge.prototype, "connect")
+      .mockImplementation(async function (this: RunBridge) {
+        const internal = this as any;
+        internal.connected = true;
+        internal.client.callTool = wire;
+        internal.definitions = [
+          {
+            name: "browser_stop",
+            inputSchema: {
+              type: "object",
+              properties: { session_id: { type: "string" } },
+              required: ["session_id"],
+            },
+          },
+        ];
+      });
+    t.close.mockImplementation(async (exec: any) => ({
+      isError: false,
+      value: await definitions.get(exec.name).execute(exec.arguments, exec),
+      content: [],
+    }));
+    try {
+      expect(await t.recover()).toContain("已释放");
+      expect(wire.mock.calls[0]?.[0]).toMatchObject({
+        name: "browser_stop",
+        arguments: { session_id: "session_own" },
+      });
+      expect(definitions.size).toBe(0);
+      expect(readFileSync(join(t.root, "run-old/results.json"), "utf8")).toBe(
+        original,
+      );
+      expect(t.manager.status().quarantine).toBeNull();
+    } finally {
+      spy.mockRestore();
+    }
+  },
+);
+
+it("私有文件换成另一许可时远程恢复拒绝接管，隔离保留", async () => {
+  const t = setup();
+  const access = join(t.root, "changed-access.json");
+  writeFileSync(
+    access,
+    JSON.stringify({
+      hub_url: "http://hub.test",
+      node_id: "node_own",
+      grant_id: "grant_new",
+      access_token: "x".repeat(48),
+    }),
+  );
+  t.run.instances[0].resources.browser_context = {
+    id: "session_own",
+    state: "unknown",
+    remote: {
+      hub_url: "http://hub.test",
+      access_file: access,
+      node_id: "node_own",
+      grant_id: "grant_original",
+      resource_id: "chromium",
+      session_id: "session_own",
+    },
+  };
+  writeFileSync(join(t.root, "run-old/results.json"), JSON.stringify(t.run));
+  await expect(t.recover()).rejects.toThrow("原许可");
+  expect(t.close).not.toHaveBeenCalled();
+  expect(t.manager.status().quarantine).not.toBeNull();
+});

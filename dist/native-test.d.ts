@@ -6,6 +6,7 @@ import type { ToolExecutionResult, ToolRunContext } from "@deepseek-ai/dsh-tools
 import { type Phase, type Step, type SuiteRun } from "./contracts.js";
 import { Recorder } from "./recorder.js";
 import { RecoveryManager } from "./recovery.js";
+import { RunBridge } from "./runbridge.js";
 import { ReportAccess } from "./report-access.js";
 import { PreviewManager } from "./preview.js";
 import { type ProgressSnapshot } from "./progress-model.js";
@@ -46,6 +47,7 @@ export declare class NativeTest {
     readonly recorder: Recorder;
     readonly run: SuiteRun;
     readonly agent: Agent;
+    readonly browser?: RunBridge;
     closed: boolean;
     private planned;
     private reportReady;
@@ -75,6 +77,11 @@ export declare class NativeTest {
     private previousPlanMode?;
     private announcement?;
     constructor(owner: NativeTests, agent: Agent, task: string, review?: boolean, input?: TextInput | undefined);
+    prepareRuntime(): Promise<void>;
+    private get browserPrefix();
+    private get closeTool();
+    private guidance;
+    private initialStep;
     get id(): string;
     enterPlanMode(): Promise<void>;
     private setPlanMode;
@@ -113,6 +120,10 @@ export declare class NativeTest {
         review_markdown?: string | undefined;
         phase: string;
         planning_input?: TextInput | undefined;
+        remote_browser?: {
+            [k: string]: string | number;
+        } | undefined;
+        browser_backend?: string | undefined;
         run_id: string;
         session_id: string;
     };

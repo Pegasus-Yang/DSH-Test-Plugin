@@ -8,6 +8,7 @@ export interface PreviewPreferences {
 }
 export declare const previewPreferenceDefaults: PreviewPreferences;
 export interface PreviewSettingsInfo {
+    browserConnection?: import("./browser-preferences.js").BrowserPreferences;
     namespace: string;
     mcpInstances: {
         id: string;

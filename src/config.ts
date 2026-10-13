@@ -6,6 +6,10 @@ import {
   previewPreferenceDefaults,
   type PreviewPreferences,
 } from "./preview-preferences.js";
+import {
+  browserPreferenceDefaults,
+  type BrowserPreferences,
+} from "./browser-preferences.js";
 export interface PreviewConfig {
   workDir: string;
   browscreenUrl: string;
@@ -21,6 +25,7 @@ export interface TestConfig {
   cancelGraceMs: number;
   maxRevisions: number;
   preview?: PreviewConfig;
+  browser?: BrowserPreferences;
 }
 export const defaults: TestConfig = {
   workspace: process.cwd(),
@@ -33,7 +38,23 @@ export const defaults: TestConfig = {
 
 export interface PluginConfig extends Partial<TestConfig> {
   browserPreview?: Volatile<PreviewPreferences | undefined>;
+  browserConnection?: Volatile<BrowserPreferences | undefined>;
 }
+const BrowserSchema = z.object({
+  backend: z
+    .union([z.const("playwright"), z.const("runbridge")])
+    .default("playwright"),
+  accessFile: z.string().default(""),
+  resourceId: z.string().default(browserPreferenceDefaults.resourceId),
+  leaseSeconds: z
+    .number()
+    .step(1)
+    .min(1)
+    .max(3600)
+    .default(browserPreferenceDefaults.leaseSeconds),
+  previewEnabled: z.boolean().default(true),
+});
+delete BrowserSchema.meta.default;
 const PreviewSchema = z.object({
   workDir: z.string().required(),
   browscreenUrl: z.string().required(),
@@ -69,8 +90,13 @@ export const Config = z.object({
   cancelGraceMs: z.number().default(defaults.cancelGraceMs),
   maxRevisions: z.number().default(defaults.maxRevisions),
   preview: PreviewSchema,
+  browser: BrowserSchema,
+  browserConnection: BrowserSchema.volatile(),
   browserPreview: PreferencesSchema.volatile(),
 }) as z<
-  Partial<TestConfig> & { browserPreview?: PreviewPreferences },
+  Partial<TestConfig> & {
+    browserPreview?: PreviewPreferences;
+    browserConnection?: BrowserPreferences;
+  },
   PluginConfig
 >;

@@ -39,7 +39,7 @@ export interface DataRow {
   expected: Record<string, Json>;
 }
 export interface Capture {
-  kind: "dom" | "http" | "browser_close";
+  kind: "dom" | "http" | "browser_close" | "browser_open";
   selector?: string;
   mode?:
     | "text"
@@ -217,16 +217,29 @@ export interface CaseRun {
   revision_history?: PlanRevision[];
   effective_required_assertion_ids: string[];
   effective_steps: Step[];
-  resources: Record<
-    string,
-    { id: string; state: "exists" | "absent" | "unknown" }
-  >;
+  resources: Record<string, BrowserResource>;
   cancelled: boolean;
   blocked: boolean;
   integrity_error: boolean;
   incomplete: boolean;
   unsettled_call_ids: string[];
   resource_quarantined: boolean;
+}
+export interface BrowserResource {
+  id: string;
+  state: "exists" | "absent" | "unknown";
+  remote?: {
+    hub_url: string;
+    access_file?: string;
+    node_id: string;
+    grant_id: string;
+    resource_id: string;
+    request_id?: string;
+    session_id?: string;
+    page_id?: string;
+    connection_generation?: number;
+    expires_at?: string;
+  };
 }
 export interface BrowserRecording {
   recording_id: string;
@@ -316,7 +329,7 @@ const stepSchema = {
             required: ["kind"],
             additionalProperties: false,
             properties: {
-              kind: { enum: ["dom", "http", "browser_close"] },
+              kind: { enum: ["dom", "http", "browser_close", "browser_open"] },
               selector: { type: "string" },
               mode: {
                 enum: [
@@ -456,6 +469,11 @@ export function validateCaptures(
       throw new Error("采集输出未声明: " + name);
     if (cap.kind === "dom" && action.capability !== "browser")
       throw new Error("DOM采集需要浏览器步骤");
+    if (
+      cap.kind === "browser_open" &&
+      (action.capability !== "browser" || action.capture_mode === "runtime")
+    )
+      throw new Error("浏览器启动只能由冻结的浏览器初始化步骤控制");
     if (cap.kind === "http" && action.capability !== "api")
       throw new Error("HTTP采集需要API步骤");
     if (cap.kind === "browser_close" && action.capture_mode === "runtime")

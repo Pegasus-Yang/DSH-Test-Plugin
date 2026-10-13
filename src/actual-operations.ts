@@ -11,6 +11,23 @@ import type {
 
 export const operationSchemaVersion = "1";
 const prefix = "mcp__playwright__";
+export const runbridgeOperationNames = [
+  "browser_navigate",
+  "browser_navigate_back",
+  "browser_click",
+  "browser_fill",
+  "browser_press_key",
+  "browser_select_option",
+  "browser_check",
+  "browser_hover",
+  "browser_drag",
+  "browser_scroll",
+  "browser_resize",
+  "browser_wait_for",
+  "browser_tabs",
+  "browser_handle_dialog",
+  "browser_file_upload",
+].map((name) => "mcp__runbridge__" + name);
 const interactions = new Set([
   "browser_navigate",
   "browser_navigate_back",
@@ -35,6 +52,11 @@ export const operationToolNames = [...interactions, "browser_tabs"].map(
 );
 
 export function operationTool(name: string, args: unknown = {}): boolean {
+  if (runbridgeOperationNames.includes(name))
+    return (
+      !name.endsWith("browser_tabs") ||
+      ((args as { action?: string })?.action ?? "list") !== "list"
+    );
   if (!name.startsWith(prefix)) return false;
   const tool = name.slice(prefix.length);
   if (tool === "browser_tabs")

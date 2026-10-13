@@ -53,13 +53,13 @@ Follow DSH's own instructions to install the host. See [plugin and browser confi
 Enter this repository address in DSH's plugin manager, then enable the plugin:
 
 ```text
-https://github.com/Pegasus-Yang/DSH-Test-Plugin.git#v0.11.2
+https://github.com/Pegasus-Yang/DSH-Test-Plugin.git#v0.12.0
 ```
 
 Alternatively, install with the standalone DSH CLI:
 
 ```sh
-dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.11.2
+dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.12.0
 dsh web
 ```
 
@@ -144,3 +144,5 @@ See [installation and deployment](doc/deployment/安装与运维.en.md) for loca
 ## License
 
 [MIT](LICENSE). Third-party dependency and icon licenses are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+Remote or VM browsers can use RunBridge Hub/Node 0.5.0 with this plugin. See the [remote browser and live preview guide](doc/user-guide/RunBridge远程浏览器与持续预览.md) (Chinese). Live PNG preview and report screenshots are supported; remote video recording is not available.

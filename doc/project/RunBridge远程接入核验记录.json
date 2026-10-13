@@ -1,0 +1,321 @@
+{
+  "verified_at": "2026-10-13T18:28:35.457121+00:00",
+  "versions": {
+    "plugin": "0.12.0",
+    "hub": "0.5.0",
+    "node": "0.5.0",
+    "dsh": "0.2.1-alpha.1",
+    "mcp_client": "2.0.0",
+    "python_mcp": "2.3.0",
+    "playwright": "1.63.0",
+    "vm_browser": "Google Chrome for Testing 153.0.8010.12"
+  },
+  "source": {
+    "plugin": {
+      "pre_delivery_commit": "c089cc6f55b76a04ae38a76607b2cec47d3bfd3e",
+      "delivery_commit_reference": "v0.12.0",
+      "source_sha256": {
+        "src/actual-operations.ts": "d20bfe4a704862eb9446a5bc6d65c9f186a3f848abf3a6bf957144e2451b38b6",
+        "src/adapters.ts": "61301a5019c3fbff99bdd94298925c1b3bd16b66ea6a4d7f7e8c1f69c6398769",
+        "src/assertions.ts": "54ac95336d7961b547d5c8a8fb8485f46aaea485c5c70c50205fb2690a10d145",
+        "src/browscreen-command.ts": "c730402cb87e1b901308465bc6afafa1557c60e8ea0531dae29c096ae957d8f6",
+        "src/browser-preferences.ts": "7341f963c70634a9dba27081fab100e810a88d67945d6facdb20cc6012bca836",
+        "src/case-input.ts": "b3e31b1f43721d0fe752b12d5dde81155edc18996857a6eba45c065a3bf22f09",
+        "src/cdp-publisher.ts": "e68cdd840fe3025cdeba972f7e9f29568833ab4706d14720eca2aa65d80e1f9c",
+        "src/client/components.tsx": "8a28db12e6d15415f2ee6fe5a7db2600b47f2ca0a0c513bc0e03249ed04b8fad",
+        "src/client/index.ts": "c6005a5a7665e6b1887563c1d79d47e01c0269944e20202a3b78a91be6ed3287",
+        "src/client/preview-settings.tsx": "3ef0a810354c8b11d0768bf89f566365a6f5f3f99bef50b089642287a16f9570",
+        "src/client/progress-dock.tsx": "d2d6e0603711a45cca76e8e734b4ea776426c62e1e3f52e0c9e90446d29525d7",
+        "src/client/progress-view.ts": "f840769b6c0f4e47ae3f929707d03dd84f725159585e691293860d34182f6b76",
+        "src/client/recovery-panel.tsx": "bd8ba31d267417719e81fda099e5be0e906b32fac93d7c2f7409adb50fb30160",
+        "src/client/report-controls.tsx": "910f92f7d3933ea1c0f3c69fd84d2cd023c2d0ee3f8a0d8507fe9ae9158cef4f",
+        "src/client/style.ts": "1243b8a97ddf1fc7fee361c9dc7790060c40a159a3828315f0610045a946ece7",
+        "src/config.ts": "570a9c51cdc0dee92a331c6994ff4a371a6ed0bcc1b5c20e987eb3707d84bf62",
+        "src/contracts.ts": "42ef6c5644f33d38a50c94b0918a84ae2843fa18ff7a2d346966490bdc8bafa3",
+        "src/index.ts": "1068758d2888514e0c2e253675aecc52a3d9e58ffe737db09478baf66f77d2a9",
+        "src/language.ts": "9be488eeb9d92f75a532d2a0b1fb4ee90b8d47afb9afd1041caee6a97a46716c",
+        "src/ledger-rebuild.ts": "15bbb95a3a1c94a3c04239f7a9854f3c3fc0a763219f9ac65d23bd78a8c1c527",
+        "src/manual-case.ts": "8e45ba85ea431c59b5e4a45d98d2628f2cd11d1a8e3d21bf9826a89fabb2fe20",
+        "src/manual-source.ts": "0af3c763429a190047f3895b37a56a252ff43b53e0a8c7c2ad3bd14550654409",
+        "src/mp4.ts": "ddad8ea32644017967609926a9672fe6602236f33d23ee57095379a83791f3ea",
+        "src/native-test.ts": "e2ae30dc83887eadc03dc6bc1507239f26096c1a1346b3a275f6f993072ca3d7",
+        "src/preview-page.ts": "d0c97dcc148378b0dd8198ff95e76b12716ed804dc32602a6fd08052b61d8681",
+        "src/preview-preferences.ts": "cc2429c7efa238c689864a236d34db5ba9dd058cfb99daf0a4beedf93048750d",
+        "src/preview-settings-access.ts": "ad67296c0105b14025acb702102dcbf6a1f754712be1f3d55e5c7321b970b1d1",
+        "src/preview-setup.ts": "b66cf76ff249f564fd6de82b186c8431fde6901df132afbdac094a4823059364",
+        "src/preview.ts": "702c65e1e5a6aab3f2a893e0990c2817d00b70ea40c1bbc1572689f077bbb4ac",
+        "src/progress-access.ts": "47879023d91e09acbffd7768be02ad5b5b323329e7d0ce897126b93f56db8f22",
+        "src/progress-model.ts": "3b2cf1e1d5007f428b755a5cf76505cbf6683672d36eb9f13115da6244b21c19",
+        "src/recorder.ts": "a6ea802303b306bd337be9bb0697dcc5349a773b8e1c3cf7c2033bcec6ae94e3",
+        "src/recording.ts": "9e60bbae35b7c5fe378adf0da5b787beb5cf74647916dd828ef683e6219918c5",
+        "src/recovery.ts": "3e59b81b1386427b326042a98d4a44353ef71edb516e2990849925c2d3d272a2",
+        "src/report-access.ts": "b343996b44ef5fe3667c76d3749b5de5c597adfd8f78d21226b07ae9e5479204",
+        "src/report-client.ts": "94956df048be17097b57175e0d49ff271d9321a5abe1fb0beb6f53e476524b93",
+        "src/report-data.ts": "7fda544cb8b556d5b5584cee8b2473e7f7392eb659de833eecd8a2cefac93675",
+        "src/report-icons.ts": "4d135bae9656e2aee3d8c8e5e235e10122d05273cd57aa33c7ec9a6b208ede2a",
+        "src/report-media.ts": "d753d4c018ab4f625f4c198a0cb3a026297ee3800af5976addcb696260d4f904",
+        "src/report-style.ts": "59631fc18ff544e9549a94830a2f13976c4fc4c5e17e744e3a842e699f2e6560",
+        "src/report.ts": "3633d401d4509ea984253440885ebac0c7815246727f2f74272539d35cc01fef",
+        "src/revisions.ts": "9631f64beef03ba456ded9045f23e71bc792198245c40d1e8e0a2310fefa0c04",
+        "src/runbridge-preview.ts": "7617195b307b6fd502df601691ebd56444e3782b3427912788c8eda9ca8cc92c",
+        "src/runbridge.ts": "cee3f642353576a4711d6c685eaefebb9bf76880e7edd5077a019e8c152394eb",
+        "src/test-ui-access.ts": "61fb4713e6a8fa9593867ae99c77dde2fcecbcc9d6a97c49ec8617d1c0e490e3",
+        "src/text-plan.ts": "2447d4bf0dcb5c397ae50c3a4d470d1afb19362f34304446ce968ae721cfe1c2"
+      }
+    },
+    "hub": {
+      "pre_delivery_commit": "34b12f128af9fc4447d36f1994e124e393ce1c47",
+      "delivery_commit_reference": "v0.5.0",
+      "source_sha256": {
+        "src/runbridge_hub/__init__.py": "cb512a7c4661a01a2e600b81b6f15435299a616199d0bbff5222bf66cbed6245",
+        "src/runbridge_hub/api.py": "9206f4553f9eadfb79a1bc61736fcc2890bb9bc6280797e73220c89ebd8d1be6",
+        "src/runbridge_hub/app.py": "6f5d97a97ec51326fb82eeada5c0d78715a2e9312469d0d2fd8f85023edda4b4",
+        "src/runbridge_hub/browser.py": "e8d3c17965846889dc4de1f8172a99c0ebbdd5281a266013695656c02339da01",
+        "src/runbridge_hub/browser_tools.py": "7e78feaa1499ed9a8bf5a80552e1eded85809c0ae3db87fff3e9f2dfbf02bda0",
+        "src/runbridge_hub/cli.py": "d9d72985130a29d4521f781c7bf712f558ece8d61d2c6ba4a86b5b7a2cacca0a",
+        "src/runbridge_hub/gateway.py": "211c5d37f99b81f82df27d30c3a94c86f0f2f2f6c01a67d207c741f26c857d2f",
+        "src/runbridge_hub/managed_visual.py": "58ead72710327be60df55427b5dc74ac1d90d0a4def4b4b23b5c130cf628905c",
+        "src/runbridge_hub/mcp_server.py": "1f8764f73e422a764d5dd6f3ba41e06e94e8d6492ac02a1c0251689057509892",
+        "src/runbridge_hub/native.py": "01b941ce15d16f680eaa4450a0f65e178bd43034a3f5c0aefba65433960c9efd",
+        "src/runbridge_hub/protocol.py": "cace64f0c8b862a770339d665eed7cc5a463b933960bd3ae16e12a739337dea7",
+        "src/runbridge_hub/security.py": "578d0e61a2c4fc75e6bfad39bffb9ac1b6440db0d13946e23f340176d1629f85",
+        "src/runbridge_hub/service.py": "316eb936cf9b688f44a854b3591b2b91e77095f03905a9add74086cab7d92955",
+        "src/runbridge_hub/sessions.py": "bf94946541a1fe30b38543f3c7c1b06d82d7534bcd36ed22448f10456e2b0d2e",
+        "src/runbridge_hub/settings.py": "97e83d95bb6cd1cab9e83164a5caff4f4e916226172ebaf9c188aa06c6c7b907",
+        "src/runbridge_hub/store.py": "b3ca82ec57d4bb8ccecff068f3124a7cd8ad221e6fac8cd4297334418383c154",
+        "src/runbridge_hub/visual.py": "273ba4c2bcb089d7ddc8a67e71f57a6e9813bb487c7696e15e74be5439ec54f6",
+        "src/runbridge_hub/visual_api.py": "5d6205bba7f37d24b0372e1687a16eeca9837ffc6448913af3f59f916e894477",
+        "src/runbridge_hub/visual_protocol.py": "f5e27f7efc906becf6e996ddd569cdd93a06bd43d7263dcb84f3882eac893be7",
+        "src/runbridge_hub/visual_wire.py": "6911d3927cc4380f7aab952e49d7bda4d20b6e3b39623bf28387f85ef5f6acbb"
+      }
+    },
+    "node": {
+      "pre_delivery_commit": "13d5ea8452c58c923fad56df4504aca64c5c4e0c",
+      "delivery_commit_reference": "v0.5.0",
+      "source_sha256": {
+        "src/runbridge_node/__init__.py": "fcdf7e9b35f1e00b952a8747a0ce272f5f6482e726f056f61df07d2f5e5fe65f",
+        "src/runbridge_node/capabilities.py": "43760008af1e4f66674f2f18c31e826abc97afcb4376eb73eea8619902bdc71d",
+        "src/runbridge_node/chrome.py": "51952d0e6a57eaa20bc946ea2c986c22d189817141ba332ca6a2e5b3feec2129",
+        "src/runbridge_node/cli.py": "8694e359c204de379d99c521e2b42f78e3b27c2b4812976c218e8135d2ba75eb",
+        "src/runbridge_node/client.py": "3c1fa8a9679fc8939cdcd9de6faae3598e3121c1befafa46a78fd5608f2712c6",
+        "src/runbridge_node/config.py": "1eb60378851bd2a6a4eddacf3014be0429ccc1e3c950185fb611172cab5cc21e",
+        "src/runbridge_node/executor.py": "0f637e55d0a867227c8c1dad14b56872196bcd51c47a87ec33c207877a0c21a4",
+        "src/runbridge_node/playwright_runtime/server.mjs": "e81ae32456208eb8e6e4dcf7d8d960399bda5555ce111b06c42da00dc1ab61c6",
+        "src/runbridge_node/protocol.py": "cace64f0c8b862a770339d665eed7cc5a463b933960bd3ae16e12a739337dea7",
+        "src/runbridge_node/runtime.py": "98e73c6ed0dc6817ff437e6fdd556f58a0b9aacd4bccca1197b7c482af0552cb",
+        "src/runbridge_node/visual.py": "038c4bf0be18699be5323766de6a186fd585cfcaeeaa55e6ac075e1cbf8600ff",
+        "src/runbridge_node/visual_capture.py": "6fd8f4af34970d41a648f9c4040a7adb6e8f0ae33ebe6fed480bf800f437747b",
+        "src/runbridge_node/visual_protocol.py": "50cf434ba6a6bb576b393bfaf044d640bffa9dfa471e9b2cdeee0882157d4964",
+        "src/runbridge_node/visual_wire.py": "f612af0107e6e1c14badd5a2d2ed515a5c290fb2a247931fd72fb290b95854c7",
+        "src/runbridge_node/visual_worker.py": "75ab35e54bf71fc66d2721eff04b7a51ae067dbe7d9c0a5c24f16c4c08b1dac4"
+      }
+    }
+  },
+  "automated_checks": {
+    "plugin_passed": 330,
+    "hub_passed": 76,
+    "hub_skipped": 6,
+    "node_passed": 31,
+    "node_skipped": 19,
+    "native_mac_browser_tests_enabled": false
+  },
+  "mcp_smoke": {
+    "checked_at": "2026-10-13T17:55:09.182Z",
+    "server": {
+      "name": "RunBridge Browser",
+      "version": "0.5.0"
+    },
+    "tool_count": 26,
+    "node_id": "node_5470fad29f5f4bbeb4886bb7031ca9cc",
+    "session_id": "session_9f7928208fec41a4af94e708f8473bf1",
+    "page_id": "page_ba1a85ff198648f2a4bd2a39f847fddb",
+    "request_id": "52f29100-3c90-4572-99b7-04de87ec70f4",
+    "dom": {
+      "name": "天马远程MCP校验",
+      "category": "api",
+      "result": "已保存：天马远程MCP校验",
+      "count": 1,
+      "visible": true,
+      "path": "/fixture",
+      "link": "/fixture"
+    },
+    "iframe_value": "iframe 正常",
+    "dialog_value": "弹窗正常",
+    "drag_value": "拖动完成",
+    "frames": 27,
+    "frames_during_wait": 23,
+    "distinct_images_during_wait": 12,
+    "terminal_state": "INTERRUPTED",
+    "cleanup": "COMPLETE"
+  },
+  "page_switch": {
+    "checked_at": "2026-10-13T17:52:06.421Z",
+    "session_id": "session_e840230291824de9bc8acf4fa034304c",
+    "targets_observed": [
+      "page_638e16ccde6d4d66b84cbcf7e079356a",
+      "page_c6609f2c16294fc898c8524b979705fd",
+      "page_36e84466881d4ecdbeb6842b7013b98e"
+    ],
+    "empty_page_count": 0,
+    "created_after_all_closed": true,
+    "frames": 4
+  },
+  "dsh_runs": [
+    {
+      "run_id": "run-2026-10-13T17-27-25-559Z-2518153c",
+      "lifecycle": "FINISHED",
+      "statuses": ["ERROR"],
+      "quarantined_original_record": true,
+      "assertions": {
+        "pass": 5,
+        "fail": 0
+      }
+    },
+    {
+      "run_id": "run-2026-10-13T17-37-52-141Z-e3395b3b",
+      "lifecycle": "FINISHED",
+      "statuses": ["PASS"],
+      "quarantined_original_record": false,
+      "assertions": {
+        "pass": 5,
+        "fail": 0
+      }
+    },
+    {
+      "run_id": "run-2026-10-13T17-45-50-634Z-de22a349",
+      "lifecycle": "FINISHED",
+      "statuses": ["FAIL", "FAIL", "FAIL", "FAIL", "PASS"],
+      "quarantined_original_record": false,
+      "assertions": {
+        "pass": 11,
+        "fail": 4
+      }
+    },
+    {
+      "run_id": "run-2026-10-13T17-55-58-826Z-7ce5df4b",
+      "lifecycle": "FINISHED",
+      "statuses": ["ERROR", "CANCELLED", "CANCELLED", "CANCELLED", "CANCELLED"],
+      "quarantined_original_record": false,
+      "assertions": {
+        "pass": 0,
+        "fail": 0
+      }
+    },
+    {
+      "run_id": "run-2026-10-13T18-01-25-922Z-c6b7456e",
+      "lifecycle": "FINISHED",
+      "statuses": [],
+      "quarantined_original_record": true,
+      "assertions": {
+        "pass": 0,
+        "fail": 0
+      }
+    },
+    {
+      "run_id": "run-2026-10-13T18-19-49-721Z-031f1b27",
+      "lifecycle": "FINISHED",
+      "statuses": ["PASS"],
+      "quarantined_original_record": false,
+      "assertions": {
+        "pass": 7,
+        "fail": 0
+      }
+    }
+  ],
+  "installed_verification": {
+    "checked_at": "2026-10-13T18:25:19.870Z",
+    "run_id": "run-2026-10-13T18-19-49-721Z-031f1b27",
+    "independent_project": {
+      "status": 200,
+      "id": 115,
+      "path": "dsh-gitlab-20261013172310-10a5132e-api",
+      "visibility": "public"
+    },
+    "session_id": "session_31759d0161ac48fa9b526044205553ea",
+    "terminal": "INTERRUPTED",
+    "cleanup": "COMPLETE",
+    "lease_seconds": 1200,
+    "assertions": [
+      {
+        "id": "case_1_step_1_check_1",
+        "status": "PASS",
+        "actual": "/users/sign_in",
+        "expected": "/users/sign_in"
+      },
+      {
+        "id": "case_1_step_1_check_2",
+        "status": "PASS",
+        "actual": true,
+        "expected": true
+      },
+      {
+        "id": "case_1_step_1_check_3",
+        "status": "PASS",
+        "actual": true,
+        "expected": true
+      },
+      {
+        "id": "case_1_step_2_check_1",
+        "status": "PASS",
+        "actual": 200,
+        "expected": 200
+      },
+      {
+        "id": "case_1_step_2_check_2",
+        "status": "PASS",
+        "actual": 115,
+        "expected": 115
+      },
+      {
+        "id": "case_1_step_2_check_3",
+        "status": "PASS",
+        "actual": "dsh-gitlab-20261013172310-10a5132e-api",
+        "expected": "dsh-gitlab-20261013172310-10a5132e-api"
+      },
+      {
+        "id": "case_1_step_2_check_4",
+        "status": "PASS",
+        "actual": "public",
+        "expected": "public"
+      }
+    ]
+  },
+  "installed_dist_identical_files": 95,
+  "internal_links_checked": 298,
+  "credentials_included": false,
+  "cleanup": {
+    "primary_grant_active_browser_sessions": 0,
+    "primary_resource": "READY/FREE",
+    "ui_controller_browser": "CLOSED/COMPLETE",
+    "isolated_dsh": "stopped",
+    "original_hub_and_borrowed_browser": "not operated"
+  },
+  "service_packages": [
+    {
+      "filename": "runbridge_hub-0.5.0-py3-none-any.whl",
+      "sha256": "c38511f44d912e4afbfdc7497ea7f1c581fb4376cf83c83b086347d56dfcbe56",
+      "files": 24
+    },
+    {
+      "filename": "runbridge_hub-0.5.0.tar.gz",
+      "sha256": "5e24823f7a7b0ff76b017d152c3c1cb3fce9d4051a09dfb36cb5f8086a1c076c",
+      "files": 118
+    },
+    {
+      "filename": "runbridge_node-0.5.0-py3-none-any.whl",
+      "sha256": "9dec3ce312d2fc3cc5231bd491f541b86ecef9af9a6657062a7957661c878a84",
+      "files": 21
+    },
+    {
+      "filename": "runbridge_node-0.5.0.tar.gz",
+      "sha256": "00fff3bd453e948ec834ac211ef6468c7111f809781edb8d533c4a82ae4bc4e3",
+      "files": 110
+    }
+  ],
+  "delivery_credentials_scan_files": 71,
+  "gitlab_seed_projects_retained": {
+    "api": 115,
+    "ui": 116,
+    "purpose": "保留用于本地审核与重跑，清理沿用归属核验脚本"
+  }
+}

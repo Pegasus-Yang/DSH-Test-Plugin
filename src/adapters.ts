@@ -15,8 +15,14 @@ import {
   type ActualOperation,
 } from "./contracts.js";
 import { Recorder, redact } from "./recorder.js";
+import {
+  RunBridge,
+  runbridgeResult,
+  remoteCleanupComplete,
+} from "./runbridge.js";
 interface CaptureHost {
   id: string;
+  browser?: RunBridge;
   call(
     name: string,
     args: unknown,
@@ -119,8 +125,12 @@ export async function captureStep(
   };
   if (Object.keys(dom).length) {
     const response = await host.call(
-      "mcp__playwright__browser_evaluate",
-      { function: domFunction(dom, origins) },
+      host.browser
+        ? host.browser.prefix + "browser_capture"
+        : "mcp__playwright__browser_evaluate",
+      host.browser
+        ? { captures: dom, allowed_origins: origins }
+        : { function: domFunction(dom, origins) },
       exec,
     );
     if (response.result.isError)
@@ -133,13 +143,21 @@ export async function captureStep(
       "application/json",
     );
     suite.evidence.push(evidence);
-    const data = mcpResult(response.result.value);
+    const data = host.browser
+      ? runbridgeResult(response.result.value)
+      : mcpResult(response.result.value);
+    if (
+      host.browser &&
+      (field(data, "truncated") !== false ||
+        !origins.includes(new URL(String(field(data, "url"))).origin))
+    )
+      throw new Error("远程采集截断或离开本步允许来源");
     for (const name of Object.keys(dom))
       save(
         name,
         field(data, "values." + name),
         response.callId,
-        "playwright-dom-v1",
+        host.browser ? "runbridge-dom-v1" : "playwright-dom-v1",
         evidence.evidence_id,
         "values." + name,
       );
@@ -169,14 +187,22 @@ export async function captureStep(
     );
   }
   for (const [name, cap] of Object.entries(captures).filter(
-    ([, c]) => c.kind === "browser_close",
+    ([, c]) => c.kind === "browser_open",
   )) {
+    if (!host.browser) throw new Error("远程浏览器启动采集需要 RunBridge 后端");
     const response = await host.call(
-      "mcp__playwright__browser_close",
+      host.browser.prefix + "browser_start",
       {},
       exec,
     );
-    if (response.result.isError) throw new Error("浏览器释放失败");
+    if (response.result.isError)
+      throw new Error("远程浏览器启动失败，需核对资源状态");
+    const data = runbridgeResult(response.result.value);
+    if (
+      data.session?.state !== "ACTIVE" ||
+      host.browser.resource?.remote?.session_id !== data.session.session_id
+    )
+      throw new Error("没有取得本次活动浏览器的证据");
     const evidence = recorder.evidence(
       randomUUID() + ".json",
       JSON.stringify(redact(response.result), null, 2),
@@ -187,15 +213,53 @@ export async function captureStep(
       name,
       true,
       response.callId,
-      "playwright-close-v1",
+      "runbridge-open-v1",
       evidence.evidence_id,
-      "isError=false",
+      "session.state=ACTIVE",
+    );
+  }
+  for (const [name, cap] of Object.entries(captures).filter(
+    ([, c]) => c.kind === "browser_close",
+  )) {
+    const response = await host.call(
+      host.browser
+        ? host.browser.prefix + "browser_stop"
+        : "mcp__playwright__browser_close",
+      {},
+      exec,
+    );
+    if (response.result.isError) throw new Error("浏览器释放失败");
+    if (host.browser) {
+      const data = runbridgeResult(response.result.value);
+      if (
+        !remoteCleanupComplete(data.session) ||
+        host.browser.resource?.remote?.session_id !== data.session.session_id
+      )
+        throw new Error("远程浏览器清理尚未确认，隔离仍保留");
+    }
+    const evidence = recorder.evidence(
+      randomUUID() + ".json",
+      JSON.stringify(redact(response.result), null, 2),
+      "application/json",
+    );
+    suite.evidence.push(evidence);
+    save(
+      name,
+      true,
+      response.callId,
+      host.browser ? "runbridge-close-v1" : "playwright-close-v1",
+      evidence.evidence_id,
+      host.browser
+        ? "session.state=terminal,cleanup=COMPLETE"
+        : "isError=false",
     );
   }
   if (step.action!.capability === "browser" && Object.keys(dom).length) {
     const shot = await host.call(
-      "mcp__playwright__browser_take_screenshot",
-      { type: "png", fullPage: true },
+      host.browser
+        ? host.browser.prefix + "browser_screenshot"
+        : "mcp__playwright__browser_take_screenshot",
+      host.browser ? { full_page: true } : { type: "png", fullPage: true },
       exec,
     );
     if (!shot.result.isError) {
@@ -205,7 +269,10 @@ export async function captureStep(
           ? (field(shot.result.value, "content") as unknown[])
           : []),
       ];
-      const img = blocks.find((b) => field(b, "type") === "image");
+      const img = blocks.find(
+        (b) =>
+          field(b, "type") === "image" && typeof field(b, "data") === "string",
+      );
       if (img && typeof field(img, "data") === "string") {
         const evidence = recorder.evidence(
           randomUUID() + ".png",

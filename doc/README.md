@@ -10,6 +10,9 @@ The English guides describe the current implementation. Historical design and ac
 
 ## 当前版本
 
+- [RunBridge 远程浏览器与持续预览](user-guide/RunBridge远程浏览器与持续预览.md)：连接设置、虚拟机网络、用例执行、画面与恢复。
+- [远程执行与画面架构](architecture/RunBridge远程执行与画面.md) · [接入验收](project/RunBridge远程浏览器接入验收.md)。
+
 - [CSV 参数文件使用手册](user-guide/CSV参数文件使用手册.md)：完整 GitLab 入门示例、模板占位符、引号和空值、多用例展开、工作区路径、审核运行与错误速查。
 - [GitLab 测试要求与本地调试](user-guide/GitLab测试要求与本地调试.md)：被测系统条件、账号权限、私有配置、Markdown/CSV、画面与录像、报告、本地改包调试和本轮项目清理；GitLab 部署引导官方文档。
 - [GitLab 测试指导文档验证](project/GitLab测试指导文档验证.md)：前轮样例解析、27 项回归、真实登录页执行/审核/预览/录像截图、隐私与收尾，以及文档职责调整后的检查。

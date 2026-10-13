@@ -14,8 +14,16 @@ import {
 } from "../preview-preferences.js";
 import { RecoveryPanel, type RecoveryActions } from "./recovery-panel.js";
 import { ReportSettings, type ReportActions } from "./report-controls.js";
+import {
+  browserPreferenceDefaults,
+  type BrowserPreferences,
+} from "../browser-preferences.js";
 
-type Fields = { browserPreview?: PreviewPreferences };
+type Fields = {
+  browserPreview?: PreviewPreferences;
+  browserConnection?: BrowserPreferences;
+  browser?: BrowserPreferences;
+};
 
 export function PreviewSettingsPage({
   forms,
@@ -46,6 +54,12 @@ export function PreviewSettingsPage({
       <p>测试提示环境未释放时，请先在这里处理，完成后重新执行测试命令。</p>
       <RecoveryPanel {...recovery} />
       <ReportSettings rebuildReport={rebuildReport} />
+      {info && (
+        <BrowserConnectionForm
+          form={forms.get<Fields>(info.namespace)}
+          effective={info.browserConnection}
+        />
+      )}
       <h2>浏览器预览与录像</h2>
       <p>
         实时查看测试网页，或在报告中回看操作录像。接口测试或没有浏览器画面时，不会打开浮窗。
@@ -57,6 +71,156 @@ export function PreviewSettingsPage({
         !error && <p>正在读取设置…</p>
       )}
     </section>
+  );
+}
+
+function BrowserConnectionForm({
+  form,
+  effective,
+}: {
+  form: ConfigForm<Fields>;
+  effective?: BrowserPreferences;
+}) {
+  const state = useSyncExternalStore(
+    form.subscribe.bind(form),
+    form.getSnapshot.bind(form),
+  );
+  const [draft, setDraft] = useState(browserPreferenceDefaults);
+  const [dirty, setDirty] = useState(false);
+  const [revision, setRevision] = useState<number>();
+  const [message, setMessage] = useState("");
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    if (!dirty && state.status === "ready")
+      setDraft({
+        ...browserPreferenceDefaults,
+        ...(state.value?.browserConnection ??
+          state.value?.browser ??
+          effective),
+      });
+  }, [state.value, state.status, dirty, effective]);
+  const edit = (value: Partial<BrowserPreferences>) => {
+    if (!dirty) setRevision(state.revision);
+    setDraft((current) => ({ ...current, ...value }));
+    setDirty(true);
+    setMessage("");
+  };
+  return (
+    <form
+      data-test-browser-connection
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (
+          draft.backend === "runbridge" &&
+          (!draft.accessFile.trim() ||
+            !Number.isInteger(draft.leaseSeconds) ||
+            draft.leaseSeconds < 1 ||
+            draft.leaseSeconds > 3600)
+        ) {
+          setMessage(
+            "请填写宿主私有访问文件路径，租期须为 1 到 3600 秒的整数。",
+          );
+          return;
+        }
+        setSaving(true);
+        void form
+          .mutate(
+            [
+              {
+                op: "set",
+                path: ["browserConnection"],
+                value: {
+                  ...draft,
+                  accessFile: draft.accessFile.trim(),
+                  resourceId: draft.resourceId.trim(),
+                },
+              },
+            ],
+            revision,
+          )
+          .then((accepted) => {
+            if (accepted) {
+              setDirty(false);
+              setMessage(
+                "已保存，下一次测试使用此连接；执行中的测试保持原连接。",
+              );
+            } else setMessage("设置已变化或由启动配置固定，请重新读取后保存。");
+          })
+          .catch(() =>
+            setMessage("连接设置保存失败，请确认已登录且配置可编辑。"),
+          )
+          .finally(() => setSaving(false));
+      }}
+    >
+      <h2>浏览器执行</h2>
+      <fieldset disabled={saving || !state.writable}>
+        <label htmlFor="dsh-test-browser-backend">浏览器位置</label>
+        <select
+          id="dsh-test-browser-backend"
+          value={draft.backend}
+          onChange={(event) =>
+            edit({
+              backend: event.target.value as BrowserPreferences["backend"],
+            })
+          }
+        >
+          <option value="playwright">本机 Playwright MCP</option>
+          <option value="runbridge">远程 RunBridge MCP</option>
+        </select>
+        {draft.backend === "runbridge" && (
+          <>
+            <label htmlFor="dsh-test-runbridge-access">
+              DSH 宿主上的私有访问文件
+            </label>
+            <input
+              id="dsh-test-runbridge-access"
+              value={draft.accessFile}
+              placeholder="访问文件完整路径，不填写令牌"
+              onChange={(event) => edit({ accessFile: event.target.value })}
+            />
+            <p className="dsh-test-setting-hint">
+              文件由 Node 所有者签发，包含 Hub、节点、grant
+              和访问令牌；令牌只在宿主读取。业务网页由远程浏览器访问。
+            </p>
+            <label htmlFor="dsh-test-runbridge-resource">
+              受管理浏览器资源
+            </label>
+            <input
+              id="dsh-test-runbridge-resource"
+              value={draft.resourceId}
+              onChange={(event) => edit({ resourceId: event.target.value })}
+            />
+            <label htmlFor="dsh-test-runbridge-lease">
+              每条用例的会话租期 秒
+            </label>
+            <input
+              id="dsh-test-runbridge-lease"
+              type="number"
+              min={1}
+              max={3600}
+              value={draft.leaseSeconds}
+              onChange={(event) =>
+                edit({ leaseSeconds: Number(event.target.value) })
+              }
+            />
+            <label className="dsh-test-setting-switch">
+              <input
+                type="checkbox"
+                checked={draft.previewEnabled}
+                onChange={(event) =>
+                  edit({ previewEnabled: event.target.checked })
+                }
+              />
+              显示远程浏览器持续画面
+            </label>
+          </>
+        )}
+        <button type="submit" disabled={!dirty}>
+          {saving ? "正在保存…" : "保存浏览器连接"}
+        </button>
+      </fieldset>
+      {message && <p role="status">{message}</p>}
+    </form>
   );
 }
 
@@ -201,6 +365,19 @@ function PreferencesForm({
     }
   };
   if (state.status === "loading") return <p>正在读取保存的配置…</p>;
+  if (
+    (
+      state.value?.browserConnection ??
+      state.value?.browser ??
+      info.browserConnection
+    )?.backend === "runbridge"
+  )
+    return (
+      <p className="dsh-test-setting-hint">
+        远程画面由 RunBridge 会话提供，无需安装本机
+        Browscreen。远程操作录像尚未提供。
+      </p>
+    );
   if (!state.writable || state.status === "unavailable")
     return (
       <p role="alert">

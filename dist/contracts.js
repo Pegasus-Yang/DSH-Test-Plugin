@@ -49,7 +49,7 @@ const stepSchema = {
                         required: ["kind"],
                         additionalProperties: false,
                         properties: {
-                            kind: { enum: ["dom", "http", "browser_close"] },
+                            kind: { enum: ["dom", "http", "browser_close", "browser_open"] },
                             selector: { type: "string" },
                             mode: {
                                 enum: [
@@ -185,6 +185,9 @@ export function validateCaptures(action, captures) {
             throw new Error("采集输出未声明: " + name);
         if (cap.kind === "dom" && action.capability !== "browser")
             throw new Error("DOM采集需要浏览器步骤");
+        if (cap.kind === "browser_open" &&
+            (action.capability !== "browser" || action.capture_mode === "runtime"))
+            throw new Error("浏览器启动只能由冻结的浏览器初始化步骤控制");
         if (cap.kind === "http" && action.capability !== "api")
             throw new Error("HTTP采集需要API步骤");
         if (cap.kind === "browser_close" && action.capture_mode === "runtime")

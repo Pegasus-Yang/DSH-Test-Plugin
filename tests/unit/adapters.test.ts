@@ -70,3 +70,74 @@ it("计划密码在工具text和JSON证据中也脱敏", async () => {
     readFileSync(join(r.directory, e.relative_path), "utf8"),
   ).not.toContain("s3cr3t-value");
 });
+
+it("DSH 投影图片引用不会遮盖规范 MCP 原图，远程证据保存实际 PNG", async () => {
+  const { captureStep } = await import("../../src/adapters.js");
+  const { Recorder } = await import("../../src/recorder.js");
+  const { mkdtempSync, readFileSync, rmSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const root = mkdtempSync(join(tmpdir(), "remote-evidence-"));
+  const recorder = new Recorder(root, "run");
+  const png = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a3ioAAAAASUVORK5CYII=",
+    "base64",
+  );
+  const step: any = {
+    action: {
+      capability: "browser",
+      allowed_targets: ["https://example.test"],
+      outputs: { zero: { type: "number" } },
+      capture: { zero: { kind: "dom", mode: "count", selector: ".missing" } },
+    },
+  };
+  const result: any = { observations: [] };
+  const suite: any = { evidence: [] };
+  try {
+    await captureStep(
+      {
+        id: "origin",
+        browser: { prefix: "mcp__runbridge__" } as any,
+        call: async (name) => ({
+          callId: name,
+          result: {
+            isError: false,
+            content: [{ type: "image", attachment: { id: "ref" } }],
+            value: name.endsWith("browser_capture")
+              ? {
+                  structuredContent: {
+                    values: { zero: 0 },
+                    url: "https://example.test/",
+                    truncated: false,
+                  },
+                }
+              : {
+                  content: [
+                    {
+                      type: "image",
+                      mimeType: "image/png",
+                      data: png.toString("base64"),
+                    },
+                  ],
+                },
+          } as any,
+        }),
+      },
+      recorder,
+      suite,
+      step,
+      result,
+      {} as any,
+      {} as any,
+    );
+    expect(result.observations[0].value).toBe(0);
+    expect(result.observations[0].evidence_refs).toHaveLength(2);
+    const image = suite.evidence.find((e: any) => e.media_type === "image/png");
+    expect(image).toBeDefined();
+    expect(readFileSync(join(recorder.directory, image.relative_path))).toEqual(
+      png,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

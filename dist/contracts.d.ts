@@ -21,7 +21,7 @@ export interface DataRow {
     expected: Record<string, Json>;
 }
 export interface Capture {
-    kind: "dom" | "http" | "browser_close";
+    kind: "dom" | "http" | "browser_close" | "browser_open";
     selector?: string;
     mode?: "text" | "number" | "count" | "visible" | "url" | "attribute" | "value";
     attribute?: string;
@@ -194,16 +194,29 @@ export interface CaseRun {
     revision_history?: PlanRevision[];
     effective_required_assertion_ids: string[];
     effective_steps: Step[];
-    resources: Record<string, {
-        id: string;
-        state: "exists" | "absent" | "unknown";
-    }>;
+    resources: Record<string, BrowserResource>;
     cancelled: boolean;
     blocked: boolean;
     integrity_error: boolean;
     incomplete: boolean;
     unsettled_call_ids: string[];
     resource_quarantined: boolean;
+}
+export interface BrowserResource {
+    id: string;
+    state: "exists" | "absent" | "unknown";
+    remote?: {
+        hub_url: string;
+        access_file?: string;
+        node_id: string;
+        grant_id: string;
+        resource_id: string;
+        request_id?: string;
+        session_id?: string;
+        page_id?: string;
+        connection_generation?: number;
+        expires_at?: string;
+    };
 }
 export interface BrowserRecording {
     recording_id: string;

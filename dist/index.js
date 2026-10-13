@@ -12,9 +12,14 @@ export { Config } from "./config.js";
 export const name = "harness-test";
 export const inject = ["commands", "tools", "systemPrompt"];
 export function apply(ctx, config = {}) {
-    const { browserPreview, ...runtimeConfig } = config;
+    const { browserPreview, browserConnection, ...runtimeConfig } = config;
     const setup = new PreviewSetup(ctx, () => browserPreview?.get(), runtimeConfig);
     const tests = new NativeTests(ctx, runtimeConfig, async () => {
+        tests.config.browser = browserConnection?.get() ?? runtimeConfig.browser;
+        if (tests.config.browser?.backend === "runbridge") {
+            await tests.preview.configure(undefined);
+            return;
+        }
         try {
             await tests.preview.configure(await setup.prepare());
         }
@@ -29,7 +34,10 @@ export function apply(ctx, config = {}) {
     const progress = new ProgressAccess((sessionId) => tests.presentation(sessionId), tests.preview);
     ctx.provide("nativeTests", tests);
     ctx.inject(["webServer", "connection", "agents"], (web) => {
-        const previewSettings = new PreviewSettingsAccess(() => setup.describe());
+        const previewSettings = new PreviewSettingsAccess(() => ({
+            ...setup.describe(),
+            browserConnection: browserConnection?.get() ?? runtimeConfig.browser,
+        }));
         web.effect(() => () => previewSettings.dispose());
         const interfaceActions = new TestUiAccess(tests, inputPath, async (sessionId, token, signal) => {
             const agent = web.agents.get(sessionId);

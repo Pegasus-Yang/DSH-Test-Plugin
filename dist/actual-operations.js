@@ -1,5 +1,22 @@
 export const operationSchemaVersion = "1";
 const prefix = "mcp__playwright__";
+export const runbridgeOperationNames = [
+    "browser_navigate",
+    "browser_navigate_back",
+    "browser_click",
+    "browser_fill",
+    "browser_press_key",
+    "browser_select_option",
+    "browser_check",
+    "browser_hover",
+    "browser_drag",
+    "browser_scroll",
+    "browser_resize",
+    "browser_wait_for",
+    "browser_tabs",
+    "browser_handle_dialog",
+    "browser_file_upload",
+].map((name) => "mcp__runbridge__" + name);
 const interactions = new Set([
     "browser_navigate",
     "browser_navigate_back",
@@ -21,6 +38,9 @@ const interactions = new Set([
 /** 模型在同一份支持名单中选择完整名称，避免省略MCP前缀反复失败。 */
 export const operationToolNames = [...interactions, "browser_tabs"].map((name) => prefix + name);
 export function operationTool(name, args = {}) {
+    if (runbridgeOperationNames.includes(name))
+        return (!name.endsWith("browser_tabs") ||
+            (args?.action ?? "list") !== "list");
     if (!name.startsWith(prefix))
         return false;
     const tool = name.slice(prefix.length);

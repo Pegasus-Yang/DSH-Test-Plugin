@@ -7,6 +7,7 @@ import { aggregate, ajv, expand, field, parsePlan, actionSchema, assertionSchema
 import { Recorder } from "./recorder.js";
 import { RecoveryManager } from "./recovery.js";
 import { captureStep } from "./adapters.js";
+import { RunBridge } from "./runbridge.js";
 import { evaluate } from "./assertions.js";
 import { writeReport } from "./report.js";
 import { ReportAccess } from "./report-access.js";
@@ -16,7 +17,7 @@ import { defaults } from "./config.js";
 import { parseTextPlan, textPlanSchema, textReview, validateTextExpectation, parseTextExpected, batchTextPlanSchema, parseBatchPlan, announcementParts, } from "./text-plan.js";
 import { testLanguage, languageGuide } from "./language.js";
 import { applyRevision } from "./revisions.js";
-import { compositeOperation, operationTool, operationToolNames, operationSchemaVersion, sealOperations, } from "./actual-operations.js";
+import { compositeOperation, operationTool, operationToolNames, runbridgeOperationNames, operationSchemaVersion, sealOperations, } from "./actual-operations.js";
 import { writeManualCases } from "./manual-case.js";
 import { ManualSource } from "./manual-source.js";
 const empty = {
@@ -65,6 +66,23 @@ function closeStep(id, description) {
             capture: { released: { kind: "browser_close" } },
         },
     };
+}
+/** JSON 字符串避开原生工具对无类型嵌套数组的转换；保留原对象入口。 */
+function nativeOperationArguments(input) {
+    if ((input.arguments !== undefined) === (input.arguments_json !== undefined))
+        throw new Error("请仅提供 arguments 参数对象或 arguments_json 完整 JSON 字符串中的一种");
+    let value = input.arguments;
+    if (input.arguments_json !== undefined) {
+        try {
+            value = JSON.parse(input.arguments_json);
+        }
+        catch {
+            throw new Error("arguments_json 必须是有效 JSON，不执行表达式");
+        }
+    }
+    if (!value || typeof value !== "object" || Array.isArray(value))
+        throw new Error("原工具参数必须是 JSON 对象");
+    return value;
 }
 export class NativeTests {
     ctx;
@@ -135,6 +153,7 @@ export class NativeTests {
             const test = new NativeTest(this, agent, task, review, input);
             this.sessions.set(agent.id, test);
             try {
+                await test.prepareRuntime();
                 if (review)
                     await test.enterPlanMode();
                 test.attach();
@@ -212,6 +231,7 @@ export class NativeTest {
     recorder;
     run;
     agent;
+    browser;
     closed = false;
     planned = false;
     reportReady = false;
@@ -271,7 +291,7 @@ export class NativeTest {
             incomplete: false,
             resource_quarantined: false,
             manifest: {
-                plugin_version: "0.11.2",
+                plugin_version: "0.12.0",
                 plan_review: review,
                 execution: "native-conversation",
                 origin_session_id: agent.id,
@@ -280,6 +300,58 @@ export class NativeTest {
             },
         };
         this.manualSource = new ManualSource(this.recorder.directory, id);
+        if (owner.config.browser?.backend === "runbridge")
+            this.browser = new RunBridge(owner.config.browser, owner.config.workspace, () => {
+                if (this.current && this.browser?.resource) {
+                    this.current.instance.resources.browser_context = structuredClone(this.browser.resource);
+                    this.save();
+                }
+            });
+    }
+    async prepareRuntime() {
+        await this.browser?.connect();
+    }
+    get browserPrefix() {
+        return this.browser?.prefix ?? "mcp__playwright__";
+    }
+    get closeTool() {
+        return this.browser
+            ? this.browser.prefix + "browser_stop"
+            : "mcp__playwright__browser_close";
+    }
+    guidance() {
+        if (!this.browser)
+            return guide;
+        return guide
+            .split("\n")
+            .map((line) => {
+            if (line.startsWith("实际操作说明："))
+                return '实际操作说明：浏览器动作必须调用test_execute_operation，tool_name从Schema中选择完整的mcp__runbridge__名称。导航、填写、点击、按键和等待逐个执行并附面向用户的说明。观察可直接browser_snapshot、browser_inspect_dom、browser_read或browser_tabs(action=list)。会话和页面参数由插件注入，不能传入node_id/session_id/page_id；只有browser_tabs明确选页时提供其返回的page_id。目标使用target.by/value/name；by=role时value只填button、textbox等角色，name填真实可访问名称，不能把snapshot整行作为value。含数组参数通过test_execute_operation的arguments_json传完整JSON字符串，例如{"target":{"by":"css","value":"#type"},"values":["api"]}；不要同时传arguments。iframe用frame_selector；没有Playwright snapshot ref、evaluate或run_code。先观察页面，再选择下一动作。断言实际值仅接受test_capture的固定DOM采集，覆盖text/number/count/visible/url/attribute/value；API仍在DSH宿主采集。接口数组的长度检查必须引用step_id.response.body.length；字段如step_id.response.body.0.iid，标签数量用step_id.response.body.0.labels.length。不要把整个数组与数量比较；只复用已采集响应，不重复请求。初始化与释放只调用test_capture({})。截图与动作成功不能宣布PASS，写操作结果未知不得盲目再次提交。';
+            if (line.startsWith("执行阶段："))
+                return "执行阶段：按test_current完成当前业务目标，使用当前RunBridge原子工具操作虚拟机页面；不能调用本机Playwright或换另一会话。browser_fill替换整个输入，按Enter另用browser_press_key；select_option按value选择；触发弹窗前用browser_handle_dialog设置一次性策略。当前步骤的允许目标与冻结预期不可改变。浏览器由Node新建，网络回环地址指虚拟机；最多3600秒租期，许可到期不能新建浏览器续跑旧步骤。";
+            return line;
+        })
+            .join("\n");
+    }
+    initialStep() {
+        if (!this.browser)
+            return closeStep("__reset", "初始化本次测试浏览器上下文");
+        return {
+            step_id: "__reset",
+            kind: "action",
+            description: "启动并确认本次远程浏览器",
+            required: true,
+            depends_on: [],
+            action: {
+                goal: "调用test_capture({})申请本次远程浏览器，再test_finish_step。",
+                capability: "browser",
+                allowed_targets: [],
+                inputs: {},
+                outputs: { initialized: { type: "boolean" } },
+                completion_requirements: ["initialized"],
+                capture: { initialized: { kind: "browser_open" } },
+            },
+        };
     }
     get id() {
         return this.agent.id;
@@ -301,6 +373,8 @@ export class NativeTest {
         const own = (dispose) => {
             this.disposers.push(dispose);
         };
+        if (this.browser)
+            own(this.browser.register(scope));
         own(scope.systemPrompt.section({
             name: "plugin:test-guidance",
             order: 10500,
@@ -309,7 +383,7 @@ export class NativeTest {
                 "\n" +
                 (this.reportReady
                     ? "测试报告已生成。请在本轮回复中只总结test_finish返回的权威统计、逐步状态和断言。BLOCKED或缺少断言记录绝不能写成PASS；页面口头观察不能替代程序断言。给出报告链接。"
-                    : guide +
+                    : this.guidance() +
                         (this.review && !this.planned
                             ? "\n本次为审核入口（/test-plan或/test-data）：原生plan模式中只规划。test_submit_plan仅保存可修改草案，不会执行。提交成功后，将返回的review_markdown原样作为exit_plan_mode的plan参数展示审核。不要自行缩写或替换审核内容。用户要求修改时重新test_submit_plan再审核；同意后插件自动冻结已审草案并开始执行。关闭plan模式不代表批准。"
                             : "") +
@@ -330,16 +404,20 @@ export class NativeTest {
         tool("test_current", "读取当前步骤、冻结目标、输入及已计算断言。", empty, () => this.state());
         const operationParameters = {
             type: "object",
-            required: ["description", "tool_name", "arguments"],
+            required: ["description", "tool_name"],
             additionalProperties: false,
             properties: {
                 description: { type: "string", minLength: 1, maxLength: 2000 },
                 tool_name: {
                     type: "string",
-                    enum: operationToolNames,
-                    description: "选择完整的原生MCP工具名，必须带mcp__playwright__前缀；不要只填browser_click等短名称。",
+                    enum: this.browser ? runbridgeOperationNames : operationToolNames,
+                    description: `选择完整的原生MCP工具名，必须带${this.browserPrefix}前缀；不要只填browser_click等短名称。`,
                 },
                 arguments: { type: "object" },
+                arguments_json: {
+                    type: "string",
+                    description: "原工具参数的完整 JSON 字符串；含数组或多层对象时使用，不能同时传 arguments。",
+                },
             },
         };
         const validateOperation = ajv.compile(operationParameters);
@@ -360,8 +438,9 @@ export class NativeTest {
                 if (!validateOperation(args))
                     throw new Error("操作参数无效：" +
                         ajv.errorsText(validateOperation.errors) +
-                        "。请仅提供description、tool_name、arguments；tool_name须使用完整名称，例如mcp__playwright__browser_click，arguments填写该原生工具的参数对象。");
+                        `。请提供description、完整tool_name（例如${this.browserPrefix}browser_click），并选择arguments对象或arguments_json字符串。`);
                 const input = args;
+                const toolArguments = nativeOperationArguments(input);
                 this.requireSettled(exec);
                 if (this.releaseStep())
                     throw new Error("当前只允许释放浏览器，请调用test_capture({})");
@@ -370,9 +449,9 @@ export class NativeTest {
                     throw new Error("当前步骤没有浏览器操作范围");
                 if (!input.description.trim())
                     throw new Error("请说明当前操作的对象与动作");
-                if (!operationTool(input.tool_name, input.arguments))
+                if (!operationTool(input.tool_name, toolArguments))
                     throw new Error("此入口只转交浏览器业务操作；tool_name必须是完整名称，例如mcp__playwright__browser_click。观察用原生工具，API用test_capture");
-                const response = await this.call(input.tool_name, input.arguments, exec, {
+                const response = await this.call(input.tool_name, toolArguments, exec, {
                     description: input.description.trim(),
                     description_source: "model",
                 });
@@ -431,10 +510,11 @@ export class NativeTest {
             if (args.capability === "browser" &&
                 !c.instance.resources.browser_context) {
                 // 直到实际遇到浏览器步骤才初始化；接口步骤不触碰浏览器。
-                c.instance.resources.browser_context = {
-                    id: this.id,
-                    state: "exists",
-                };
+                if (!this.browser)
+                    c.instance.resources.browser_context = {
+                        id: this.id,
+                        state: "exists",
+                    };
                 const after = this.entries.findIndex((e, n) => n >= this.cursor && e.instance !== c.instance);
                 this.entries.splice(after < 0 ? this.entries.length : after, 0, {
                     instance: c.instance,
@@ -442,7 +522,9 @@ export class NativeTest {
                     step: closeStep("__close", "关闭并确认浏览器上下文释放"),
                 });
                 this.save();
-                const reset = await this.call("mcp__playwright__browser_close", {}, exec);
+                const reset = await this.call(this.browser
+                    ? this.browser.prefix + "browser_start"
+                    : this.closeTool, {}, exec);
                 if (reset.result.isError) {
                     this.finishStep("ERROR", "初始化浏览器上下文失败");
                     this.advance();
@@ -852,6 +934,26 @@ export class NativeTest {
                 return "停止后禁止新业务动作，等待在途结算";
             if (exec.agent?.id !== this.id)
                 return;
+            if (/^mcp__.+__browser_/.test(exec.name) &&
+                !exec.name.startsWith(this.browserPrefix))
+                return "本次测试只允许所选浏览器后端，不能切换浏览器";
+            if (this.browser &&
+                this.current?.step.action?.capture &&
+                Object.values(this.current.step.action.capture).every((item) => item.kind === "browser_open") &&
+                ![
+                    "test_capture",
+                    "test_current",
+                    "test_finish_step",
+                    "test_fail_step",
+                    "test_finish",
+                ].includes(exec.name) &&
+                !(exec.name === this.browser.prefix + "browser_start" &&
+                    this.isTrusted(exec)))
+                return "初始化阶段只允许test_capture申请并核对本次远程浏览器";
+            if (this.browser &&
+                ["browser_start", "browser_stop", "browser_capture"].some((name) => exec.name === this.browser.prefix + name) &&
+                !this.isTrusted(exec))
+                return "远程生命周期和可信采集由test_capture控制";
             if (this.releaseStep() && !this.releaseAllowed(exec))
                 return "当前只允许释放浏览器，请调用test_capture({})，取得释放证据后test_finish_step";
             if ((this.cleanupTurn || this.current?.phase === "cleanup") &&
@@ -1018,7 +1120,7 @@ export class NativeTest {
                 this.entries.push({
                     instance,
                     phase: "setup",
-                    step: closeStep("__reset", "初始化本次测试浏览器上下文"),
+                    step: this.initialStep(),
                 });
             }
             this.entries.push(...c.preconditions.map((step) => ({
@@ -1076,11 +1178,12 @@ export class NativeTest {
             this.recorder.event("step_started", { step: e.step }, binding);
             if (!this.cancelled &&
                 e.phase === "setup" &&
-                e.step.step_id === "__reset")
+                e.step.step_id === "__reset" &&
+                !this.browser)
                 e.instance.resources.browser_context = { id: this.id, state: "exists" };
             if (e.phase === "cleanup" &&
                 e.step.run_if === "resource_exists" &&
-                e.instance.resources[e.step.resource_ref]?.state !== "exists") {
+                !["exists", "unknown"].includes(e.instance.resources[e.step.resource_ref]?.state ?? "absent")) {
                 result.cleanup_applicable = false;
                 this.finishStep("SKIPPED", "资源不存在，无需清理");
                 continue;
@@ -1154,6 +1257,16 @@ export class NativeTest {
         return {
             run_id: this.run.suite_run_id,
             session_id: this.id,
+            ...(this.browser
+                ? {
+                    browser_backend: "runbridge",
+                    ...(this.browser.resource?.remote
+                        ? {
+                            remote_browser: Object.fromEntries(Object.entries(this.browser.resource.remote).filter(([key]) => key !== "access_file")),
+                        }
+                        : {}),
+                }
+                : {}),
             ...(!this.planned && this.input ? { planning_input: this.input } : {}),
             phase: this.reportReady
                 ? "finished"
@@ -1277,7 +1390,9 @@ export class NativeTest {
             operation.state =
                 !operation.dispatch_observed || code === "ABORTED_BEFORE_DISPATCH"
                     ? "NOT_DISPATCHED"
-                    : code === "ABORTED" || aborted
+                    : code === "ABORTED" ||
+                        aborted ||
+                        this.browser?.outcome(id) === "OUTCOME_UNKNOWN"
                         ? "UNKNOWN"
                         : result.isError
                             ? "ERROR"
@@ -1494,7 +1609,9 @@ export class NativeTest {
                     i.incomplete = true;
                     i.issues.push(String(this.run.manifest.stop_reason ?? "运行未完整结算"));
                 }
-                if (i.resources.browser_context?.state === "exists") {
+                if (i.resources.browser_context?.state === "exists" ||
+                    (i.resources.browser_context?.remote &&
+                        i.resources.browser_context.state === "unknown")) {
                     i.resource_quarantined = true;
                     this.owner.quarantine(this.run, "浏览器释放未获确认");
                 }
@@ -1555,14 +1672,21 @@ export class NativeTest {
             return false;
         if (exec.name === "test_execute_operation") {
             const input = exec.arguments;
+            let arguments_;
+            try {
+                arguments_ = nativeOperationArguments(input);
+            }
+            catch {
+                return false;
+            }
             return (!!input.tool_name &&
-                operationTool(input.tool_name, input.arguments) &&
+                operationTool(input.tool_name, arguments_) &&
                 this.cleanupAllowed({ ...exec, name: input.tool_name }));
         }
         if (action.capability === "browser") {
             if (Object.values(action.capture ?? {}).every((c) => c.kind === "browser_close"))
-                return (this.isTrusted(exec) && exec.name === "mcp__playwright__browser_close");
-            return (exec.name.startsWith("mcp__playwright__") &&
+                return this.isTrusted(exec) && exec.name === this.closeTool;
+            return (exec.name.startsWith(this.browserPrefix) &&
                 ![
                     "mcp__playwright__browser_run_code",
                     "mcp__playwright__browser_install",
@@ -1585,7 +1709,7 @@ export class NativeTest {
             "test_fail_step",
             "test_finish",
         ].includes(exec.name) ||
-            (exec.name === "mcp__playwright__browser_close" && this.isTrusted(exec)));
+            (exec.name === this.closeTool && this.isTrusted(exec)));
     }
     armStopDeadline() {
         if (this.stoppingTimer)
@@ -1613,6 +1737,10 @@ export class NativeTest {
         this.recorder.snapshot(this.run);
         this.manualSource.save(this.run);
         try {
+            if (this.browser) {
+                this.owner.preview.syncRemote(this.run, this.browser);
+                return;
+            }
             this.owner.preview.sync(this.run, {
                 directory: this.recorder.directory,
                 deadline: () => Math.min(this.mediaDeadline ??
@@ -1675,6 +1803,7 @@ export class NativeTest {
             clearTimeout(this.stoppingTimer);
         for (const dispose of this.disposers.splice(0).reverse())
             dispose();
+        void this.browser?.close();
         if (this.previousPlanMode !== undefined && !this.planned)
             void this.setPlanMode(this.previousPlanMode).catch((error) => this.owner.ctx.logger.warn("恢复计划模式失败: %s", String(error)));
     }

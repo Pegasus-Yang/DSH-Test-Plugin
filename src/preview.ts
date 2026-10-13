@@ -8,6 +8,8 @@ import type { SuiteRun } from "./contracts.js";
 import type { PreviewOwner, PublishedCdp } from "./cdp-publisher.js";
 import type { PreviewState } from "./progress-model.js";
 import { atomicJson } from "./recorder.js";
+import type { RunBridge } from "./runbridge.js";
+import { RunBridgePreview } from "./runbridge-preview.js";
 import { RecordingSession, type RecordingContext } from "./recording.js";
 import {
   checkBrowscreen,
@@ -32,6 +34,7 @@ function localUrl(value: string, protocols: string[]): URL {
 }
 
 export class PreviewManager {
+  private remote?: RunBridgePreview;
   private owner?: PreviewOwner;
   private generation = 0;
   private target?: string;
@@ -110,6 +113,8 @@ export class PreviewManager {
 
   /** 只有当前运行实际持有浏览器上下文时才交付页面归属。 */
   sync(run: SuiteRun, recordingContext?: RecordingContext): void {
+    this.remote?.stop();
+    this.remote = undefined;
     const instance =
       run.lifecycle !== "FINISHED" && !run.resource_quarantined
         ? run.instances.find(
@@ -547,6 +552,7 @@ export class PreviewManager {
     await this.pending;
   }
   async state(runId: string): Promise<PreviewState> {
+    if (this.remote) return this.remote.state(runId);
     if (this.owner?.run_id !== runId) return { ready: false };
     if (!this.config)
       return this.setupError
@@ -578,9 +584,12 @@ export class PreviewManager {
     };
   }
   async screenshot(runId: string): Promise<Frame | undefined> {
+    if (this.remote) return this.remote.screenshot(runId);
     return (await this.state(runId)).ready ? this.frame : undefined;
   }
   async shutdown(): Promise<void> {
+    this.remote?.stop();
+    this.remote = undefined;
     clearTimeout(this.polling);
     this.polling = undefined;
     this.owner = undefined;
@@ -596,5 +605,10 @@ export class PreviewManager {
       const path = join(this.config.workDir, "owner.json");
       if (existsSync(path)) unlinkSync(path);
     }
+  }
+  /** 远程后端复用展示接口，不启动本机 Browscreen。 */
+  syncRemote(run: SuiteRun, browser: RunBridge): void {
+    this.remote ??= new RunBridgePreview();
+    this.remote.bind(run, browser);
   }
 }

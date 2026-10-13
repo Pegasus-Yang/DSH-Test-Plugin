@@ -26,13 +26,18 @@ declare module "@deepseek-ai/cordis" {
   }
 }
 export function apply(ctx: Context, config: PluginConfig = {}): void {
-  const { browserPreview, ...runtimeConfig } = config;
+  const { browserPreview, browserConnection, ...runtimeConfig } = config;
   const setup = new PreviewSetup(
     ctx,
     () => browserPreview?.get(),
     runtimeConfig,
   );
   const tests = new NativeTests(ctx, runtimeConfig, async () => {
+    tests.config.browser = browserConnection?.get() ?? runtimeConfig.browser;
+    if (tests.config.browser?.backend === "runbridge") {
+      await tests.preview.configure(undefined);
+      return;
+    }
     try {
       await tests.preview.configure(await setup.prepare());
     } catch (error) {
@@ -51,7 +56,10 @@ export function apply(ctx: Context, config: PluginConfig = {}): void {
   );
   ctx.provide("nativeTests", tests);
   ctx.inject(["webServer", "connection", "agents"], (web) => {
-    const previewSettings = new PreviewSettingsAccess(() => setup.describe());
+    const previewSettings = new PreviewSettingsAccess(() => ({
+      ...setup.describe(),
+      browserConnection: browserConnection?.get() ?? runtimeConfig.browser,
+    }));
     web.effect(() => () => previewSettings.dispose());
     const interfaceActions = new TestUiAccess(
       tests,

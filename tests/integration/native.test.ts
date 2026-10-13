@@ -2274,3 +2274,178 @@ it("预览接入准备也保持互斥，不能在准备过程中启动第二条�
   await first;
   expect(t.manager.sessions.size).toBe(1);
 });
+
+async function remoteSetup() {
+  const { RunBridge } = await import("../../src/runbridge.js");
+  const { writeFileSync } = await import("node:fs");
+  const { browserPreferenceDefaults } = await import(
+    "../../src/browser-preferences.js"
+  );
+  const t = setup();
+  const access = join(t.root, "access.json");
+  writeFileSync(
+    access,
+    JSON.stringify({
+      hub_url: "http://hub.test",
+      node_id: "node_own",
+      grant_id: "grant_own",
+      access_token: "x".repeat(48),
+    }),
+  );
+  t.manager.config.browser = {
+    ...browserPreferenceDefaults,
+    backend: "runbridge",
+    accessFile: access,
+    previewEnabled: false,
+  };
+  let cleanup = "COMPLETE";
+  const session = {
+    session_id: "session_own",
+    node_id: "node_own",
+    grant_id: "grant_own",
+    resource_id: "chromium",
+    connection_generation: 2,
+    state: "ACTIVE",
+    cleanup: "PENDING",
+  };
+  const wire = vi.fn(async ({ name }: any) => {
+    const data =
+      name === "browser_start"
+        ? { session, page_id: "page_own" }
+        : name === "browser_stop"
+          ? { session: { ...session, state: "CLOSED", cleanup } }
+          : name === "browser_capture"
+            ? {
+                url: "https://example.test/",
+                truncated: false,
+                values: { likes: 3 },
+              }
+            : { completed: true };
+    return {
+      content: [{ type: "text", text: JSON.stringify(data) }],
+      structuredContent: data,
+    };
+  });
+  const spy = vi
+    .spyOn(RunBridge.prototype, "connect")
+    .mockImplementation(async function (this: RunBridge) {
+      const internal = this as any;
+      internal.connected = true;
+      internal.client.callTool = wire;
+      internal.definitions = [
+        "browser_start",
+        "browser_stop",
+        "browser_capture",
+        "browser_click",
+        "browser_select_option",
+        "browser_screenshot",
+      ].map((name) => ({
+        name,
+        inputSchema: {
+          type: "object",
+          properties: {
+            values: { type: "array", items: { type: "string" } },
+            target: { type: "object" },
+            captures: { type: "object" },
+            allowed_origins: { type: "array", items: { type: "string" } },
+            full_page: { type: "boolean" },
+          },
+          additionalProperties: false,
+        },
+      }));
+    });
+  cleanups.push(() => spy.mockRestore());
+  return {
+    ...t,
+    wire,
+    setCleanup: (value: string) => {
+      cleanup = value;
+    },
+  };
+}
+
+it("远程后端在可信初始化中申请资源，旧 MCP 和直接生命周期调用被拒绝，原生操作绑定本会话", async () => {
+  const t = await remoteSetup();
+  await t.manager.start(t.agent, "读取并检查点赞", sample());
+  const test = t.manager.sessions.get("origin")!;
+  expect(t.wire).not.toHaveBeenCalled();
+  expect((await t.call("mcp__playwright__browser_click")).isError).toBe(true);
+  expect((await t.call("mcp__runbridge__browser_start")).isError).toBe(true);
+  expect(t.wire).not.toHaveBeenCalled();
+  await t.step();
+  expect(
+    test.run.instances[0].resources.browser_context?.remote?.session_id,
+  ).toBe("session_own");
+  const op = await t.call("test_execute_operation", {
+    description: "点击唯一按钮",
+    tool_name: "mcp__runbridge__browser_click",
+    arguments: { target: { by: "css", value: "#button" } },
+  });
+  expect(op.isError).toBe(false);
+  expect(t.wire.mock.calls.at(-1)![0].arguments).toMatchObject({
+    session_id: "session_own",
+    page_id: "page_own",
+  });
+  expect(test.run.instances[0].steps.at(-1)?.actual_operations?.[0].state).toBe(
+    "SUCCEEDED",
+  );
+  const invalid = await t.call("test_execute_operation", {
+    description: "选择类型",
+    tool_name: "mcp__runbridge__browser_select_option",
+    arguments: {
+      target: { by: "css", value: "#category" },
+      values: { item: "api" },
+    },
+  });
+  expect(invalid.isError).toBe(true);
+  const count = t.wire.mock.calls.length;
+  const valid = await t.call("test_execute_operation", {
+    description: "选择接口",
+    tool_name: "mcp__runbridge__browser_select_option",
+    arguments_json: JSON.stringify({
+      target: { by: "css", value: "#category" },
+      values: ["api"],
+    }),
+  });
+  expect(valid.isError).toBe(false);
+  expect(t.wire.mock.calls).toHaveLength(count + 1);
+  expect(t.wire.mock.calls.at(-1)![0].arguments.values).toEqual(["api"]);
+  await t.step();
+  expect(test.state().phase).toBe("cleanup");
+  await t.step();
+  await t.call("test_finish");
+  expect(test.run.instances[0].status).toBe("PASS");
+  expect(test.run.instances[0].resources.browser_context?.state).toBe("absent");
+  expect(test.run.manifest.plugin_version).toBe("0.12.0");
+  expect(JSON.stringify(test.state())).not.toContain("access.json");
+});
+
+it("远程写响应丢失记录 UNKNOWN；清理 UNKNOWN 不得解除隔离或伪造 PASS", async () => {
+  const t = await remoteSetup();
+  await t.manager.start(t.agent, "点击后核对", sample());
+  await t.step();
+  const test = t.manager.sessions.get("origin")!;
+  t.wire.mockRejectedValueOnce(new Error("network"));
+  expect(
+    (
+      await t.call("test_execute_operation", {
+        description: "点击保存",
+        tool_name: "mcp__runbridge__browser_click",
+        arguments: { target: { by: "css", value: "#save" } },
+      })
+    ).isError,
+  ).toBe(true);
+  expect(test.run.instances[0].steps.at(-1)?.actual_operations?.[0].state).toBe(
+    "UNKNOWN",
+  );
+  await t.step();
+  t.setCleanup("UNKNOWN");
+  expect((await t.call("test_capture")).isError).toBe(true);
+  await t.call("test_fail_step", { reason: "节点清理未确认" });
+  await t.call("test_finish");
+  expect(test.run.resource_quarantined).toBe(true);
+  expect(test.run.instances[0].resources.browser_context?.state).toBe(
+    "unknown",
+  );
+  expect(test.run.instances[0].status).not.toBe("PASS");
+});

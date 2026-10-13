@@ -67,3 +67,7 @@ git diff v0.8.2 v0.8.3
 ```
 
 在GitHub仓库的Tags页面也能按版本查找。其他本地克隆第一次需要读取这些远端标签时，执行 `git fetch origin --tags`。临时查看旧版可执行 `git switch --detach v0.8.2`，查看后用 `git switch main` 返回；操作前先提交或暂存当前改动，避免把自己的工作夹在旧版里。
+
+## 0.12.0 本地交付
+
+2026-10-14 完成 RunBridge 远程浏览器与持续画面交付，代码、dist、测试与文档纳入同一本地提交；附注标签 `v0.12.0` 指向该完成提交。package.json、运行 manifest 和标签版本均为 0.12.0。使用 `git rev-list -n 1 v0.12.0` 查询准确提交；验证范围及旧失败见[接入验收](../project/RunBridge远程浏览器接入验收.md)。本轮不推送，由用户审核后手动同步提交与标签。

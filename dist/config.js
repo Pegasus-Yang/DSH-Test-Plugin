@@ -2,6 +2,7 @@
 import { resolve } from "node:path";
 import z from "@deepseek-ai/schemastery";
 import { previewPreferenceDefaults, } from "./preview-preferences.js";
+import { browserPreferenceDefaults, } from "./browser-preferences.js";
 export const defaults = {
     workspace: process.cwd(),
     outputRoot: resolve("artifacts/runs"),
@@ -10,6 +11,21 @@ export const defaults = {
     cancelGraceMs: 10000,
     maxRevisions: 10,
 };
+const BrowserSchema = z.object({
+    backend: z
+        .union([z.const("playwright"), z.const("runbridge")])
+        .default("playwright"),
+    accessFile: z.string().default(""),
+    resourceId: z.string().default(browserPreferenceDefaults.resourceId),
+    leaseSeconds: z
+        .number()
+        .step(1)
+        .min(1)
+        .max(3600)
+        .default(browserPreferenceDefaults.leaseSeconds),
+    previewEnabled: z.boolean().default(true),
+});
+delete BrowserSchema.meta.default;
 const PreviewSchema = z.object({
     workDir: z.string().required(),
     browscreenUrl: z.string().required(),
@@ -45,5 +61,7 @@ export const Config = z.object({
     cancelGraceMs: z.number().default(defaults.cancelGraceMs),
     maxRevisions: z.number().default(defaults.maxRevisions),
     preview: PreviewSchema,
+    browser: BrowserSchema,
+    browserConnection: BrowserSchema.volatile(),
     browserPreview: PreferencesSchema.volatile(),
 });
