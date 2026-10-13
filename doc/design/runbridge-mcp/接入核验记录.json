@@ -1,0 +1,256 @@
+{
+  "schema_version": 1,
+  "status": "DESIGN_ONLY",
+  "recorded_at": "2026-10-13T15:04:43.755Z",
+  "timezone": "Asia/Shanghai",
+  "source_baseline": {
+    "plugin": {
+      "root": "/Users/pegasus-yang/Projects/SandBoxProjects/DeepseekHarnessTestPlugin",
+      "version": "0.11.2",
+      "commit": "5dfec783a3020a82dea3a03cb072adf3075551cd"
+    },
+    "hub": {
+      "root": "/Users/pegasus-yang/Projects/PythonProjects/Personal/runbridge-hub",
+      "version": "0.4.0",
+      "commit": "34b12f128af9fc4447d36f1994e124e393ce1c47"
+    },
+    "node": {
+      "root": "/Users/pegasus-yang/Projects/PythonProjects/Personal/runbridge-node",
+      "version": "0.4.0",
+      "commit": "13d5ea8452c58c923fad56df4504aca64c5c4e0c"
+    }
+  },
+  "dsh_local_source": {
+    "commit": "d743267388641bc76f17c45ce8b4c231aed1d32c",
+    "mcp_package_version": "0.2.1-alpha.2",
+    "used_as_release_baseline": false
+  },
+  "published_mcp_client": {
+    "name": "@deepseek-ai/dsh-mcp-client",
+    "version": "0.2.1-alpha.1",
+    "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-mcp-client/-/dsh-mcp-client-0.2.1-alpha.1.tgz",
+    "registry_integrity": "sha512-YWEkf4TZUvUjZZz+rGH83ojKjfKmHdj+PeCRPFh8dVSNnoj7/lFH9BNtQN2dG7gavJnvkNIi1XeK3U4K2miPKA==",
+    "actual_integrity": "sha512-YWEkf4TZUvUjZZz+rGH83ojKjfKmHdj+PeCRPFh8dVSNnoj7/lFH9BNtQN2dG7gavJnvkNIi1XeK3U4K2miPKA==",
+    "integrity_verified": true,
+    "official_client_dependency": "2.0.0",
+    "source_checks": [
+      "streamable-http transport",
+      "requestInit.headers",
+      "url and headers config schema",
+      "canonical value retains structuredContent and content"
+    ],
+    "installed_or_executed": false,
+    "real_dsh_hub_interop_tested": false
+  },
+  "http_probe": {
+    "checked_at": "2026-10-13T22:52:25+08:00",
+    "hub_url": "http://192.168.20.1:49762",
+    "responses": [
+      {
+        "method": "GET",
+        "path": "/health",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/mcp",
+        "status": 404
+      }
+    ],
+    "bearer_used": false
+  },
+  "remote_environment": {
+    "source_document": "runbridge-hub/doc/deployment/本机与虚拟机测试环境记录.md",
+    "source_checked_at": "2026-10-13T21:32:00+08:00",
+    "ssh_rechecked_in_this_task": false,
+    "managed_browser_prepared_in_this_task": false,
+    "resource_in_source_record": "vm-chrome",
+    "resource_kind_in_source_record": "BORROWED_CHROME_CDP"
+  },
+  "current_tools": [
+    {
+      "name": "node_inspect",
+      "definition": "async def node_inspect(node_id: Identifier) -> dict:",
+      "line": 127
+    },
+    {
+      "name": "browser_start",
+      "definition": "async def browser_start(node_id: Identifier, resource_id: Identifier | None = None, lease_seconds: Lease = 300) -> dict:",
+      "line": 132
+    },
+    {
+      "name": "browser_sessions",
+      "definition": "async def browser_sessions(node_id: Identifier) -> dict:",
+      "line": 137
+    },
+    {
+      "name": "browser_status",
+      "definition": "async def browser_status(session_id: Identifier) -> dict:",
+      "line": 142
+    },
+    {
+      "name": "browser_stop",
+      "definition": "async def browser_stop(session_id: Identifier) -> dict:",
+      "line": 147
+    },
+    {
+      "name": "browser_navigate",
+      "definition": "async def browser_navigate(session_id: Identifier, page_id: Identifier, url: Annotated[str, Field(max_length=8192)], timeout_ms: Timeout = 10000) -> dict:",
+      "line": 152
+    },
+    {
+      "name": "browser_snapshot",
+      "definition": "async def browser_snapshot(session_id: Identifier, page_id: Identifier, timeout_ms: Timeout = 10000) -> dict:",
+      "line": 162
+    },
+    {
+      "name": "browser_fill",
+      "definition": "async def browser_fill(session_id: Identifier, page_id: Identifier, target: Target, value: Annotated[str, Field(max_length=20000)], timeout_ms: Timeout = 10000) -> dict:",
+      "line": 169
+    },
+    {
+      "name": "browser_click",
+      "definition": "async def browser_click(session_id: Identifier, page_id: Identifier, target: Target, timeout_ms: Timeout = 10000) -> dict:",
+      "line": 177
+    },
+    {
+      "name": "browser_read",
+      "definition": "async def browser_read(session_id: Identifier, page_id: Identifier, target: Target, kind: Literal[\"text\", \"input_value\"] = \"text\", timeout_ms: Timeout = 10000) -> dict:",
+      "line": 185
+    },
+    {
+      "name": "browser_wait_for",
+      "definition": "async def browser_wait_for(session_id: Identifier, page_id: Identifier, target: Target, state: Literal[\"visible\", \"hidden\", \"attached\", \"detached\", \"text\", \"value\"] = \"visible\", value: Annotated[str | None, Field(max_length=20000)] = None, timeout_ms: Timeout = 10000) -> dict:",
+      "line": 193
+    },
+    {
+      "name": "browser_screenshot",
+      "definition": "async def browser_screenshot(session_id: Identifier, page_id: Identifier, timeout_ms: Timeout = 10000) -> CallToolResult:",
+      "line": 208
+    }
+  ],
+  "current_limits": {
+    "mcp_browser_backend": "playwright/MANAGED_CHROMIUM",
+    "visual_stream_backend": "chrome-cdp/BORROWED_CHROME_CDP",
+    "read_kinds": ["text", "input_value"],
+    "text_max_characters": 20000,
+    "screenshot_max_bytes": 2097152,
+    "screenshot_full_page": false,
+    "tool_timeout_ms": {
+      "default": 10000,
+      "min": 1,
+      "max": 30000
+    },
+    "lease_seconds": {
+      "default": 300,
+      "min": 1,
+      "max": 3600
+    },
+    "same_session_page_operations_serialized": true
+  },
+  "source_files": [
+    {
+      "project": "plugin",
+      "path": "src/adapters.ts",
+      "sha256": "36b31af959ea5aa17d2d7fdf31a6846b69781055b8859ebf044e87f27174dc0f"
+    },
+    {
+      "project": "plugin",
+      "path": "src/native-test.ts",
+      "sha256": "9c9ee2cdaa70cfc6e46715e6edf9f0839daadfc33121b0df067486973e3e3578"
+    },
+    {
+      "project": "plugin",
+      "path": "src/actual-operations.ts",
+      "sha256": "7f4edbf5edf773837b471bf7f046ca60ef9e4d5597d8a097bb5efd4ba37c6e44"
+    },
+    {
+      "project": "plugin",
+      "path": "src/config.ts",
+      "sha256": "a5cb6fa2eb8045fc729fd2e035237d1e1292b26a864a5a288db60968a5e31ccc"
+    },
+    {
+      "project": "plugin",
+      "path": "src/contracts.ts",
+      "sha256": "d88d83f949a7146d8a60c0a5a09f0502a6b30e71d671ab05d9acd8011e98598d"
+    },
+    {
+      "project": "plugin",
+      "path": "src/recovery.ts",
+      "sha256": "b56d1ba3042ff3cd8e52dc252ab458d4569424818b691980958a39bb6dd597e4"
+    },
+    {
+      "project": "plugin",
+      "path": "src/preview.ts",
+      "sha256": "9e871d899bda4d40d220d310e6a2f0d3777495da91a919a8d5a49a365501cef2"
+    },
+    {
+      "project": "plugin",
+      "path": "src/preview-setup.ts",
+      "sha256": "b66cf76ff249f564fd6de82b186c8431fde6901df132afbdac094a4823059364"
+    },
+    {
+      "project": "plugin",
+      "path": "src/preview-page.ts",
+      "sha256": "d0c97dcc148378b0dd8198ff95e76b12716ed804dc32602a6fd08052b61d8681"
+    },
+    {
+      "project": "plugin",
+      "path": "src/progress-access.ts",
+      "sha256": "47879023d91e09acbffd7768be02ad5b5b323329e7d0ce897126b93f56db8f22"
+    },
+    {
+      "project": "hub",
+      "path": "src/runbridge_hub/mcp_server.py",
+      "sha256": "a8d74c359b4a013188605f157a6b3bbc970b4a706b51bd47a66c5f588842a50d"
+    },
+    {
+      "project": "hub",
+      "path": "src/runbridge_hub/browser.py",
+      "sha256": "aa71cf12dbb32c6bc58dd7e344ed8aef77a6862f4e85f3959a238d3df70a67b0"
+    },
+    {
+      "project": "hub",
+      "path": "src/runbridge_hub/visual.py",
+      "sha256": "0aceec1c1eb2d4a18a6eaeb0310a60476470b725b27ef02abc51a52346ab8fc4"
+    },
+    {
+      "project": "hub",
+      "path": "src/runbridge_hub/visual_protocol.py",
+      "sha256": "f5e27f7efc906becf6e996ddd569cdd93a06bd43d7263dcb84f3882eac893be7"
+    },
+    {
+      "project": "hub",
+      "path": "doc/deployment/本机与虚拟机测试环境记录.md",
+      "sha256": "c4d6b6e8fe5c4fac4cd35454adfb43e9cbc238f053bf0a5e21fa2264d549857c"
+    },
+    {
+      "project": "hub",
+      "path": "doc/reference/受管理画面观察探测记录.json",
+      "sha256": "1c1cd0dfecfe683d08b4f48fe8012d8c5a16979b42530d364b3346551535b9b2"
+    },
+    {
+      "project": "node",
+      "path": "src/runbridge_node/executor.py",
+      "sha256": "729520e3823e5d0de92a2ccce43d2d9d023687e6282a848d913ed721dad2a8a5"
+    },
+    {
+      "project": "node",
+      "path": "src/runbridge_node/runtime.py",
+      "sha256": "6771ede42dd19a721a063365fc37e9504eb5eb7d2486db5d67d70e3f8fe6b7e3"
+    },
+    {
+      "project": "node",
+      "path": "src/runbridge_node/playwright_runtime/server.mjs",
+      "sha256": "9c583212e1acb54934d2bcacd158ee7eb15acbc41121660c33861b8e395a5b3b"
+    }
+  ],
+  "verification_boundary": {
+    "code_changed": false,
+    "service_configuration_changed": false,
+    "live_browser_started": false,
+    "credentials_issued": false,
+    "dsh_to_vm_e2e_completed": false,
+    "functional_checklist_status": "ALL_PENDING"
+  }
+}

@@ -61,6 +61,7 @@ The English guides describe the current implementation. Historical design and ac
 
 ## 设计与实施
 
+- [RunBridge MCP 远程浏览器对接](design/runbridge-mcp/README.md)：现有 12 个工具与 Playwright MCP 的差异、远程会话及可信采集适配、截图与持续画面路线、改动清单及分阶段验收；当前为待评审提案。
 - [收尾约束与账本报告优化实施方案](design/收尾约束与账本报告优化实施方案.md)：已获批准，核心实现及优化指标验证完成；保留原方案及完整回归标准，实际结果和分轮复测边界见验收记录。
 - [运行实际步骤与手工用例导出实施方案](design/运行实际步骤与手工用例导出实施方案.md)：已获批准，纳入 0.11.0；运行时逐条保存操作说明及真实调用，编号展示、失败重试记录和 Markdown／JSON 手工用例导出。
 - [Browscreen视频录制与报告接入实施方案](design/Browscreen视频录制与报告接入实施方案.md)：正式 0.3.0 参数、独立录像开关、服务端采集、按实例归档、MP4 报告与 API 无媒体显示；方案已获用户批准，实施结果见当前架构和录像验收记录；原调研范围按历史保留。
