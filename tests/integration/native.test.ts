@@ -2420,6 +2420,80 @@ it("远程后端在可信初始化中申请资源，旧 MCP 和直接生命周�
   expect(JSON.stringify(test.state())).not.toContain("access.json");
 });
 
+it.each(["FAILED", "NOT_FOUND"])(
+  "远程初始化响应丢失后原请求为 %s，原生收尾仅凭确定未分配证据释放",
+  async (state) => {
+    const t = await remoteSetup();
+    await t.manager.start(t.agent, "读取并检查点赞", sample());
+    const test = t.manager.sessions.get("origin")!;
+    t.wire.mockRejectedValueOnce(new Error("lost start response"));
+    expect((await t.call("test_capture")).isError).toBe(true);
+    expect(test.run.instances[0].resources.browser_context?.state).toBe(
+      "unknown",
+    );
+    await t.call("test_fail_step", {
+      reason: "初始化结果未知，先按原请求核对",
+    });
+    expect(test.state().phase).toBe("cleanup");
+    const request = {
+      request_id:
+        test.run.instances[0].resources.browser_context?.remote?.request_id,
+      node_id: "node_own",
+      grant_id: "grant_own",
+      state,
+      session_id: null,
+      error_code: "RESOURCE_BUSY",
+      execution_outcome: "NOT_STARTED",
+    };
+    t.wire.mockResolvedValueOnce({
+      content: [
+        { type: "text", text: JSON.stringify({ request, sessions: [] }) },
+      ],
+      structuredContent: { request, sessions: [] },
+    } as any);
+    if (state === "FAILED") {
+      await t.step();
+      expect(test.run.instances[0].resources.browser_context?.state).toBe(
+        "absent",
+      );
+      const cleanup = test.run.instances[0].steps.find(
+        (step) => step.phase === "cleanup",
+      )!;
+      expect(cleanup.observations[0].producer.field).toContain(
+        "execution_outcome=NOT_STARTED",
+      );
+      const evidence = test.run.evidence.find(
+        (item) => item.evidence_id === cleanup.observations[0].evidence_refs[0],
+      )!;
+      expect(
+        readFileSync(
+          join(t.root, test.run.suite_run_id, evidence.relative_path),
+          "utf8",
+        ),
+      ).toContain(request.request_id!);
+      expect(test.run.resource_quarantined).toBe(false);
+    } else {
+      expect((await t.call("test_capture")).isError).toBe(true);
+      await t.call("test_fail_step", { reason: "无记录不能证明未分配" });
+      expect(test.run.instances[0].resources.browser_context?.state).toBe(
+        "unknown",
+      );
+      expect(test.run.resource_quarantined).toBe(true);
+    }
+    await t.call("test_finish");
+    expect(
+      test.run.instances[0].steps.find((step) => step.phase === "setup")
+        ?.status,
+    ).toBe("ERROR");
+    if (state === "FAILED") expect(test.run.instances[0].status).toBe("ERROR");
+    else expect(test.run.instances[0].status).not.toBe("PASS");
+    expect(t.wire.mock.calls.map(([input]) => input.name)).toEqual([
+      "browser_start",
+      "browser_sessions",
+    ]);
+  },
+);
+
 it("远程写响应丢失记录 UNKNOWN；清理 UNKNOWN 不得解除隔离或伪造 PASS", async () => {
   const t = await remoteSetup();
   await t.manager.start(t.agent, "点击后核对", sample());

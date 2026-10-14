@@ -4,6 +4,8 @@ import { type BrowserResource } from "./contracts.js";
 export declare const runbridgePrefix = "mcp__runbridge__";
 /** 技术终态与业务结果分别判断；只有 Node 的 COMPLETE 能确认清理。 */
 export declare function remoteCleanupComplete(session: unknown): boolean;
+/** 普通收尾与隔离恢复复用实际清理或确定未分配的同一证据。 */
+export declare function remoteReleaseConfirmed(data: unknown, resource?: BrowserResource): boolean;
 export declare function runbridgeResult(value: unknown): Record<string, any>;
 export interface RunBridgeAccess {
     hub_url: string;

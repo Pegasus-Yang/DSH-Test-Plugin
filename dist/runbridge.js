@@ -10,6 +10,33 @@ export const runbridgePrefix = "mcp__runbridge__";
 export function remoteCleanupComplete(session) {
     return (["CLOSED", "FAILED", "INTERRUPTED"].includes(String(field(session, "state"))) && field(session, "cleanup") === "COMPLETE");
 }
+/** 只有原请求的确定未分配终态可以作为不存在资源的证据。 */
+function requestNotStarted(request, reference) {
+    return (!!reference?.request_id &&
+        field(request, "request_id") === reference.request_id &&
+        field(request, "node_id") === reference.node_id &&
+        field(request, "grant_id") === reference.grant_id &&
+        field(request, "state") === "FAILED" &&
+        field(request, "session_id") === null &&
+        field(request, "execution_outcome") === "NOT_STARTED");
+}
+/** 普通收尾与隔离恢复复用实际清理或确定未分配的同一证据。 */
+export function remoteReleaseConfirmed(data, resource) {
+    const reference = resource?.remote;
+    if (!reference || resource?.state !== "absent")
+        return false;
+    const session = field(data, "session");
+    if (reference.session_id)
+        return (remoteCleanupComplete(session) &&
+            field(session, "session_id") === reference.session_id &&
+            field(session, "node_id") === reference.node_id &&
+            field(session, "grant_id") === reference.grant_id);
+    const sessions = field(data, "sessions");
+    return (session === undefined &&
+        Array.isArray(sessions) &&
+        sessions.length === 0 &&
+        requestNotStarted(field(data, "request"), reference));
+}
 const managed = new Set([
     "node_id",
     "session_id",
@@ -251,8 +278,11 @@ export class RunBridge {
         else {
             if (!resource?.remote)
                 throw new Error("尚未启动本次远程浏览器");
-            if (!resource.remote.session_id && name === "browser_stop")
-                await this.reconcile(signal);
+            if (!resource.remote.session_id && name === "browser_stop") {
+                const unallocated = await this.reconcile(signal);
+                if (unallocated)
+                    return unallocated;
+            }
             if (!resource.remote.session_id)
                 throw new Error("本次启动结果未知，不能猜测会话身份");
             parameters.session_id = resource.remote.session_id;
@@ -293,6 +323,8 @@ export class RunBridge {
                     "RESOURCE_BUSY",
                     "RESOURCE_NOT_READY",
                     "PLAYWRIGHT_VERSION_MISMATCH",
+                    "REQUEST_RECORD_LIMIT",
+                    "REQUEST_CONCURRENCY_LIMIT",
                 ].includes(data.code)) {
                 this.resource.state = "absent";
                 this.changed();
@@ -360,17 +392,44 @@ export class RunBridge {
         this.resource = structuredClone(resource);
     }
     async reconcile(signal) {
+        const reference = this.resource.remote;
+        if (!reference.request_id)
+            throw new Error("本次启动记录缺少请求身份，隔离仍保留");
         const response = await this.client.callTool({
             name: "browser_sessions",
             arguments: {
                 node_id: this.access.node_id,
-                request_id: this.resource.remote.request_id,
+                request_id: reference.request_id,
             },
         }, { signal, timeout: 10000 });
         if (response.isError)
             throw new Error("无法核对本次远程启动的结果");
-        const matches = runbridgeResult(response).sessions?.filter((item) => item.request_id === this.resource?.remote?.request_id);
-        if (!Array.isArray(matches) || matches.length !== 1)
+        const data = runbridgeResult(response);
+        if (!Array.isArray(data.sessions))
+            throw new Error("远程启动核对缺少会话列表，隔离仍保留");
+        const matches = data.sessions.filter((item) => item?.request_id === reference.request_id);
+        if (data.request !== undefined) {
+            const request = data.request;
+            if (field(request, "request_id") !== reference.request_id ||
+                field(request, "node_id") !== reference.node_id ||
+                field(request, "grant_id") !== reference.grant_id)
+                throw new Error("远程请求归属与本次启动不一致，隔离仍保留");
+            if (requestNotStarted(request, reference) &&
+                data.sessions.length === 0 &&
+                data.session === undefined) {
+                this.resource.state = "absent";
+                this.changed();
+                return response;
+            }
+            if (!["PENDING", "SUCCEEDED", "FAILED", "UNKNOWN"].includes(request.state) ||
+                typeof request.session_id !== "string" ||
+                !request.session_id ||
+                data.sessions.length !== 1 ||
+                matches.length !== 1 ||
+                matches[0].session?.session_id !== request.session_id)
+                throw new Error("远程请求结果未确认或与会话不一致，隔离仍保留");
+        }
+        if (matches.length !== 1)
             throw new Error("无法唯一确认本次启动的会话，隔离仍保留");
         this.acceptSession(matches[0].session);
         this.changed();

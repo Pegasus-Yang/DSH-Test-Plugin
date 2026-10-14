@@ -18,7 +18,7 @@ import { Recorder, redact } from "./recorder.js";
 import {
   RunBridge,
   runbridgeResult,
-  remoteCleanupComplete,
+  remoteReleaseConfirmed,
 } from "./runbridge.js";
 interface CaptureHost {
   id: string;
@@ -231,10 +231,7 @@ export async function captureStep(
     if (response.result.isError) throw new Error("浏览器释放失败");
     if (host.browser) {
       const data = runbridgeResult(response.result.value);
-      if (
-        !remoteCleanupComplete(data.session) ||
-        host.browser.resource?.remote?.session_id !== data.session.session_id
-      )
+      if (!remoteReleaseConfirmed(data, host.browser.resource))
         throw new Error("远程浏览器清理尚未确认，隔离仍保留");
     }
     const evidence = recorder.evidence(
@@ -250,7 +247,9 @@ export async function captureStep(
       host.browser ? "runbridge-close-v1" : "playwright-close-v1",
       evidence.evidence_id,
       host.browser
-        ? "session.state=terminal,cleanup=COMPLETE"
+        ? host.browser.resource?.remote?.session_id
+          ? "session.state=terminal,cleanup=COMPLETE"
+          : "request.state=FAILED,session_id=null,execution_outcome=NOT_STARTED"
         : "isError=false",
     );
   }

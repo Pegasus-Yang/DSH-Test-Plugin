@@ -209,6 +209,206 @@ it("响应丢失保留未知，不自动重放；恢复按原请求核对会话�
   });
   expect(bridge.resource?.state).toBe("absent");
 });
+it("失败启动找回原会话，UNKNOWN 保留身份，COMPLETE 才确认释放", async () => {
+  sdk.call.mockRejectedValueOnce(new Error("lost start response"));
+  await expect(call("browser_start")).rejects.toThrow("不能盲目重放");
+  const request = bridge.resource?.remote?.request_id;
+  const failed = { ...session, state: "FAILED", cleanup: "UNKNOWN" };
+  sdk.call
+    .mockResolvedValueOnce(
+      result({
+        request: {
+          request_id: request,
+          node_id: session.node_id,
+          grant_id: session.grant_id,
+          state: "FAILED",
+          session_id: session.session_id,
+          error_code: "BROWSER_CONNECT_FAILED",
+          execution_outcome: "OUTCOME_UNKNOWN",
+        },
+        sessions: [{ request_id: request, session: failed }],
+      }),
+    )
+    .mockResolvedValueOnce(result({ session: failed }));
+  await call("browser_stop");
+  expect(bridge.resource?.remote?.session_id).toBe("session_own");
+  expect(bridge.resource?.state).toBe("unknown");
+  sdk.call.mockResolvedValueOnce(
+    result({ session: { ...failed, cleanup: "COMPLETE" } }),
+  );
+  await call("browser_stop");
+  expect(bridge.resource?.state).toBe("absent");
+  expect(
+    sdk.call.mock.calls.filter(([input]) => input.name === "browser_start"),
+  ).toHaveLength(1);
+  expect(
+    sdk.call.mock.calls.filter(([input]) => input.name === "browser_stop"),
+  ).toHaveLength(2);
+});
+it.each(["缺失", "重复", "另一许可"])(
+  "旧格式恢复查询%s时保留隔离，不猜测或重放启动",
+  async (kind) => {
+    sdk.call.mockRejectedValueOnce(new Error("lost response"));
+    await expect(call("browser_start")).rejects.toThrow("不能盲目重放");
+    const own = { request_id: bridge.resource?.remote?.request_id, session };
+    const sessions =
+      kind === "缺失"
+        ? []
+        : kind === "重复"
+          ? [own, own]
+          : [{ ...own, session: { ...session, grant_id: "foreign" } }];
+    sdk.call.mockResolvedValueOnce(result({ sessions }));
+    await expect(call("browser_stop")).rejects.toThrow(
+      kind === "另一许可" ? "归属" : "唯一确认",
+    );
+    expect(bridge.resource?.state).toBe("unknown");
+    expect(bridge.resource?.remote?.session_id).toBeUndefined();
+    expect(sdk.call.mock.calls.map(([input]) => input.name)).toEqual([
+      "browser_start",
+      "browser_sessions",
+    ]);
+  },
+);
+it("确定未分配的失败请求仅核对一次便确认不存在，不发送无身份关闭", async () => {
+  sdk.call.mockRejectedValueOnce(new Error("lost start response"));
+  await expect(call("browser_start")).rejects.toThrow("不能盲目重放");
+  const proof = {
+    request: {
+      request_id: bridge.resource?.remote?.request_id,
+      node_id: session.node_id,
+      grant_id: session.grant_id,
+      state: "FAILED",
+      session_id: null,
+      error_code: "RESOURCE_BUSY",
+      execution_outcome: "NOT_STARTED",
+    },
+    sessions: [],
+  };
+  sdk.call.mockResolvedValueOnce(result(proof));
+  expect((await call("browser_stop")).structuredContent).toEqual(proof);
+  expect(bridge.resource?.state).toBe("absent");
+  expect(bridge.resource?.remote?.session_id).toBeUndefined();
+  expect(sdk.call.mock.calls.map(([input]) => input.name)).toEqual([
+    "browser_start",
+    "browser_sessions",
+  ]);
+});
+it.each([
+  { state: "PENDING", session_id: null, execution_outcome: "NOT_STARTED" },
+  { state: "UNKNOWN", session_id: null, execution_outcome: "NOT_STARTED" },
+  { state: "NOT_FOUND", session_id: null, execution_outcome: "NOT_STARTED" },
+  { state: "FAILED", session_id: null, execution_outcome: "OUTCOME_UNKNOWN" },
+  { state: "FAILED", execution_outcome: "NOT_STARTED" },
+])("未分配证据不完整或未知（$state）时保留隔离", async (request) => {
+  sdk.call.mockRejectedValueOnce(new Error("lost start response"));
+  await expect(call("browser_start")).rejects.toThrow("不能盲目重放");
+  sdk.call.mockResolvedValueOnce(
+    result({
+      request: {
+        request_id: bridge.resource?.remote?.request_id,
+        node_id: session.node_id,
+        grant_id: session.grant_id,
+        ...request,
+      },
+      sessions: [],
+    }),
+  );
+  await expect(call("browser_stop")).rejects.toThrow("隔离仍保留");
+  expect(bridge.resource?.state).toBe("unknown");
+  expect(sdk.call.mock.calls.map(([input]) => input.name)).toEqual([
+    "browser_start",
+    "browser_sessions",
+  ]);
+});
+it.each([
+  "请求不符",
+  "节点不符",
+  "许可不符",
+  "会话不符",
+  "失败却列出会话",
+  "无记录却列出会话",
+])("请求核对结果%s时不采用矛盾证据", async (kind) => {
+  sdk.call.mockRejectedValueOnce(new Error("lost start response"));
+  await expect(call("browser_start")).rejects.toThrow("不能盲目重放");
+  const request = bridge.resource?.remote?.request_id;
+  sdk.call.mockResolvedValueOnce(
+    result({
+      request: {
+        request_id: kind === "请求不符" ? "foreign" : request,
+        node_id: kind === "节点不符" ? "foreign" : session.node_id,
+        grant_id: kind === "许可不符" ? "foreign" : session.grant_id,
+        state:
+          kind === "失败却列出会话"
+            ? "FAILED"
+            : kind === "无记录却列出会话"
+              ? "NOT_FOUND"
+              : "SUCCEEDED",
+        session_id:
+          kind === "失败却列出会话"
+            ? null
+            : kind === "会话不符"
+              ? "foreign"
+              : session.session_id,
+        execution_outcome: "NOT_STARTED",
+      },
+      sessions: [{ request_id: request, session }],
+    }),
+  );
+  await expect(call("browser_stop")).rejects.toThrow("隔离仍保留");
+  expect(bridge.resource?.state).toBe("unknown");
+  expect(bridge.resource?.remote?.session_id).toBeUndefined();
+  expect(sdk.call.mock.calls.map(([input]) => input.name)).toEqual([
+    "browser_start",
+    "browser_sessions",
+  ]);
+});
+it.each(["PENDING", "UNKNOWN", "SUCCEEDED"])(
+  "%s 已分配时恢复原会话，不能凭请求状态确认清理",
+  async (state) => {
+    sdk.call.mockRejectedValueOnce(new Error("lost start response"));
+    await expect(call("browser_start")).rejects.toThrow("不能盲目重放");
+    const request = bridge.resource?.remote?.request_id;
+    sdk.call
+      .mockResolvedValueOnce(
+        result({
+          request: {
+            request_id: request,
+            node_id: session.node_id,
+            grant_id: session.grant_id,
+            state,
+            session_id: session.session_id,
+            error_code: null,
+            execution_outcome: "OUTCOME_UNKNOWN",
+          },
+          sessions: [{ request_id: request, session }],
+        }),
+      )
+      .mockResolvedValueOnce(
+        result({
+          session: { ...session, state: "FAILED", cleanup: "UNKNOWN" },
+        }),
+      );
+    await call("browser_stop");
+    expect(bridge.resource?.state).toBe("unknown");
+    expect(bridge.resource?.remote?.session_id).toBe(session.session_id);
+    expect(sdk.call.mock.calls.map(([input]) => input.name)).toEqual([
+      "browser_start",
+      "browser_sessions",
+      "browser_stop",
+    ]);
+  },
+);
+it.each(["REQUEST_RECORD_LIMIT", "REQUEST_CONCURRENCY_LIMIT"])(
+  "%s 在分配前明确拒绝时确认未占用资源",
+  async (code) => {
+    sdk.call.mockResolvedValueOnce(
+      result({ code, execution_outcome: "NOT_STARTED" }, true),
+    );
+    await expect(call("browser_start")).rejects.toThrow(code);
+    expect(bridge.resource?.state).toBe("absent");
+    expect(bridge.outcome("call_own")).toBe("NOT_STARTED");
+  },
+);
 it("结构化与通用 MCP 错误都经公开工具投影失败，拒绝启动无占用证据", async () => {
   sdk.call.mockResolvedValueOnce(
     result({ code: "RESOURCE_BUSY", execution_outcome: "NOT_STARTED" }, true),
@@ -245,6 +445,53 @@ it("文件上传读取明确本机路径，经线传送实际字节而非 Hub �
     data: Buffer.from("原始内容").toString("base64"),
   });
 });
+it.each([1, 2])(
+  "%i 个文件合计恰好 4 MiB 时发送原始字节，超出一字节在本机拒绝",
+  async (count) => {
+    await open();
+    const files = Array.from(
+      { length: count },
+      (_, index) => `边界-${index}.bin`,
+    );
+    for (const [index, path] of files.entries())
+      writeFileSync(
+        join(root, path),
+        Buffer.alloc((4 * 1024 * 1024) / count, index),
+      );
+    sdk.call.mockResolvedValueOnce(result({ files }));
+    await call("browser_file_upload", {
+      files,
+      target: { by: "css", value: "#file" },
+    });
+    const sent = sdk.call.mock.calls.at(-1)![0].arguments.files;
+    expect(sent.map((file: any) => file.name)).toEqual(files);
+    expect(
+      sent.reduce(
+        (total: number, file: any) =>
+          total + Buffer.from(file.data, "base64").length,
+        0,
+      ),
+    ).toBe(4 * 1024 * 1024);
+    for (const [index, file] of sent.entries())
+      expect(
+        Buffer.from(file.data, "base64").equals(
+          Buffer.alloc((4 * 1024 * 1024) / count, index),
+        ),
+      ).toBe(true);
+    writeFileSync(
+      join(root, files[0]),
+      Buffer.alloc((4 * 1024 * 1024) / count + 1),
+    );
+    sdk.call.mockClear();
+    await expect(
+      call("browser_file_upload", {
+        files,
+        target: { by: "css", value: "#file" },
+      }),
+    ).rejects.toThrow("不得超过 4 MiB");
+    expect(sdk.call).not.toHaveBeenCalled();
+  },
+);
 it("恢复拒绝不同 grant，配置异常不回显秘密", () => {
   expect(() =>
     bridge.restore({

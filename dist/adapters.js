@@ -2,7 +2,7 @@
 import { randomUUID } from "node:crypto";
 import { ajv, field, } from "./contracts.js";
 import { redact } from "./recorder.js";
-import { runbridgeResult, remoteCleanupComplete, } from "./runbridge.js";
+import { runbridgeResult, remoteReleaseConfirmed, } from "./runbridge.js";
 export function mcpResult(value) {
     const blocks = field(value, "content");
     if (!Array.isArray(blocks))
@@ -124,14 +124,15 @@ export async function captureStep(host, recorder, suite, step, result, binding, 
             throw new Error("浏览器释放失败");
         if (host.browser) {
             const data = runbridgeResult(response.result.value);
-            if (!remoteCleanupComplete(data.session) ||
-                host.browser.resource?.remote?.session_id !== data.session.session_id)
+            if (!remoteReleaseConfirmed(data, host.browser.resource))
                 throw new Error("远程浏览器清理尚未确认，隔离仍保留");
         }
         const evidence = recorder.evidence(randomUUID() + ".json", JSON.stringify(redact(response.result), null, 2), "application/json");
         suite.evidence.push(evidence);
         save(name, true, response.callId, host.browser ? "runbridge-close-v1" : "playwright-close-v1", evidence.evidence_id, host.browser
-            ? "session.state=terminal,cleanup=COMPLETE"
+            ? host.browser.resource?.remote?.session_id
+                ? "session.state=terminal,cleanup=COMPLETE"
+                : "request.state=FAILED,session_id=null,execution_outcome=NOT_STARTED"
             : "isError=false");
     }
     if (step.action.capability === "browser" && Object.keys(dom).length) {

@@ -9,7 +9,7 @@ import { atomicJson } from "./recorder.js";
 import {
   RunBridge,
   runbridgeResult,
-  remoteCleanupComplete,
+  remoteReleaseConfirmed,
 } from "./runbridge.js";
 import { browserPreferenceDefaults } from "./browser-preferences.js";
 
@@ -261,12 +261,7 @@ export class RecoveryManager {
           "浏览器关闭未成功（可能审批被拒绝或连接失败），隔离仍保留",
         );
       const remoteProof = remote ? runbridgeResult(result.value) : undefined;
-      if (
-        remote &&
-        (!remoteCleanupComplete(remoteProof?.session) ||
-          remoteProof?.session?.session_id !==
-            remote.resource?.remote?.session_id)
-      )
+      if (remote && !remoteReleaseConfirmed(remoteProof, remote.resource))
         throw new Error("远程会话清理未确认，隔离仍保留");
       await this.stopPreview();
       if (controller.signal.aborted)
@@ -276,7 +271,9 @@ export class RecoveryManager {
         external_stopped: true,
         environment_reset: true,
         details:
-          "用户确认旧测试及外部操作已停止；原生工具关闭测试专用浏览器，并停止本插件预览。旧测试结果保持原样。",
+          remoteProof?.request && !remoteProof.session
+            ? "用户确认旧测试及外部操作已停止；原许可核对确认本次请求未分配浏览器，并停止本插件预览。旧测试结果保持原样。"
+            : "用户确认旧测试及外部操作已停止；原生工具关闭测试专用浏览器，并停止本插件预览。旧测试结果保持原样。",
         evidence: {
           method: "confirmed-browser-recovery",
           session_id: agent.id,
@@ -285,7 +282,12 @@ export class RecoveryManager {
           started_at: startedAt,
           finished_at: new Date().toISOString(),
           browser_close_is_error: false,
-          ...(remoteProof ? { remote_session: remoteProof.session } : {}),
+          ...(remoteProof?.session
+            ? { remote_session: remoteProof.session }
+            : {}),
+          ...(remoteProof?.request
+            ? { remote_request: remoteProof.request }
+            : {}),
           preview_stopped: true,
         },
       });

@@ -239,9 +239,13 @@ it("缺少浏览器、时间或可用关闭工具时提示实际处置，保留�
   expect(t.manager.status().quarantine).toBeNull();
 });
 
-it.each(["CLOSED", "FAILED", "INTERRUPTED"])(
-  "远程 %s+COMPLETE 按原许可确认释放，保留旧业务结果",
-  async (terminal) => {
+it.each(
+  ["CLOSED", "FAILED", "INTERRUPTED"].flatMap((terminal) =>
+    [false, true].map((lost) => ({ terminal, lost })),
+  ),
+)(
+  "远程 $terminal+COMPLETE 按原许可确认释放（启动身份丢失=$lost），保留旧业务结果",
+  async ({ terminal, lost }) => {
     const { RunBridge } = await import("../../src/runbridge.js");
     const t = setup();
     const access = join(t.root, "original-access.json");
@@ -255,7 +259,7 @@ it.each(["CLOSED", "FAILED", "INTERRUPTED"])(
       }),
     );
     const resource: any = {
-      id: "session_own",
+      id: lost ? "request_own" : "session_own",
       state: "unknown",
       remote: {
         hub_url: "http://hub.test",
@@ -263,7 +267,8 @@ it.each(["CLOSED", "FAILED", "INTERRUPTED"])(
         node_id: "node_own",
         grant_id: "grant_own",
         resource_id: "chromium",
-        session_id: "session_own",
+        request_id: "request_own",
+        ...(lost ? {} : { session_id: "session_own" }),
       },
     };
     t.run.instances[0].resources.browser_context = resource;
@@ -275,11 +280,22 @@ it.each(["CLOSED", "FAILED", "INTERRUPTED"])(
       definitions.set(d.name, d);
       return () => definitions.delete(d.name);
     };
-    const wire = vi.fn(async () => ({
+    const recoveredSession = {
+      ...resource.remote,
+      session_id: "session_own",
+      state: terminal,
+      cleanup: "COMPLETE",
+    };
+    const wire = vi.fn(async (input: any) => ({
       content: [{ type: "text", text: "released" }],
-      structuredContent: {
-        session: { ...resource.remote, state: terminal, cleanup: "COMPLETE" },
-      },
+      structuredContent:
+        input.name === "browser_sessions"
+          ? {
+              sessions: [
+                { request_id: "request_own", session: recoveredSession },
+              ],
+            }
+          : { session: recoveredSession },
     }));
     const spy = vi
       .spyOn(RunBridge.prototype, "connect")
@@ -305,15 +321,126 @@ it.each(["CLOSED", "FAILED", "INTERRUPTED"])(
     }));
     try {
       expect(await t.recover()).toContain("已释放");
-      expect(wire.mock.calls[0]?.[0]).toMatchObject({
+      expect(wire.mock.calls.at(-1)?.[0]).toMatchObject({
         name: "browser_stop",
         arguments: { session_id: "session_own" },
       });
+      expect(wire.mock.calls.map(([input]) => input.name)).toEqual(
+        lost ? ["browser_sessions", "browser_stop"] : ["browser_stop"],
+      );
       expect(definitions.size).toBe(0);
       expect(readFileSync(join(t.root, "run-old/results.json"), "utf8")).toBe(
         original,
       );
       expect(t.manager.status().quarantine).toBeNull();
+    } finally {
+      spy.mockRestore();
+    }
+  },
+);
+
+it.each(["FAILED", "PENDING", "UNKNOWN", "NOT_FOUND"])(
+  "无会话身份的 %s 请求按原许可核对，只有确定未分配才解除隔离",
+  async (state) => {
+    const { RunBridge } = await import("../../src/runbridge.js");
+    const t = setup();
+    const access = join(t.root, "original-access.json");
+    writeFileSync(
+      access,
+      JSON.stringify({
+        hub_url: "http://hub.test",
+        node_id: "node_own",
+        grant_id: "grant_own",
+        access_token: "x".repeat(48),
+      }),
+    );
+    t.run.instances[0].resources.browser_context = {
+      id: "request_own",
+      state: "unknown",
+      remote: {
+        hub_url: "http://hub.test",
+        access_file: access,
+        node_id: "node_own",
+        grant_id: "grant_own",
+        resource_id: "chromium",
+        request_id: "request_own",
+      },
+    };
+    t.run.instances[0].status = "ERROR";
+    const original = JSON.stringify(t.run);
+    writeFileSync(join(t.root, "run-old/results.json"), original);
+    const request = {
+      request_id: "request_own",
+      node_id: "node_own",
+      grant_id: "grant_own",
+      state,
+      session_id: null,
+      error_code: "RESOURCE_BUSY",
+      execution_outcome: "NOT_STARTED",
+    };
+    const definitions = new Map<string, any>();
+    (t.agent.ctx.tools as any).register = (definition: any) => {
+      definitions.set(definition.name, definition);
+      return () => definitions.delete(definition.name);
+    };
+    const wire = vi.fn(async () => ({
+      content: [
+        { type: "text", text: JSON.stringify({ request, sessions: [] }) },
+      ],
+      structuredContent: { request, sessions: [] },
+    }));
+    const spy = vi
+      .spyOn(RunBridge.prototype, "connect")
+      .mockImplementation(async function (this: RunBridge) {
+        const internal = this as any;
+        internal.connected = true;
+        internal.client.callTool = wire;
+        internal.definitions = [
+          {
+            name: "browser_stop",
+            inputSchema: {
+              type: "object",
+              properties: { session_id: { type: "string" } },
+              required: ["session_id"],
+            },
+          },
+        ];
+      });
+    t.close.mockImplementation(async (exec: any) => ({
+      isError: false,
+      value: await definitions.get(exec.name).execute(exec.arguments, exec),
+      content: [],
+    }));
+    try {
+      if (state === "FAILED") {
+        expect(await t.recover()).toContain("已释放");
+        expect(t.manager.status().quarantine).toBeNull();
+        const audit = readdirSync(t.root).find((name) =>
+          name.startsWith("release-"),
+        )!;
+        const proof = JSON.parse(
+          readFileSync(join(t.root, audit), "utf8"),
+        ).proof;
+        expect(proof.evidence.remote_request).toEqual(request);
+        expect(proof.evidence.remote_session).toBeUndefined();
+        expect(proof.details).toContain("未分配浏览器");
+      } else {
+        await expect(t.recover()).rejects.toThrow("隔离仍保留");
+        expect(t.manager.status().quarantine).not.toBeNull();
+        expect(t.preview).not.toHaveBeenCalled();
+        expect(
+          readdirSync(t.root).filter((name) => name.startsWith("release-")),
+        ).toEqual([]);
+      }
+      expect(wire.mock.calls).toHaveLength(1);
+      expect(wire.mock.calls[0]?.[0]).toMatchObject({
+        name: "browser_sessions",
+        arguments: { node_id: "node_own", request_id: "request_own" },
+      });
+      expect(definitions.size).toBe(0);
+      expect(readFileSync(join(t.root, "run-old/results.json"), "utf8")).toBe(
+        original,
+      );
     } finally {
       spy.mockRestore();
     }
