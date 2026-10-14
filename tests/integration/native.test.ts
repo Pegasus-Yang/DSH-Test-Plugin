@@ -2416,7 +2416,7 @@ it("远程后端在可信初始化中申请资源，旧 MCP 和直接生命周�
   await t.call("test_finish");
   expect(test.run.instances[0].status).toBe("PASS");
   expect(test.run.instances[0].resources.browser_context?.state).toBe("absent");
-  expect(test.run.manifest.plugin_version).toBe("0.12.0");
+  expect(test.run.manifest.plugin_version).toBe("0.12.1");
   expect(JSON.stringify(test.state())).not.toContain("access.json");
 });
 

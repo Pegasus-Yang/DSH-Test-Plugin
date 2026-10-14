@@ -139,7 +139,7 @@ export class RunBridge {
   private readonly accessFile: string;
   resource?: BrowserResource;
   private client = new Client(
-    { name: "dsh-test-plugin", version: "0.12.0" },
+    { name: "dsh-test-plugin", version: "0.12.1" },
     { capabilities: {} },
   );
   private definitions: Awaited<ReturnType<Client["listTools"]>>["tools"] = [];

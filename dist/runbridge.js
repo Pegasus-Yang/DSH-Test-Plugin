@@ -104,7 +104,7 @@ export class RunBridge {
     config;
     accessFile;
     resource;
-    client = new Client({ name: "dsh-test-plugin", version: "0.12.0" }, { capabilities: {} });
+    client = new Client({ name: "dsh-test-plugin", version: "0.12.1" }, { capabilities: {} });
     definitions = [];
     connected = false;
     disposing;

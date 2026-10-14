@@ -43,25 +43,25 @@ DSH Test Plugin 是 DeepSeek Harness（DSH）的原生测试插件。描述想�
 ### 1. 准备 DSH 与测试工具
 
 - Node.js **22.19+**，已安装并配置可用模型的 DeepSeek Harness **0.2.1-alpha.1**。
-- 在 DSH 中使用 **native 工具模式**；网页测试还需要专用 Playwright MCP 和匹配的 Chromium。
+- 在 DSH 中使用 **native 工具模式**；网页测试选择本机专用 Playwright MCP 或远程 RunBridge 浏览器。
 - 仅做接口测试时无需安装浏览器；源码开发需要 pnpm **11.7.0**。
 
 宿主安装按 DSH 自身文档完成，插件和浏览器工具的具体配置见[安装与运维](doc/deployment/安装与运维.md#配置)。
 
-远程或虚拟机浏览器可使用 **RunBridge Hub/Node 0.5.0**；配置与持续画面见[远程浏览器指南](doc/user-guide/RunBridge远程浏览器与持续预览.md)。
+远程或虚拟机浏览器使用 **RunBridge Hub 0.5.1 / Node 0.5.0**；配置与持续画面见[远程浏览器指南](doc/user-guide/RunBridge远程浏览器与持续预览.md)。
 
 ### 2. 安装并启用插件
 
 在 DSH 插件管理页填写下面的仓库地址，安装后启用：
 
 ```text
-https://github.com/Pegasus-Yang/DSH-Test-Plugin.git#v0.12.0
+https://github.com/Pegasus-Yang/DSH-Test-Plugin.git#v0.12.1
 ```
 
 也可以使用独立 DSH CLI 安装：
 
 ```sh
-dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.12.0
+dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.12.1
 dsh web
 ```
 

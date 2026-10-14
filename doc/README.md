@@ -12,6 +12,7 @@ The English guides describe the current implementation. Historical design and ac
 
 - [RunBridge 远程浏览器与持续预览](user-guide/RunBridge远程浏览器与持续预览.md)：连接设置、虚拟机网络、用例执行、画面与恢复。
 - [远程执行与画面架构](architecture/RunBridge远程执行与画面.md) · [接入验收](project/RunBridge远程浏览器接入验收.md)。
+- [RunBridge 请求恢复兼容验收](project/RunBridge请求恢复兼容验收.md)：0.12.1 的原请求核对、失败会话恢复、确定未分配证据、旧结果保留及上传边界。
 
 - [CSV 参数文件使用手册](user-guide/CSV参数文件使用手册.md)：完整 GitLab 入门示例、模板占位符、引号和空值、多用例展开、工作区路径、审核运行与错误速查。
 - [GitLab 测试要求与本地调试](user-guide/GitLab测试要求与本地调试.md)：被测系统条件、账号权限、私有配置、Markdown/CSV、画面与录像、报告、本地改包调试和本轮项目清理；GitLab 部署引导官方文档。
@@ -64,7 +65,7 @@ The English guides describe the current implementation. Historical design and ac
 
 ## 设计与实施
 
-- [RunBridge MCP 远程浏览器对接](design/runbridge-mcp/README.md)：现有 12 个工具与 Playwright MCP 的差异、远程会话及可信采集适配、截图与持续画面路线、改动清单及分阶段验收；当前为待评审提案。
+- [RunBridge MCP 远程浏览器对接](design/runbridge-mcp/README.md)：以原 12 工具基线编写的历史提案，完整接入已在 0.12.0 实施；当前能力与修复结果以上方架构和验收记录为准。
 - [收尾约束与账本报告优化实施方案](design/收尾约束与账本报告优化实施方案.md)：已获批准，核心实现及优化指标验证完成；保留原方案及完整回归标准，实际结果和分轮复测边界见验收记录。
 - [运行实际步骤与手工用例导出实施方案](design/运行实际步骤与手工用例导出实施方案.md)：已获批准，纳入 0.11.0；运行时逐条保存操作说明及真实调用，编号展示、失败重试记录和 Markdown／JSON 手工用例导出。
 - [Browscreen视频录制与报告接入实施方案](design/Browscreen视频录制与报告接入实施方案.md)：正式 0.3.0 参数、独立录像开关、服务端采集、按实例归档、MP4 报告与 API 无媒体显示；方案已获用户批准，实施结果见当前架构和录像验收记录；原调研范围按历史保留。
