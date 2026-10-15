@@ -42,7 +42,7 @@ DSH Test Plugin 是 DeepSeek Harness（DSH）的原生测试插件。描述想�
 
 ### 1. 准备 DSH 与测试工具
 
-- Node.js **22.19+**，已安装并配置可用模型的 DeepSeek Harness **0.2.1-alpha.1**。
+- Node.js **22.19+**，已安装并配置可用模型的 DeepSeek Harness **0.2.1-alpha.3**。
 - 在 DSH 中使用 **native 工具模式**；网页测试选择本机专用 Playwright MCP 或远程 RunBridge 浏览器。
 - 仅做接口测试时无需安装浏览器；源码开发需要 pnpm **11.7.0**。
 
@@ -55,13 +55,13 @@ DSH Test Plugin 是 DeepSeek Harness（DSH）的原生测试插件。描述想�
 在 DSH 插件管理页填写下面的仓库地址，安装后启用：
 
 ```text
-https://github.com/Pegasus-Yang/DSH-Test-Plugin.git#v0.12.1
+https://github.com/Pegasus-Yang/DSH-Test-Plugin.git#v0.12.2
 ```
 
 也可以使用独立 DSH CLI 安装：
 
 ```sh
-dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.12.1
+dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.12.2
 dsh web
 ```
 

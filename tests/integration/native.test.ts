@@ -1566,24 +1566,50 @@ it.each([
   },
 );
 
-it("计划只输出文字时提醒原生提交，审核拒绝后不催促用户或自动执行", async () => {
-  const t = setup();
-  await t.manager.start(t.agent, "点赞不为0", undefined, true);
-  await t.emit("agent/turn-stopping", { agent: t.agent });
-  expect(t.agent.steer).toHaveBeenCalledOnce();
-  await t.call("test_submit_plan", reviewPlan());
-  const run = t.manager.sessions.get("origin")!;
-  t.definitions.set("exit_plan_mode", {
-    execute: () => {
-      throw new Error("要求修改");
-    },
-  });
-  await t.call("exit_plan_mode", { plan: run.state().review_markdown });
-  t.agent.steer.mockClear();
-  await t.emit("agent/turn-stopping", { agent: t.agent });
-  expect(t.agent.steer).not.toHaveBeenCalled();
-  expect(run.run.instances).toEqual([]);
-});
+it.each(["要求修改", "关闭审核"])(
+  "计划只输出文字时提醒原生提交，%s 后不催促用户或自动执行",
+  async (outcome) => {
+    const t = setup();
+    await t.manager.start(t.agent, "点赞不为0", undefined, true);
+    await t.emit("agent/turn-stopping", { agent: t.agent });
+    expect(t.agent.steer).toHaveBeenCalledOnce();
+    await t.call("test_submit_plan", reviewPlan());
+    const run = t.manager.sessions.get("origin")!;
+    t.definitions.set("exit_plan_mode", {
+      execute: (_: unknown, exec: any) => {
+        if (outcome === "关闭审核") {
+          exec.concludeTurn();
+          return { approved: false };
+        }
+        throw new Error("要求修改");
+      },
+    });
+    const result = await t.call("exit_plan_mode", {
+      plan: run.state().review_markdown,
+    });
+    if (outcome === "关闭审核") {
+      expect(result.isError).toBe(false);
+      expect(result.concludesTurn).toBe(true);
+    }
+    t.agent.steer.mockClear();
+    await t.emit("agent/turn-stopping", { agent: t.agent });
+    expect(t.agent.steer).not.toHaveBeenCalled();
+    expect(run.run.instances).toEqual([]);
+    expect(existsSync(join(run.recorder.directory, "plan.json"))).toBe(false);
+    await t.end();
+    expect(run.closed).toBe(false);
+    expect(run.state().phase).toBe("reviewing");
+    const revised = reviewPlan();
+    revised.name = "用户反馈后的计划";
+    const submitted = await t.call("test_submit_plan", revised);
+    t.definitions.set("exit_plan_mode", {
+      execute: () => ({ approved: true }),
+    });
+    await t.call("exit_plan_mode", { plan: submitted.value.review_markdown });
+    expect(run.state().phase).toBe("executing");
+    expect(run.run.plan.name).toBe("用户反馈后的计划");
+  },
+);
 
 it("文字计划只冻结短句，运行时按采集方式登记输出；缺少检查不能通过", async () => {
   const t = setup();
@@ -2416,7 +2442,7 @@ it("远程后端在可信初始化中申请资源，旧 MCP 和直接生命周�
   await t.call("test_finish");
   expect(test.run.instances[0].status).toBe("PASS");
   expect(test.run.instances[0].resources.browser_context?.state).toBe("absent");
-  expect(test.run.manifest.plugin_version).toBe("0.12.1");
+  expect(test.run.manifest.plugin_version).toBe("0.12.2");
   expect(JSON.stringify(test.state())).not.toContain("access.json");
 });
 

@@ -2,7 +2,7 @@
 
 [项目首页](../../README.md) · [文档导航](../README.md) · [GitLab 用例操作指南](GitLab复杂用例.md)
 
-本文适用于插件 0.12.1，说明使用 GitLab 作为被测系统时需要满足的条件，以及本插件的配置、用例运行和本地调试方法。
+本文适用于插件 0.12.2，说明使用 GitLab 作为被测系统时需要满足的条件，以及本插件的配置、用例运行和本地调试方法。
 
 GitLab 的安装、启动、配置及服务维护请查阅 [GitLab 官方 Docker 文档](https://docs.gitlab.com/install/docker/)。本项目不提供 GitLab 部署教程或部署模板。准备好可用的 GitLab 后，再按本文配置测试账号和用例。
 
@@ -55,7 +55,7 @@ GitLab 的安装、启动、配置及服务维护请查阅 [GitLab 官方 Docker
 
 ## 3. 准备插件与数据脚本
 
-需要 Node.js **22.19+**、pnpm **11.7.0**，以及已配置可用模型并启用本插件的 DSH **0.2.1-alpha.1**。UI 用例需要专用 Playwright MCP；Browscreen 只在需要预览或录像时安装。
+需要 Node.js **22.19+**、pnpm **11.7.0**，以及已配置可用模型并启用本插件的 DSH **0.2.1-alpha.3**。UI 用例需要专用 Playwright MCP；Browscreen 只在需要预览或录像时安装。
 
 在终端克隆包含当前用例的插件源码，进入根目录：
 

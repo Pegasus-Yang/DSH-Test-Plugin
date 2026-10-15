@@ -291,7 +291,7 @@ export class NativeTest {
             incomplete: false,
             resource_quarantined: false,
             manifest: {
-                plugin_version: "0.12.1",
+                plugin_version: "0.12.2",
                 plan_review: review,
                 execution: "native-conversation",
                 origin_session_id: agent.id,
@@ -914,12 +914,10 @@ export class NativeTest {
             this.delegatedFailures.delete(exec.callId);
             if (exec.callId === this.reviewCall) {
                 this.reviewCall = undefined;
-                this.reviewDismissed = result.isError;
-                if (!result.isError &&
-                    result.value?.approved === true &&
-                    !this.cancelled &&
-                    !this.closed &&
-                    this.draft) {
+                const approved = !result.isError &&
+                    result.value?.approved === true;
+                this.reviewDismissed = !approved;
+                if (approved && !this.cancelled && !this.closed && this.draft) {
                     this.recorder.event("plan_approved", { call_id: exec.callId });
                     this.freeze(this.draft);
                 }

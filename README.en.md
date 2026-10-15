@@ -42,7 +42,7 @@ See the [visual tour](doc/user-guide/使用说明.en.md#visual-tour) for more pl
 
 ### 1. Prepare DSH and testing tools
 
-- Node.js **22.19+**, and DeepSeek Harness **0.2.1-alpha.1** with a working model configured.
+- Node.js **22.19+**, and DeepSeek Harness **0.2.1-alpha.3** with a working model configured.
 - DSH **native tool mode**; browser tests use a dedicated local Playwright MCP or a remote RunBridge browser.
 - API-only tests need no browser. Source development requires pnpm **11.7.0**.
 
@@ -55,13 +55,13 @@ For remote or VM browsers, use **RunBridge Hub 0.5.1 / Node 0.5.0**. See the [re
 Enter this repository address in DSH's plugin manager, then enable the plugin:
 
 ```text
-https://github.com/Pegasus-Yang/DSH-Test-Plugin.git#v0.12.1
+https://github.com/Pegasus-Yang/DSH-Test-Plugin.git#v0.12.2
 ```
 
 Alternatively, install with the standalone DSH CLI:
 
 ```sh
-dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.12.1
+dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.12.2
 dsh web
 ```
 
