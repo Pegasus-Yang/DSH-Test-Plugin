@@ -2,7 +2,7 @@
 
 [项目首页](../../README.md) · [文档导航](../README.md) · [GitLab 用例操作指南](GitLab复杂用例.md)
 
-本文适用于插件 0.11.2，说明使用 GitLab 作为被测系统时需要满足的条件，以及本插件的配置、用例运行和本地调试方法。
+本文适用于插件 0.12.1，说明使用 GitLab 作为被测系统时需要满足的条件，以及本插件的配置、用例运行和本地调试方法。
 
 GitLab 的安装、启动、配置及服务维护请查阅 [GitLab 官方 Docker 文档](https://docs.gitlab.com/install/docker/)。本项目不提供 GitLab 部署教程或部署模板。准备好可用的 GitLab 后，再按本文配置测试账号和用例。
 
