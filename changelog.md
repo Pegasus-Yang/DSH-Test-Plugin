@@ -6,6 +6,14 @@
 
 暂无。
 
+## [0.12.3](https://github.com/Pegasus-Yang/DSH-Test-Plugin/tree/v0.12.3) — 2026-10-15
+
+- 补齐公开 SDK 运行时导入所需的开发 peer 依赖和锁文件，修复干净安装时缺少 `dsh-scope` 等包导致 7 个单元测试套件无法加载的问题。
+- CI 在重建后直接导入 `dist/index.js`，同时验证 SDK 依赖可解析及构建入口可加载。
+- 取消等待的集成测试改用受控时钟，在宽限期结束前验证仍等待在途工具、结算后才开始清理，消除繁忙环境下的调度竞态；生产超时设置保持原值。
+
+Linux x86_64 的冻结安装、构建一致性、类型、300 项单元和 63 项集成回归及解包检查通过，详见 [CI 公开依赖安装验收](doc/project/CI公开依赖安装验收.md)。
+
 ## [0.12.2](https://github.com/Pegasus-Yang/DSH-Test-Plugin/tree/v0.12.2) — 2026-10-15
 
 - 适配 DSH 0.2.1-alpha.3，升级公开 SDK、Cordis、Cosmokit、Schemastery 开发依赖与锁文件，沿用宿主原生模型、工具、审批和客户端扩展点。

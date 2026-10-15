@@ -6,7 +6,7 @@
 
 ## 准备服务
 
-需要插件 **0.12.2**、公开 DSH **0.2.1-alpha.3**、Node.js **22.19+**，以及 RunBridge Hub **0.5.1**、Node **0.5.0**。Hub 安装 `mcp` extra，开启 `/mcp` 并配置允许的 Host；Node 配置受管理 Chromium 和官方 Playwright **1.63.0** 运行时。Hub 的 Python Playwright 与 Node 的运行时版本须匹配。旧 Hub 0.5.0 仍可执行常规用例与画面预览，但缺少本次完整请求恢复和满额上传修复。
+需要插件 **0.12.3**、公开 DSH **0.2.1-alpha.3**、Node.js **22.19+**，以及 RunBridge Hub **0.5.1**、Node **0.5.0**。Hub 安装 `mcp` extra，开启 `/mcp` 并配置允许的 Host；Node 配置受管理 Chromium 和官方 Playwright **1.63.0** 运行时。Hub 的 Python Playwright 与 Node 的运行时版本须匹配。旧 Hub 0.5.0 仍可执行常规用例与画面预览，但缺少本次完整请求恢复和满额上传修复。
 
 先按服务项目的 `doc/user-guide/MCP浏览器接入.md`（Hub）和 `doc/user-guide/MCP对接准备.md`（Node）完成登记、运行和许可签发。确认节点 ONLINE、目标资源 READY/FREE，能力中 `host.managed_visual=cdp-png`。这表示实际探测支持采集；画面仍须等到用例启动并产生首帧才显示。
 

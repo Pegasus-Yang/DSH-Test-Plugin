@@ -18,11 +18,12 @@ jobs:
           cache: pnpm
       - name: 从公开依赖安装
         run: pnpm install --frozen-lockfile
-      - name: 检查 Git 安装入口及源码与产物一致性
+      - name: 检查 Git 安装入口、SDK 导入及源码与产物一致性
         run: |
           pnpm verify:package
           pnpm build
           git diff --exit-code -- dist
+          node --input-type=module -e "await import('./dist/index.js')"
       - name: 类型与行为回归
         run: |
           pnpm typecheck

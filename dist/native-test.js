@@ -291,7 +291,7 @@ export class NativeTest {
             incomplete: false,
             resource_quarantined: false,
             manifest: {
-                plugin_version: "0.12.2",
+                plugin_version: "0.12.3",
                 plan_review: review,
                 execution: "native-conversation",
                 origin_session_id: agent.id,

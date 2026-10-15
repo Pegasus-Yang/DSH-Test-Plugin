@@ -10,6 +10,7 @@ The English guides describe the current implementation. Historical design and ac
 
 ## 当前版本
 
+- [CI 公开依赖安装验收](project/CI公开依赖安装验收.md)：0.12.3 的缺包复现、公开依赖补齐与 Linux 干净 CI 验证。
 - [DSH 宿主升级适配验收](project/DSH宿主升级适配验收.md)：0.12.2 对 DSH 0.2.1-alpha.3 的 SDK、原生审核、构建与运行兼容验证。
 - [RunBridge 远程浏览器与持续预览](user-guide/RunBridge远程浏览器与持续预览.md)：连接设置、虚拟机网络、用例执行、画面与恢复。
 - [远程执行与画面架构](architecture/RunBridge远程执行与画面.md) · [接入验收](project/RunBridge远程浏览器接入验收.md)。
@@ -34,7 +35,7 @@ The English guides describe the current implementation. Historical design and ac
 
 - [0.10.0 历史版本发布验收](project/0.10.0版本发布验收.md)：版本与运行记录同步、公开 SDK 重建、安装包和远端标签核对。
 
-- [浏览器录像与报告](user-guide/浏览器录像与报告.md)：0.12.2 的依赖安装、独立开关、视频回看、下载、离线保存和接口无媒体规则。
+- [浏览器录像与报告](user-guide/浏览器录像与报告.md)：0.12.3 的依赖安装、独立开关、视频回看、下载、离线保存和接口无媒体规则。
 - [浏览器录像与报告验收](project/浏览器录像与报告验收.md)：正式 PyPI 0.3.0、公开 npm DSH、缺依赖、混合实例及播放验收。
 
 - [命令精简与单预览浮窗验收](project/命令精简与单预览浮窗验收.md)：在 0.9.2 基线上验收、随 0.10.0 发布的四个命令、界面报告与处置、折叠箭头和单浮窗切换。
@@ -43,10 +44,10 @@ The English guides describe the current implementation. Historical design and ac
 - [版本变更记录](../changelog.md)：各版本功能、修复和文档变化，以及尚未打新标签的主分支更新。
 - [GitHub安装与卸载验收](project/GitHub安装与卸载验收.md)：0.9.1 公开 SDK 构建、独立 npm 宿主、Git 安装及真实页面执行、停用和卸载验证。
 - [Browscreen命令接入验收](project/Browscreen命令接入验收.md)：0.9.0 PyPI 包、174 项回归、真实设置、接口与浏览器浮窗验证，以及部署边界。
-- [执行步骤与进度显示](user-guide/执行步骤与进度显示.md)：0.12.2 的当前步骤焦点、完整列表、折叠、长文字及多实例编号。
+- [执行步骤与进度显示](user-guide/执行步骤与进度显示.md)：0.12.3 的当前步骤焦点、完整列表、折叠、长文字及多实例编号。
 - [步骤进度界面验收](project/步骤进度界面验收.md)：0.8.3 所选稿对照、100步模拟列表、长文字、窄窗口与真实安装的验证范围。
 - [常见问题速查与处理](deployment/常见问题速查与处理.md)：按现象定位环境残留、释放失败、预览、配置、构建、安装和报告问题，附处理步骤与恢复标准。
-- [测试环境卡住怎么办](user-guide/测试环境卡住怎么办.md)：0.12.2 的按需提示、设置页释放、超时提醒和失败处置。
+- [测试环境卡住怎么办](user-guide/测试环境卡住怎么办.md)：0.12.3 的按需提示、设置页释放、超时提醒和失败处置。
 - [设置释放与按需提示验收](project/设置释放与按需提示验收.md)：0.8.2 普通对话不显示隔离、命令错误按会话提示、设置页确认及真实浏览器释放。
 - [隔离提示与确认释放验收](project/隔离提示与确认释放验收.md)：0.8.1 历史验收，常驻提示已在 0.8.2 改为按需提示；保留原生恢复与失败保留行为。
 - [浏览器实时预览一步一步配置](user-guide/浏览器实时预览一步一步配置.md)：当前 Browscreen 0.3.x 本机命令安装、预览与录像开关、版本检测、逐项填写、运行命令、关闭与排错。

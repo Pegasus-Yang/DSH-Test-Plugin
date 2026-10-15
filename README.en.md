@@ -55,13 +55,13 @@ For remote or VM browsers, use **RunBridge Hub 0.5.1 / Node 0.5.0**. See the [re
 Enter this repository address in DSH's plugin manager, then enable the plugin:
 
 ```text
-https://github.com/Pegasus-Yang/DSH-Test-Plugin.git#v0.12.2
+https://github.com/Pegasus-Yang/DSH-Test-Plugin.git#v0.12.3
 ```
 
 Alternatively, install with the standalone DSH CLI:
 
 ```sh
-dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.12.2
+dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.12.3
 dsh web
 ```
 

@@ -55,13 +55,13 @@ DSH Test Plugin 是 DeepSeek Harness（DSH）的原生测试插件。描述想�
 在 DSH 插件管理页填写下面的仓库地址，安装后启用：
 
 ```text
-https://github.com/Pegasus-Yang/DSH-Test-Plugin.git#v0.12.2
+https://github.com/Pegasus-Yang/DSH-Test-Plugin.git#v0.12.3
 ```
 
 也可以使用独立 DSH CLI 安装：
 
 ```sh
-dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.12.2
+dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.12.3
 dsh web
 ```
 

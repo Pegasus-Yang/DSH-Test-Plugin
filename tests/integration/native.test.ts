@@ -9,7 +9,10 @@ import { projectActualCase } from "../../src/actual-operations.js";
 import { ManualSource } from "../../src/manual-source.js";
 
 const cleanups: (() => void)[] = [];
-afterEach(() => cleanups.splice(0).forEach((f) => f()));
+afterEach(() => {
+  cleanups.splice(0).forEach((f) => f());
+  vi.useRealTimers();
+});
 // 生命周期替身只驱动官方公开接口；真实宿主与模型在网页验收中单独验证。
 function setup(value = 3, preparePreview?: () => Promise<void>) {
   const root = mkdtempSync(join(tmpdir(), "native-test-"));
@@ -911,6 +914,8 @@ it("允许正常追问并等待同一会话补充；其他会话不继承测试�
 });
 
 it("停止先等待原生在途结算，再在同一会话运行预授权清理并保留取消状态", async () => {
+  // 由受控时钟推进取消宽限期，避免调度负载把正常结算误判为超时。
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   const t = setup();
   await t.manager.start(t.agent, "点赞不为0", sample());
   await t.step();
@@ -923,10 +928,13 @@ it("停止先等待原生在途结算，再在同一会话运行预授权清理�
   );
   const run = t.manager.sessions.get("origin")!;
   run.stop();
-  await t.end(true);
+  const stopping = t.end(true);
+  await vi.advanceTimersByTimeAsync(t.manager.config.cancelGraceMs - 1);
+  await stopping;
   expect(t.followups).toHaveLength(1);
+  expect(run.closed).toBe(false);
   drain();
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await vi.advanceTimersByTimeAsync(0);
   expect(t.followups).toHaveLength(2);
   expect(t.followups[1].source.kind).toBe("plugin:test");
   expect(
@@ -941,7 +949,9 @@ it("停止先等待原生在途结算，再在同一会话运行预授权清理�
   await t.step();
   expect((await t.call("test_finish")).value.statistics.CANCELLED).toBe(1);
   t.agent.whenIdle.mockResolvedValue(undefined);
-  await t.end();
+  const finished = t.end();
+  await vi.advanceTimersByTimeAsync(0);
+  await finished;
   expect(run.closed).toBe(true);
   expect(run.run.instances[0].cleanup_session_id).toBe("origin");
 });
@@ -2442,7 +2452,7 @@ it("远程后端在可信初始化中申请资源，旧 MCP 和直接生命周�
   await t.call("test_finish");
   expect(test.run.instances[0].status).toBe("PASS");
   expect(test.run.instances[0].resources.browser_context?.state).toBe("absent");
-  expect(test.run.manifest.plugin_version).toBe("0.12.2");
+  expect(test.run.manifest.plugin_version).toBe("0.12.3");
   expect(JSON.stringify(test.state())).not.toContain("access.json");
 });
 
