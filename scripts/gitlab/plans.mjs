@@ -430,9 +430,9 @@ export function createPlans(config, state) {
       [
         dom(
           "preview_draft",
-          "打开绑定的新建 Issue 表单，使用纯文本 Markdown 编辑模式（需要时先切换），填写标题和绑定的 Markdown 原文，点击 Preview，等待预览渲染完成。先观察实际 DOM，确认匹配的是预览正文中已显示的粗体段落，再用一个已验证的精确选择器采集。不能使用逗号并列多个候选选择器、~ * 通配或全页面的 main strong 兜底，首个匹配可能是空或隐藏节点。不要采集编辑器输入框、整个容器、工具栏、隐藏菜单或帮助文字。不要提交表单",
+          "打开绑定的工作项列表，点击页面原生 New item 入口，在新建弹窗中选择 Issue；不能直接导航到新建页。使用纯文本 Markdown 编辑模式（需要时先切换），填写标题和绑定的 Markdown 原文，点击 Preview，等待预览渲染完成。先观察实际 DOM，确认匹配的是预览正文中已显示的粗体段落，再用一个已验证的精确选择器采集。不能使用逗号并列多个候选选择器、~ * 通配或全页面的 main strong 兜底，首个匹配可能是空或隐藏节点。不要采集编辑器输入框、整个容器、工具栏、隐藏菜单或帮助文字。不要提交表单",
           {
-            url: listUrl + "/new?type=issue",
+            url: listUrl,
             title: draft,
             description: "**DSH 草稿预览**",
           },
@@ -446,7 +446,7 @@ export function createPlans(config, state) {
         ),
         browser(
           "cancel_draft",
-          "点击页面 Cancel 取消按钮，若弹出丢弃确认则确认；回到 Issue 列表，不能点击创建",
+          "点击新建弹窗的 Cancel 取消按钮，若弹出丢弃确认则确认；直接检查原列表路径，不能额外导航、后退、刷新或点击创建",
           { url: listUrl },
         ),
         check(

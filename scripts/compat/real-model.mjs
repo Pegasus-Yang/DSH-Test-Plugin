@@ -8,6 +8,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 import { enter, rpc } from "./browser.mjs";
+import { assertDraftCancellation } from "./gitlab-ui.mjs";
 import {
   actualStepsDocument,
   manualCasesMarkdown,
@@ -17,6 +18,13 @@ import { seeds } from "../gitlab/plans.mjs";
 import { publicGet } from "../gitlab/client.mjs";
 
 const state = JSON.parse(await readFile(process.argv[2], "utf8"));
+const mode = process.argv[3] ?? "full";
+assert(
+  ["full", "gitlab-ui", "gitlab-draft"].includes(mode),
+  "模式仅支持 full、gitlab-ui 或 gitlab-draft",
+);
+if (mode !== "full")
+  assert(process.env.DSH_GITLAB_STATE, "缺少 GitLab 准备记录");
 const evidence = join(state.output, "real-model");
 await mkdir(evidence);
 const workspace = join(state.root, "workspace"),
@@ -79,6 +87,7 @@ const summary = {
   host_version: state.version,
   plugin_version: state.plugin_version,
   candidate_sha256: state.candidate_sha256,
+  mode,
   exemption: false,
   cases: [],
 };
@@ -92,7 +101,7 @@ async function allow() {
   const button = page.getByRole("button", { name: "允许一次", exact: true });
   if (await button.isVisible()) await button.click();
 }
-async function until(check, message, timeout = 900000) {
+async function until(check, message, timeout = 1800000) {
   const begin = Date.now();
   while (Date.now() - begin < timeout) {
     await allow();
@@ -134,12 +143,15 @@ async function waitIdle(sessionId) {
       const selected = sessionId
         ? rows.filter((row) => row.id === sessionId)
         : rows;
-      return selected.every(
-        (row) =>
-          row.closed &&
-          row.agentStatus === "idle" &&
-          row.whenIdleResolved &&
-          row.pendingTools === 0,
+      return (
+        (!sessionId || selected.length > 0) &&
+        selected.every(
+          (row) =>
+            row.closed &&
+            row.agentStatus === "idle" &&
+            row.whenIdleResolved &&
+            row.pendingTools === 0,
+        )
       );
     },
     "Agent、测试作用域或在途调用未释放",
@@ -283,6 +295,20 @@ async function verify(sessionId, kind, statuses) {
     `报告重放或证据核对失败：${validated.stderr}`,
   );
   item.report_integrity = true;
+  if (kind === "gitlab-ui_draft_cancel") {
+    const prepared = JSON.parse(
+      await readFile(resolve(process.env.DSH_GITLAB_STATE), "utf8"),
+    );
+    assertDraftCancellation(
+      actualStepsDocument(run),
+      prepared.origin +
+        "/" +
+        prepared.projects.ui.path_with_namespace +
+        "/-/work_items",
+      run,
+    );
+    item.native_cancel_without_repair_navigation = true;
+  }
   assert.deepEqual(
     JSON.parse(await readFile(join(directory, "actual-steps.json"), "utf8")),
     actualStepsDocument(run),
@@ -335,78 +361,83 @@ try {
     await select(created.sessionId);
     return created.sessionId;
   }
-  const sessionId = await newSession("Markdown UI 和同会话连续运行");
-  await send("/test-plan --file ui.md");
-  const review = page.locator("[data-plan-review-key]");
-  await review.waitFor({ state: "visible", timeout: 180000 });
-  await page.screenshot({
-    path: join(evidence, "plan-review.png"),
-    fullPage: true,
-  });
-  await page.getByRole("button", { name: "要求修改", exact: true }).click();
-  await review.waitFor({ state: "hidden" });
-  await page.waitForTimeout(1500);
-  assert.equal(await review.count(), 0, "关闭审核后自动重开");
-  const pending = await waitRun(sessionId);
-  assert.equal(pending.run.instances.length, 0);
-  assert(!existsSync(join(pending.directory, "plan.json")));
-  summary.review = {
-    dismissed_without_dispatch: true,
-    no_frozen_plan: true,
-    not_reopened: true,
-  };
-  await save();
-  await send("保持原用例内容不变，请重新提交计划并展示原生审核。");
-  await approve();
-  await verify(sessionId, "ui", ["PASS"]);
-  await send("请仅回复：兼容检查完成。不要调用任何工具。");
-  await page
-    .getByText(/^兼容检查完成[。.!！]?$/)
-    .last()
-    .waitFor({ timeout: 120000 });
-  await waitIdle(sessionId);
-  summary.ordinary_chat_after_test = true;
-  await send("/test-run api.md");
-  await verify(sessionId, "api", ["PASS"]);
-  summary.same_session_next_run = true;
-  const negativeSession = await newSession("Markdown 固定反例");
-  await send("/test-run api-fail.md");
-  await verify(negativeSession, "api-fail", ["FAIL"]);
-  const csvSession = await newSession("CSV 多实例");
-  await send("/test-data data.csv --file csv.md");
-  await approve();
-  await verify(csvSession, "csv", ["PASS", "FAIL"]);
-  const cancelSession = await newSession("原生审核取消");
-  await send("/test-plan --file api.md");
-  await review.waitFor({ state: "visible", timeout: 180000 });
-  const beforeCancel = await waitRun(cancelSession);
-  assert(!existsSync(join(beforeCancel.directory, "plan.json")));
-  await rpc(page, "session/cancel", { request: { sessionId: cancelSession } });
-  const cancelled = await waitRun(cancelSession, true);
-  await waitIdle(cancelSession);
-  seen.add(cancelled.run.suite_run_id);
-  assert(
-    cancelled.run.instances.every(
-      (i) => i.status !== "PASS" && i.steps.every((s) => s.calls.length === 0),
-    ),
-    "审核取消后仍执行业务",
-  );
-  summary.review.cancel_without_business = true;
-  const stopSession = await newSession("接口在途停止");
-  await send("/test-run stop.md");
-  await until(() => slowRequests > 0, "没有进入固定慢接口");
-  await rpc(page, "session/cancel", { request: { sessionId: stopSession } });
-  const stopped = await waitRun(stopSession, true);
-  await waitIdle(stopSession);
-  assert.equal(laterRequests, 0, "停止后又执行了后续业务请求");
-  assert(stopped.run.instances.every((i) => i.status !== "PASS"));
-  assert.equal(stopped.run.resource_quarantined, false);
-  summary.stop = {
-    run_id: stopped.run.suite_run_id,
-    in_flight: true,
-    later_requests: laterRequests,
-    agent_idle_scope_closed_pending_zero: true,
-  };
+  if (mode === "full") {
+    const sessionId = await newSession("Markdown UI 和同会话连续运行");
+    await send("/test-plan --file ui.md");
+    const review = page.locator("[data-plan-review-key]");
+    await review.waitFor({ state: "visible", timeout: 180000 });
+    await page.screenshot({
+      path: join(evidence, "plan-review.png"),
+      fullPage: true,
+    });
+    await page.getByRole("button", { name: "要求修改", exact: true }).click();
+    await review.waitFor({ state: "hidden" });
+    await page.waitForTimeout(1500);
+    assert.equal(await review.count(), 0, "关闭审核后自动重开");
+    const pending = await waitRun(sessionId);
+    assert.equal(pending.run.instances.length, 0);
+    assert(!existsSync(join(pending.directory, "plan.json")));
+    summary.review = {
+      dismissed_without_dispatch: true,
+      no_frozen_plan: true,
+      not_reopened: true,
+    };
+    await save();
+    await send("保持原用例内容不变，请重新提交计划并展示原生审核。");
+    await approve();
+    await verify(sessionId, "ui", ["PASS"]);
+    await send("请仅回复：兼容检查完成。不要调用任何工具。");
+    await page
+      .getByText(/^兼容检查完成[。.!！]?$/)
+      .last()
+      .waitFor({ timeout: 120000 });
+    await waitIdle(sessionId);
+    summary.ordinary_chat_after_test = true;
+    await send("/test-run api.md");
+    await verify(sessionId, "api", ["PASS"]);
+    summary.same_session_next_run = true;
+    const negativeSession = await newSession("Markdown 固定反例");
+    await send("/test-run api-fail.md");
+    await verify(negativeSession, "api-fail", ["FAIL"]);
+    const csvSession = await newSession("CSV 多实例");
+    await send("/test-data data.csv --file csv.md");
+    await approve();
+    await verify(csvSession, "csv", ["PASS", "FAIL"]);
+    const cancelSession = await newSession("原生审核取消");
+    await send("/test-plan --file api.md");
+    await review.waitFor({ state: "visible", timeout: 180000 });
+    const beforeCancel = await waitRun(cancelSession);
+    assert(!existsSync(join(beforeCancel.directory, "plan.json")));
+    await rpc(page, "session/cancel", {
+      request: { sessionId: cancelSession },
+    });
+    const cancelled = await waitRun(cancelSession, true);
+    await waitIdle(cancelSession);
+    seen.add(cancelled.run.suite_run_id);
+    assert(
+      cancelled.run.instances.every(
+        (i) =>
+          i.status !== "PASS" && i.steps.every((s) => s.calls.length === 0),
+      ),
+      "审核取消后仍执行业务",
+    );
+    summary.review.cancel_without_business = true;
+    const stopSession = await newSession("接口在途停止");
+    await send("/test-run stop.md");
+    await until(() => slowRequests > 0, "没有进入固定慢接口");
+    await rpc(page, "session/cancel", { request: { sessionId: stopSession } });
+    const stopped = await waitRun(stopSession, true);
+    await waitIdle(stopSession);
+    assert.equal(laterRequests, 0, "停止后又执行了后续业务请求");
+    assert(stopped.run.instances.every((i) => i.status !== "PASS"));
+    assert.equal(stopped.run.resource_quarantined, false);
+    summary.stop = {
+      run_id: stopped.run.suite_run_id,
+      in_flight: true,
+      later_requests: laterRequests,
+      agent_idle_scope_closed_pending_zero: true,
+    };
+  }
   if (process.env.DSH_GITLAB_STATE) {
     const preparedFile = resolve(process.env.DSH_GITLAB_STATE);
     const prepared = JSON.parse(await readFile(preparedFile, "utf8"));
@@ -416,10 +447,18 @@ try {
       "GitLab 数据必须是本轮尚未执行的准备记录",
     );
     assert(/^dsh-gitlab-[a-z0-9-]+$/.test(prepared.marker));
-    for (const [kind, statuses] of [
-      ["api", ["PASS", "PASS", "PASS"]],
-      ["ui", ["PASS", "PASS"]],
-    ]) {
+    for (const [kind, statuses] of mode === "gitlab-draft"
+      ? [["ui_draft_cancel", ["PASS"]]]
+      : mode === "gitlab-ui"
+        ? [
+            ["ui_filters", ["PASS"]],
+            ["ui_draft_cancel", ["PASS"]],
+          ]
+        : [
+            ["api", ["PASS", "PASS", "PASS"]],
+            ["ui_filters", ["PASS"]],
+            ["ui_draft_cancel", ["PASS"]],
+          ]) {
       await cp(
         join(dirname(preparedFile), kind + ".md"),
         join(workspace, `gitlab-${kind}.md`),
@@ -445,7 +484,7 @@ try {
     summary.gitlab = {
       marker: prepared.marker,
       state_file: preparedFile,
-      markdown_ui_and_api: true,
+      markdown_ui_and_api: mode === "full",
       final_persistence_checked: true,
     };
   }

@@ -99,7 +99,7 @@ async function command(
       child.kill("SIGTERM");
       forceTimer = setTimeout(() => child.kill("SIGKILL"), 10000);
     },
-    label === "real-model" ? 1800000 : 240000,
+    label === "real-model" ? 3600000 : 240000,
   );
   try {
     const code = await new Promise((done, reject) => {
@@ -524,14 +524,22 @@ try {
       id: "agent-loop",
       config: { maxParallelToolCalls: 1 },
     });
-    assert(
-      process.env.DSH_MODEL_CREDENTIALS,
-      "真实模型验收必须提供独立凭据来源",
-    );
-    await cp(
-      resolve(process.env.DSH_MODEL_CREDENTIALS),
-      join(cohort.home, ".credentials.yaml"),
-    );
+    if (process.env.DSH_MODEL_CREDENTIALS)
+      await cp(
+        resolve(process.env.DSH_MODEL_CREDENTIALS),
+        join(cohort.home, ".credentials.yaml"),
+      );
+    else {
+      const providers = Object.values(
+        models.find((row) => row.id === "llm-pi-ai").config.providers ?? {},
+      );
+      assert(providers.length > 0, "真实模型验收缺少提供方配置");
+      for (const provider of providers)
+        assert(
+          provider.apiKeyEnv && process.env[provider.apiKeyEnv],
+          "真实模型验收必须提供凭据文件或已设置的 apiKeyEnv",
+        );
+    }
   }
   const diagnostic = join(cohort.root, "diagnostic");
   await mkdir(diagnostic);

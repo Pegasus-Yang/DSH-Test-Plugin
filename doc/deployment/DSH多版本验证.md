@@ -2,9 +2,9 @@
 
 [安装与运维](安装与运维.md) · [方案](../design/DSH多版本兼容方案.md) · [0.13.0 验收](../project/0.13.0多版本兼容验收.md)
 
-插件 0.13.0 候选的同一个包声明支持 DSH `0.2.1-alpha.1`、`0.2.1-alpha.2`、`0.2.1-alpha.3`。开发与构建 SDK 固定 alpha.3。Node.js 最低 22.19，Web、native 工具模式、单批并发 1；其他 alpha、rc、正式版不自动纳入。
+插件 0.13.0 的同一个包声明支持 DSH `0.2.1-alpha.1`、`0.2.1-alpha.2`、`0.2.1-alpha.3`。开发与构建 SDK 固定 alpha.3。Node.js 最低 22.19，Web、native 工具模式、单批并发 1；其他 alpha、rc、正式版不自动纳入。
 
-当前必要真实验收受模型额度限制，尚未创建正式标签；已通过项目和剩余工作见[验收状态](../project/0.13.0多版本兼容验收.md)。
+实际交付和各层验证结果见[验收记录](../project/0.13.0多版本兼容验收.md)。正式附注标签在必要门禁全部通过后创建，再由用户审核推送。
 
 ## 维护支持集合
 
@@ -47,7 +47,7 @@ pnpm compat:host 0.2.1-alpha.3 artifacts/package/dsh-test-plugin.tgz /绝对路�
 
 ## 受控真实模型与 GitLab
 
-扩展支持集合和正式交付前，给三个宿主的同一命令提供本机配置。模型 patch 只读取 `llm-pi-ai`、`agent-default-model`；凭据复制到独立 home，均不进入包和 Git：
+扩展支持集合和正式交付前，给三个宿主的同一命令提供本机配置。模型 patch 只读取 `llm-pi-ai`、`agent-default-model`；凭据文件按需复制到独立 home，也可由提供方的 `apiKeyEnv` 从进程环境读取，均不进入包和 Git：
 
 ```sh
 export DSH_MODEL_PATCH=/绝对路径/不提交的模型配置.yml
@@ -55,9 +55,17 @@ export DSH_MODEL_CREDENTIALS=/绝对路径/不提交的.credentials.yaml
 # 使用上面的同一 tgz 和摘要，输出到新的三个目录。
 ```
 
-受控模型验收统一使用步骤 600000 ms、收尾 180000 ms、取消宽限 500 ms，容纳多轮模型响应时延；生产默认预算不变，超时仍保留错误和隔离，不改判通过。驱动额外启动本地固定页面／JSON 夹具，使用真实模型和 Playwright MCP 完成 Markdown UI、关闭审核后修改与重新批准、同会话接口正向、新会话固定反例、CSV 多实例、普通聊天恢复、审核取消及接口在途停止。实际值由夹具固定为 101；反例和 CSV 的错误预期固定为 100，不根据响应改写预期。每轮检查认证 HTML、账本重放、证据 SHA、原会话清理；继续前等待实际 Agent 空闲、测试作用域关闭、在途工具归零。只读探针仅加载在独立验收 profile，不进入发行包。
+使用环境变量凭据时不设置 `DSH_MODEL_CREDENTIALS`，必须先设置 patch 中各提供方引用的 `apiKeyEnv`。例如 OpenAI 兼容服务可在不提交的 patch 中设置 `api: openai-completions`、`apiKeyEnv: OPENCODE_API_KEY`，由本机脚本读取 `OPENCODE_API_HOST` 生成实际 `baseURL`，模型 ID 使用服务端接受的精确值。不要把密钥写入 patch；先用低输出的流式工具调用探针确认路径和模型可用。缺少两类凭据来源时驱动失败。
 
-GitLab 正式回归继续使用[既有流程](../user-guide/GitLab复杂用例.md)，从 `.local/gitlab/config.json` 准备本轮专用项目，执行生成的 Markdown UI 和接口文件，固定业务预期，保留私有原始输入并清理本轮项目。可在每版运行前执行 `pnpm gitlab:prepare`，将生成的 `state.json` 完整路径设为 `DSH_GITLAB_STATE` 后运行矩阵驱动，驱动会复制私有 Markdown 并检查 3 条接口和 2 条 UI 用例；每版必须使用独立准备记录，完成后按原记录 `pnpm gitlab:cleanup --state <路径>` 清理并核对 404。这里的本地夹具不能代替 GitLab、RunBridge 实机或 Browscreen 录像的对应验收。
+若服务实际为 OpenCode Go，使用内置提供方 `opencode-go`，保留其协议和按对话注入的会话头，不设置 route 级 `api` 覆盖。本次指定的 `deepseek/deepseek-v4.1-flash` 在服务端 `/models` 中对应 `deepseek-v4.1-flash`，`OPENCODE_API_HOST` 的 `/zen/go/` 基路径补为 `/zen/go/v1`。配置只引用 `OPENCODE_API_KEY`；模型能力从宿主目录继承。接入要求见 [OpenCode Go 官方文档](https://opencode.ai/v2/docs/console/go/#where-can-i-use-it)。
+
+受控模型验收统一使用步骤 600000 ms、收尾 180000 ms、取消宽限 500 ms，容纳多轮模型响应时延；整批等待上限 30 分钟、模型驱动外层上限 60 分钟。生产默认预算不变，超时仍保留错误和隔离，不改判通过。驱动额外启动本地固定页面／JSON 夹具，使用真实模型和 Playwright MCP 完成 Markdown UI、关闭审核后修改与重新批准、同会话接口正向、新会话固定反例、CSV 多实例、普通聊天恢复、审核取消及接口在途停止。实际值由夹具固定为 101；反例和 CSV 的错误预期固定为 100，不根据响应改写预期。每轮检查认证 HTML、账本重放、证据 SHA、原会话清理；继续前等待实际 Agent 空闲、测试作用域关闭、在途工具归零。只读探针仅加载在独立验收 profile，不进入发行包。
+
+GitLab 正式回归继续使用[既有流程](../user-guide/GitLab复杂用例.md)，从 `.local/gitlab/config.json` 准备本轮专用项目，执行生成的 Markdown UI 和接口文件，固定业务预期，保留私有原始输入并清理本轮项目。可在每版运行前执行 `pnpm gitlab:prepare`，将生成的 `state.json` 完整路径设为 `DSH_GITLAB_STATE` 后运行矩阵驱动。接口文件保留 3 条用例；两个 UI 场景分别使用已有的 `ui_filters.md` 和 `ui_draft_cancel.md` 单用例入口，每轮确认 Agent 空闲后再开始下一轮。
+
+草稿场景从列表原生 New item 入口进入弹窗，取消后检查表单关闭、原列表路径和接口空数组。验证器审计实际操作顺序，拒绝取消后额外导航、后退、刷新或其他修正动作形成的通过结果。表单关闭必须绑定本用例的 DOM 原始观测，实际值为 false 或 0；断言通过之外还需核对观测来源，不限定合法断言的写法。
+
+仅补验 UI 时可在已正确准备的独立 profile 上运行 `node scripts/compat/real-model.mjs <state.json> gitlab-ui`；只补草稿使用 `gitlab-draft`。摘要保留模式，不能表述为完整模型矩阵通过。每版必须使用独立准备记录，完成后按原记录 `pnpm gitlab:cleanup --state <路径>` 清理并核对 404。本地夹具不能代替 GitLab、RunBridge 实机或 Browscreen 录像的对应验收。
 
 ## 旧宿主用户
 

@@ -28,7 +28,6 @@ export function createMarkdownPlans(config, state) {
     password: config.password,
     work_items_url: list,
     work_items_path: new URL(list).pathname,
-    new_issue_url: list + "/new?type=issue",
     closed_title: seeds[2].title,
     closed_iid: ui.issues[2].iid,
     closed_api_url: endpoint(

@@ -75,6 +75,8 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium
+      - name: 安装 MCP 与报告验证各自匹配的 Chromium
+        run: node scripts/install-browser.mjs
       - uses: actions/download-artifact@v4
         with:
           name: candidate

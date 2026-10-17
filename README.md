@@ -52,14 +52,14 @@ DSH Test Plugin 是 DeepSeek Harness（DSH）的原生测试插件。描述想�
 
 ### 2. 安装并启用插件
 
-当前 0.13.0 是本地候选，必要真实验收因模型额度尚未全部完成，正式标签未创建。当前先使用维护者提供的本地 tgz：
+本地审核时，使用维护者提供的同一个 tgz：
 
 ```sh
 dsh plugin --profile web add /绝对路径/dsh-test-plugin-0.13.0.tgz
 dsh web
 ```
 
-通过验收并由维护者审核推送后，可在 DSH 插件管理页填写下面的仓库地址，安装后启用：
+维护者完成验收并推送标签后，可在 DSH 插件管理页填写下面的仓库地址，安装后启用：
 
 ```text
 https://github.com/Pegasus-Yang/DSH-Test-Plugin.git#v0.13.0

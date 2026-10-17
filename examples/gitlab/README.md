@@ -14,7 +14,7 @@ GitLab 的部署和启动请查阅[官方 Docker 文档](https://docs.gitlab.com
 | 模板 | 场景 | 固定预期 |
 | --- | --- | --- |
 | [ui-cases.md](ui-cases.md) | Closed 状态与 dsh-smoke 标签组合筛选 | gamma 唯一匹配，详情标题与独立接口身份一致 |
-| [ui-cases.md](ui-cases.md) | Markdown 草稿预览后取消 | 预览文字准确，返回列表，接口搜索草稿为空 |
+| [ui-cases.md](ui-cases.md) | Markdown 草稿预览后取消 | 从列表原生新建入口进入弹窗，预览文字准确；取消后表单关闭、列表路径正确且无额外跳转，接口搜索草稿为空 |
 | [api-cases.md](api-cases.md) | 按专用项目名称搜索 | 数量、ID、路径及 public 可见性准确 |
 | [api-cases.md](api-cases.md) | 逐页读取 Issue | 前三页 alpha/beta/gamma，第四页为空数组 |
 | [api-cases.md](api-cases.md) | 不存在的项目 | HTTP 404，错误信息为 404 Project Not Found |

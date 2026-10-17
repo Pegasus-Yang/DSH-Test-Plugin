@@ -52,7 +52,7 @@ For remote or VM browsers, use **RunBridge Hub 0.5.1 / Node 0.5.0**. See the [re
 
 ### 2. Install and enable the plugin
 
-Version 0.13.0 is a local candidate. Model quota limits interrupted the remaining live acceptance checks, so the final tag has not been created. For now, install the local tgz supplied by the maintainer:
+For local review, install the same tgz supplied by the maintainer:
 
 ```sh
 dsh plugin --profile web add /absolute/path/dsh-test-plugin-0.13.0.tgz
