@@ -10,6 +10,7 @@ The English guides describe the current implementation. Historical design and ac
 
 ## 当前版本
 
+- [DSH 三个 alpha 版本兼容性核查](project/DSH三个alpha版本兼容性核查.md)：0.12.3 原包对 alpha.1、alpha.2、alpha.3 的准入、公开 SDK 回归与隔离运行；区分当前声明与兼容可行性。
 - [CI 公开依赖安装验收](project/CI公开依赖安装验收.md)：0.12.3 的缺包复现、公开依赖补齐与 Linux 干净 CI 验证。
 - [DSH 宿主升级适配验收](project/DSH宿主升级适配验收.md)：0.12.2 对 DSH 0.2.1-alpha.3 的 SDK、原生审核、构建与运行兼容验证。
 - [RunBridge 远程浏览器与持续预览](user-guide/RunBridge远程浏览器与持续预览.md)：连接设置、虚拟机网络、用例执行、画面与恢复。
@@ -67,6 +68,7 @@ The English guides describe the current implementation. Historical design and ac
 
 ## 设计与实施
 
+- [DSH 多版本兼容方案](design/DSH多版本兼容方案.md)：待审核；明确 alpha.1–alpha.3 同包支持、开发基线与支持集合分离、必要改造、同一候选包的矩阵和旧宿主安装方式。
 - [RunBridge MCP 远程浏览器对接](design/runbridge-mcp/README.md)：以原 12 工具基线编写的历史提案，完整接入已在 0.12.0 实施；当前能力与修复结果以上方架构和验收记录为准。
 - [收尾约束与账本报告优化实施方案](design/收尾约束与账本报告优化实施方案.md)：已获批准，核心实现及优化指标验证完成；保留原方案及完整回归标准，实际结果和分轮复测边界见验收记录。
 - [运行实际步骤与手工用例导出实施方案](design/运行实际步骤与手工用例导出实施方案.md)：已获批准，纳入 0.11.0；运行时逐条保存操作说明及真实调用，编号展示、失败重试记录和 Markdown／JSON 手工用例导出。
