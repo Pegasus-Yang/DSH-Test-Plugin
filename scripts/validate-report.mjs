@@ -148,7 +148,13 @@ try {
       }
     }
   }
-  await page.locator("#case").selectOption(run.instances[0].case_id);
+  // CSV 按原用例模板分组；行实例的 case_id 不一定是筛选选项值。
+  const caseFilter = await page
+    .locator("article.case")
+    .first()
+    .getAttribute("data-case");
+  assert(caseFilter, "报告缺少用例筛选分组");
+  await page.locator("#case").selectOption(caseFilter);
   await page.locator("#data").selectOption(run.instances[0].data_id);
   await page.locator("#status").selectOption(run.instances[0].status);
   assert.equal(await page.locator("article.case:visible").count(), 1);

@@ -7,6 +7,8 @@ on:
 jobs:
   plugin:
     runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.value }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -18,6 +20,9 @@ jobs:
           cache: pnpm
       - name: 从公开依赖安装
         run: pnpm install --frozen-lockfile
+      - id: matrix
+        name: 核对单一兼容策略并输出矩阵
+        run: echo "value=$(node scripts/dsh-compatibility.mjs matrix)" >> "$GITHUB_OUTPUT"
       - name: 检查 Git 安装入口、SDK 导入及源码与产物一致性
         run: |
           pnpm verify:package
@@ -37,3 +42,74 @@ jobs:
           mkdir "${RUNNER_TEMP}/plugin-package"
           tar -xzf "${RUNNER_TEMP}/dsh-test-plugin.tgz" -C "${RUNNER_TEMP}/plugin-package"
           node scripts/check-package.mjs "${RUNNER_TEMP}/plugin-package/package"
+          cd "${RUNNER_TEMP}"
+          sha256sum dsh-test-plugin.tgz > dsh-test-plugin.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: candidate
+          path: |
+            ${{ runner.temp }}/dsh-test-plugin.tgz
+            ${{ runner.temp }}/dsh-test-plugin.sha256
+
+  host:
+    needs: plugin
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plugin.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: deepseek-ai/deepseek-harness
+          ref: dsh-v${{ matrix.host }}
+          path: host-source
+          fetch-depth: 1
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.3
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - uses: actions/download-artifact@v4
+        with:
+          name: candidate
+          path: ${{ runner.temp }}/candidate
+      - name: 同一候选包的无豁免安装、SDK 回归与真实 Web
+        env:
+          DSH_NPM_CACHE: ${{ runner.temp }}/npm-cache
+        run: |
+          cd "${RUNNER_TEMP}/candidate"
+          sha256sum --check dsh-test-plugin.sha256
+          export DSH_CANDIDATE_SHA256=$(cut -d ' ' -f 1 dsh-test-plugin.sha256)
+          cd "${GITHUB_WORKSPACE}"
+          pnpm compat:host "${{ matrix.host }}" "${RUNNER_TEMP}/candidate/dsh-test-plugin.tgz" host-source "${RUNNER_TEMP}/host-check"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: host-${{ matrix.host }}
+          if-no-files-found: error
+          path: |
+            ${{ runner.temp }}/host-check/summary.json
+            ${{ runner.temp }}/host-check/*sdk.json
+            ${{ runner.temp }}/host-check/regression.json
+            ${{ runner.temp }}/host-check/web-*.json
+            ${{ runner.temp }}/host-check/web-*.png
+            ${{ runner.temp }}/host-check/cohort/package-lock.json
+            ${{ runner.temp }}/host-check/public/package-lock.json
+            ${{ runner.temp }}/host-check/profile-locks/**
+
+  compatibility:
+    name: 三个宿主全部通过
+    needs: [plugin, host]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          BUILD_RESULT: ${{ needs.plugin.result }}
+          HOST_RESULT: ${{ needs.host.result }}
+        run: test "$BUILD_RESULT" = success && test "$HOST_RESULT" = success

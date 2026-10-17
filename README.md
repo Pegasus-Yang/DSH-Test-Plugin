@@ -42,7 +42,7 @@ DSH Test Plugin 是 DeepSeek Harness（DSH）的原生测试插件。描述想�
 
 ### 1. 准备 DSH 与测试工具
 
-- Node.js **22.19+**，已安装并配置可用模型的 DeepSeek Harness **0.2.1-alpha.3**。
+- Node.js **22.19+**，已安装并配置可用模型的 DeepSeek Harness **0.2.1-alpha.1、alpha.2 或 alpha.3**。
 - 在 DSH 中使用 **native 工具模式**；网页测试选择本机专用 Playwright MCP 或远程 RunBridge 浏览器。
 - 仅做接口测试时无需安装浏览器；源码开发需要 pnpm **11.7.0**。
 
@@ -52,20 +52,29 @@ DSH Test Plugin 是 DeepSeek Harness（DSH）的原生测试插件。描述想�
 
 ### 2. 安装并启用插件
 
-在 DSH 插件管理页填写下面的仓库地址，安装后启用：
+当前 0.13.0 是本地候选，必要真实验收因模型额度尚未全部完成，正式标签未创建。当前先使用维护者提供的本地 tgz：
+
+```sh
+dsh plugin --profile web add /绝对路径/dsh-test-plugin-0.13.0.tgz
+dsh web
+```
+
+通过验收并由维护者审核推送后，可在 DSH 插件管理页填写下面的仓库地址，安装后启用：
 
 ```text
-https://github.com/Pegasus-Yang/DSH-Test-Plugin.git#v0.12.3
+https://github.com/Pegasus-Yang/DSH-Test-Plugin.git#v0.13.0
 ```
 
 也可以使用独立 DSH CLI 安装：
 
 ```sh
-dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.12.3
+dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.13.0
 dsh web
 ```
 
 命令行安装前先正常停止正在运行的 DSH，安装与后续启动使用同一 profile 和 `DSH_HOME`，启动后刷新页面。从 DSH 源码目录运行时，将 `dsh` 替换为 `pnpm dsh`。仓库发行版本包含构建产物，可以直接安装。
+
+这三个宿主使用同一个插件包，无需版本豁免。当前开发 SDK 固定 alpha.3；后续插件升级继续保留已支持宿主。[状态与已验证范围](doc/project/0.13.0多版本兼容验收.md)详见记录，支持集合以 [dsh-compatibility.json](dsh-compatibility.json) 为准。
 
 升级、卸载和本地安装包的操作见[安装与运维](doc/deployment/安装与运维.md)。
 

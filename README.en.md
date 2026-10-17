@@ -42,7 +42,7 @@ See the [visual tour](doc/user-guide/使用说明.en.md#visual-tour) for more pl
 
 ### 1. Prepare DSH and testing tools
 
-- Node.js **22.19+**, and DeepSeek Harness **0.2.1-alpha.3** with a working model configured.
+- Node.js **22.19+**, and DeepSeek Harness **0.2.1-alpha.1, alpha.2, or alpha.3** with a working model configured.
 - DSH **native tool mode**; browser tests use a dedicated local Playwright MCP or a remote RunBridge browser.
 - API-only tests need no browser. Source development requires pnpm **11.7.0**.
 
@@ -52,22 +52,31 @@ For remote or VM browsers, use **RunBridge Hub 0.5.1 / Node 0.5.0**. See the [re
 
 ### 2. Install and enable the plugin
 
-Enter this repository address in DSH's plugin manager, then enable the plugin:
+Version 0.13.0 is a local candidate. Model quota limits interrupted the remaining live acceptance checks, so the final tag has not been created. For now, install the local tgz supplied by the maintainer:
+
+```sh
+dsh plugin --profile web add /absolute/path/dsh-test-plugin-0.13.0.tgz
+dsh web
+```
+
+After completed acceptance, review, and a manual push, enter this repository address in DSH's plugin manager, then enable the plugin:
 
 ```text
-https://github.com/Pegasus-Yang/DSH-Test-Plugin.git#v0.12.3
+https://github.com/Pegasus-Yang/DSH-Test-Plugin.git#v0.13.0
 ```
 
 Alternatively, install with the standalone DSH CLI:
 
 ```sh
-dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.12.3
+dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.13.0
 dsh web
 ```
 
 Stop a running DSH normally before CLI installation. Use the same profile and `DSH_HOME` for installation and startup, then refresh the page. When running from the DSH source checkout, replace `dsh` with `pnpm dsh`. Git releases include built artifacts and can be installed directly.
 
 See [installation and deployment](doc/deployment/安装与运维.en.md) for upgrades, uninstalling, and local packages.
+
+All three hosts use the same package without version exemptions. The build SDK remains alpha.3; ordinary plugin upgrades retain the supported hosts. See the [validation status (Chinese)](doc/project/0.13.0多版本兼容验收.md) and [dsh-compatibility.json](dsh-compatibility.json) for the exact support set.
 
 ### 3. Run your first test in a conversation
 

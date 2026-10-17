@@ -1763,19 +1763,29 @@ it.each([false, true])(
   },
 );
 
-it("数组观察引用在冻结前拒绝错误括号语法，点分隔索引复用已采集响应", async () => {
+it("数组观察引用拒绝错误括号语法，索引与长度复用同一可信响应", async () => {
   const t = setup();
   const spy = vi
     .spyOn(globalThis, "fetch")
     .mockResolvedValue(
-      new Response(JSON.stringify([{ iid: 3 }]), { status: 200 }),
+      new Response(JSON.stringify([{ iid: 3, labels: [] }]), { status: 200 }),
     );
   try {
-    await t.manager.start(t.agent, "查询 Issue 并检查第一条 iid 等于3");
+    await t.manager.start(
+      t.agent,
+      "查询 Issue，检查第一条 iid 等于3、数组长度1和标签数量0",
+    );
     const submitted = await t.call("test_submit_plan", {
       name: "数组引用",
       steps: [
-        { description: "查询并检查 Issue", checks: ["第一条 iid 等于3"] },
+        {
+          description: "查询并检查 Issue",
+          checks: [
+            "第一条 iid 等于3",
+            "响应数组长度等于1",
+            "第一条标签数量等于0",
+          ],
+        },
       ],
     });
     await t.announce(submitted.value.plan_summary);
@@ -1818,7 +1828,30 @@ it("数组观察引用在冻结前拒绝错误括号语法，点分隔索引复�
         })
       ).isError,
     ).toBe(false);
+    for (const [check_index, observation_ref, expected_value] of [
+      [1, "step_1.response.body.length", "1"],
+      [2, "step_1.response.body.0.labels.length", "0"],
+    ] as const) {
+      expect(
+        (
+          await t.call("test_bind_check", {
+            check_index,
+            assertion: {
+              observation_ref,
+              operator: "eq",
+              expected_value,
+              unit: "length",
+            },
+          })
+        ).isError,
+      ).toBe(false);
+    }
     await t.call("test_finish_step");
+    expect(
+      run.run.instances[0].steps
+        .filter((s) => s.assertion)
+        .map((s) => s.assertion?.actual),
+    ).toEqual([3, 1, 0]);
     expect((await t.call("test_finish")).value.statistics.PASS).toBe(1);
     expect(spy).toHaveBeenCalledOnce();
     await t.end();
@@ -2452,7 +2485,7 @@ it("远程后端在可信初始化中申请资源，旧 MCP 和直接生命周�
   await t.call("test_finish");
   expect(test.run.instances[0].status).toBe("PASS");
   expect(test.run.instances[0].resources.browser_context?.state).toBe("absent");
-  expect(test.run.manifest.plugin_version).toBe("0.12.3");
+  expect(test.run.manifest.plugin_version).toBe("0.13.0");
   expect(JSON.stringify(test.state())).not.toContain("access.json");
 });
 

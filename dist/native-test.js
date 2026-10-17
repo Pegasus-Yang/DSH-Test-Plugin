@@ -37,6 +37,7 @@ test_submit_plan按工具schema提交：普通任务为{name,rationale:"一两�
 文字计划执行：每次只处理test_current的当前步骤。需要操作目标时先test_define_step({capability:"browser"或"api",allowed_targets:[本步目标网址],reason:"当前步骤依据"})设定操作范围，无需填写outputs。随后使用原生工具观察、操作、调整；了解实际页面后直接test_capture采集。采集时插件按采集方式自动登记输出类型，无需先写输出Schema；已有成功观察不可覆盖，但可补采其他输出。API通常以response保存完整响应。不是在执行开始时编译整份计划，不能配置未来步骤。
 实际操作说明：浏览器访问、点击、输入、按键、选择、拖动、业务等待等必须调用test_execute_operation({description:"面向用户的简短操作说明，说明对象、动作和必要目的",tool_name:"mcp__playwright__browser_click",arguments:{原工具参数}})。tool_name从Schema的完整名称中选择，必须保留mcp__playwright__前缀。先观察真实页面，再提交当前一个动作的说明并执行，不能一次编造后续操作。常规导航、点击、输入和提交必须逐个使用原子动作工具，不得用browser_run_code或browser_evaluate把这些常规交互合并成脚本。只有原子工具无法表达的动作才使用复合脚本，并保留需复核标记。点击搜索按钮与输入关键词分别调用；browser_type不要submit:true，输入后单独browser_press_key提交Enter；多个表单字段优先逐字段填写。说明随同一次调用保存，不需要另一个登记工具或额外模型轮次。原生browser_snapshot、截图及只读browser_evaluate仍可直接用于分析；evaluate仅允许观察，脚本操作必须带说明并标为复合操作，无法证明内部每个动作都完成。API请求继续test_capture，不调用新的浏览器入口或直接test_api_get。操作成功仅表示工具结算，断言仍按可信采集计算。定位失败可调整后产生新记录，保留旧失败；插件自行生成身份、顺序和状态。用户要求的准备与清理遵守当前冻结阶段，自动复位、关闭继续test_capture({})。
 文字检查点：获得可信观察后，对当前步骤的每个checks，调用test_bind_check({check_index:从0开始,assertion:{observation_ref:"step_编号.输出名.可选嵌套路径",operator:"eq/neq/...",expected_value:"用户预期原文，例如agent或0；不加引号或数组包装"}})。也可用expected_observation_ref比较前一步观察（例如第一条搜索结果链接）。rule_ref由插件绑定文字检查点；不用提交actual。预期来自原文和文字检查，不能按实际值改写；数字不为0用neq和expected_value直接填"0"（按数字条件解析为数值0）。正文或文本不为空必须用text采集、operator:"neq"、expected_value:""（空字符串），不能填0或字符串0，也不能以元素可见替代正文非空。每个文字检查都必须绑定程序断言，不能靠口头宣布通过；纯检查步骤可以直接引用前一步的可信观察。绑定后test_finish_step结算当前步骤并计算断言。无法完成用test_fail_step说明原因。
+接口数组检查：接口数组的长度检查必须引用step_id.response.body.length；字段如step_id.response.body.0.iid，标签数量用step_id.response.body.0.labels.length。不要把整个数组与数量比较；只复用已采集响应，不重复请求。unit只表示展示单位，不会把数组转换成长度；长度断言必须在observation_ref引用.length，不能使用整个body配合unit:"length"。
 执行阶段：文字计划提交（/test-plan还需批准）后按test_current执行当前业务目标。此时才使用正常Playwright工具查看页面、点击、输入、等待和检查DOM，可根据实际状态调整定位、操作组合和重试，无需重跑整条用例；只完成当前步骤，不提前执行后续步骤。browser_evaluate可用于实际页面结构检查，断言实际值仍只接受test_capture可信采集。JSON文件计划已提交时直接按test_current继续，不能重复提交计划或预跑。
 运行时采集：完成当前动作后，按页面/接口实际情况调用test_capture({capture:{输出名:采集定义},reason:"依据当前页面选择或修正定位的原因"})。它不接受actual或任意执行代码。dom mode支持text/number/count/visible/url/attribute/value；selector为真实CSS，可用index定位集合。页面路径用{kind:"dom",mode:"url",field:"pathname"}；元素href用{kind:"dom",mode:"attribute",attribute:"href",selector:"实际选择器",index:0,field:"pathname"}；数字用mode:number；文本框用mode:value；http仅用于返回JSON的GET接口。HTTP采集本身会发送请求，直接调用test_capture，无需先用test_api_get预发一次。完整响应为{status:number,body:JSON}，不含headers；可声明单一object输出，用{kind:"http",url:"授权URL",field:""}一次采集，再通过step_id.output_name.status及step_id.output_name.body的嵌套路径断言。必要输出都要采集。采集定义可根据实际页面修正，保留每次原因和调用记录；已有成功观察不可覆盖，只补采尚缺的输出。不能改变输出含义、输出类型、目标范围或断言预期。静态JSON的capture和自动清理已有采集定义，直接test_capture({})即可。
 采集成功后调用test_finish_step；程序计算断言，模型不能填写实际值或口头改判。定位失败可修正重试；确实无法完成时test_fail_step说明原因。用户停止后不再执行业务，只按同会话收尾指导执行预授权清理。全部完成调用test_finish，并在原生最终回复写明逐步结果、断言实际/预期、保存位置和工具返回的报告链接。BLOCKED、SKIPPED或缺证据不能写成通过。`;
@@ -291,7 +292,7 @@ export class NativeTest {
             incomplete: false,
             resource_quarantined: false,
             manifest: {
-                plugin_version: "0.12.3",
+                plugin_version: "0.13.0",
                 plan_review: review,
                 execution: "native-conversation",
                 origin_session_id: agent.id,
@@ -326,7 +327,7 @@ export class NativeTest {
             .split("\n")
             .map((line) => {
             if (line.startsWith("实际操作说明："))
-                return '实际操作说明：浏览器动作必须调用test_execute_operation，tool_name从Schema中选择完整的mcp__runbridge__名称。导航、填写、点击、按键和等待逐个执行并附面向用户的说明。观察可直接browser_snapshot、browser_inspect_dom、browser_read或browser_tabs(action=list)。会话和页面参数由插件注入，不能传入node_id/session_id/page_id；只有browser_tabs明确选页时提供其返回的page_id。目标使用target.by/value/name；by=role时value只填button、textbox等角色，name填真实可访问名称，不能把snapshot整行作为value。含数组参数通过test_execute_operation的arguments_json传完整JSON字符串，例如{"target":{"by":"css","value":"#type"},"values":["api"]}；不要同时传arguments。iframe用frame_selector；没有Playwright snapshot ref、evaluate或run_code。先观察页面，再选择下一动作。断言实际值仅接受test_capture的固定DOM采集，覆盖text/number/count/visible/url/attribute/value；API仍在DSH宿主采集。接口数组的长度检查必须引用step_id.response.body.length；字段如step_id.response.body.0.iid，标签数量用step_id.response.body.0.labels.length。不要把整个数组与数量比较；只复用已采集响应，不重复请求。初始化与释放只调用test_capture({})。截图与动作成功不能宣布PASS，写操作结果未知不得盲目再次提交。';
+                return '实际操作说明：浏览器动作必须调用test_execute_operation，tool_name从Schema中选择完整的mcp__runbridge__名称。导航、填写、点击、按键和等待逐个执行并附面向用户的说明。观察可直接browser_snapshot、browser_inspect_dom、browser_read或browser_tabs(action=list)。会话和页面参数由插件注入，不能传入node_id/session_id/page_id；只有browser_tabs明确选页时提供其返回的page_id。目标使用target.by/value/name；by=role时value只填button、textbox等角色，name填真实可访问名称，不能把snapshot整行作为value。含数组参数通过test_execute_operation的arguments_json传完整JSON字符串，例如{"target":{"by":"css","value":"#type"},"values":["api"]}；不要同时传arguments。iframe用frame_selector；没有Playwright snapshot ref、evaluate或run_code。先观察页面，再选择下一动作。断言实际值仅接受test_capture的固定DOM采集，覆盖text/number/count/visible/url/attribute/value；API仍在DSH宿主采集。初始化与释放只调用test_capture({})。截图与动作成功不能宣布PASS，写操作结果未知不得盲目再次提交。';
             if (line.startsWith("执行阶段："))
                 return "执行阶段：按test_current完成当前业务目标，使用当前RunBridge原子工具操作虚拟机页面；不能调用本机Playwright或换另一会话。browser_fill替换整个输入，按Enter另用browser_press_key；select_option按value选择；触发弹窗前用browser_handle_dialog设置一次性策略。当前步骤的允许目标与冻结预期不可改变。浏览器由Node新建，网络回环地址指虚拟机；最多3600秒租期，许可到期不能新建浏览器续跑旧步骤。";
             return line;
@@ -547,7 +548,7 @@ export class NativeTest {
                     properties: {
                         observation_ref: {
                             ...assertionSchema.properties.observation_ref,
-                            description: "点分隔的可信观察路径，例如step_1.response.status或step_1.response.body.0.iid；数组使用数字路径段，不使用[0]语法。",
+                            description: "点分隔的可信观察路径，例如step_1.response.status、step_1.response.body.0.iid；数组长度用step_1.response.body.length，标签数量用step_1.response.body.0.labels.length。数组索引用数字路径段，不使用[0]语法。",
                         },
                         operator: assertionSchema.properties.operator,
                         expected_value: {
@@ -555,7 +556,10 @@ export class NativeTest {
                             description: '用户预期原文。例如agent、dsh、0或200；不加JSON引号、不包数组或value对象。正文/文本不为空用neq及expected_value:""（空字符串）。数字/布尔按检查和观察类型解析；仅对象、数组或range预期写JSON。与expected_observation_ref二选一',
                         },
                         expected_observation_ref: assertionSchema.properties.expected_observation_ref,
-                        unit: assertionSchema.properties.unit,
+                        unit: {
+                            ...assertionSchema.properties.unit,
+                            description: "仅表示展示单位，不执行取长度、计数或其他转换；数组长度必须在 observation_ref 引用 .length。",
+                        },
                         tolerance: assertionSchema.properties.tolerance,
                     },
                 },
