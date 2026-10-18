@@ -229,6 +229,7 @@ async function installHost(root, cohort) {
   };
   return {
     root,
+    cohort,
     cli: join(root, "node_modules/@deepseek-ai/dsh/lib/bin.js"),
     home: join(root, "home"),
     profile: join(root, "home/profiles/web"),
@@ -334,12 +335,16 @@ async function stopHost() {
 async function startHost(host, label) {
   let text = "",
     url;
+  const hostEnv = { ...env, DSH_HOME: host.home };
+  // 默认模型的环境密钥会掩盖 CI 无凭据首次引导；只有受控模型 profile 继承它。
+  if (!host.cohort || !process.env.DSH_MODEL_PATCH)
+    delete hostEnv.DEEPSEEK_API_KEY;
   const child = spawn(
     process.execPath,
     [host.cli, "web", "--no-open", "--port", "0"],
     {
       cwd: host.root,
-      env: { ...env, DSH_HOME: host.home },
+      env: hostEnv,
       stdio: ["ignore", "pipe", "pipe"],
     },
   );
@@ -357,6 +362,11 @@ async function startHost(host, label) {
     !text.includes("dsh-test-plugin@" + pkg.version + " is incompatible"),
     "实际启动被版本门禁拒绝",
   );
+  summary.checks.host_env ??= [];
+  summary.checks.host_env.push({
+    phase: label,
+    default_model_env_key: !!hostEnv.DEEPSEEK_API_KEY,
+  });
   const state = {
     version,
     plugin_version: pkg.version,
@@ -367,6 +377,7 @@ async function startHost(host, label) {
     pid: child.pid,
     output,
     candidate_sha256: sha256,
+    default_model_env_key: !!hostEnv.DEEPSEEK_API_KEY,
   };
   await writeFile(join(output, "state.json"), JSON.stringify(state, null, 2), {
     mode: 0o600,

@@ -114,6 +114,7 @@ try {
         host_version: state.version,
         mode,
         status: "PASS",
+        default_model_env_key: state.default_model_env_key,
         page_errors: errors,
       },
       null,

@@ -28,6 +28,7 @@ pnpm verify:package
 ```sh
 pnpm install --frozen-lockfile
 node scripts/install-browser.mjs
+node --test tests/browser/compat-browser.test.mjs
 pnpm build
 pnpm pack --out artifacts/package/dsh-test-plugin.tgz
 export DSH_CANDIDATE_SHA256=$(shasum -a 256 artifacts/package/dsh-test-plugin.tgz | cut -d ' ' -f 1)
@@ -42,6 +43,8 @@ pnpm compat:host 0.2.1-alpha.3 artifacts/package/dsh-test-plugin.tgz /绝对路�
 - `cohort/` 从官方发布标签提取公开包版本，约束为同批 SDK 及 Cordis／Schemastery；核对真实依赖后运行目标 SDK 的类型和完整回归，验证 CLI 安装、真实 Web 偏好保存、停服后编辑 MCP profile 配置、重启回读、停用／启用和卸载。
 
 二者都有独立 `DSH_HOME` 与 profile；通过实际 `dsh plugin --profile web add <tgz> --ignore-scripts` 安装。profile 不得包含 DSH SDK 副本和版本豁免。门禁直接调用目标宿主的 `evaluatePluginCompatibility`，验证支持集合、范围外版本及畸形数据；另验证缺 SDK 的入口导入失败。缺宿主、标签、浏览器、用例或配置时失败，不输出绿色跳过。
+
+公开 profile 和未启用受控模型的同批 profile 启动时移除 `DEEPSEEK_API_KEY`，避免本机模型环境密钥使首次凭据引导被跳过；摘要仅记录其存在性。浏览器通过原生“继续”和“稍后配置”，或关闭 alpha.3 的“开始使用”账号引导，完成已知首次设置，在有界等待内重试被遮罩阻挡的操作；未知弹窗、保存失败及其他脚本错误继续失败。5 项真实浏览器专项覆盖无凭据、晚于两秒的欢迎页、已有配置的账号菜单、alpha.3 账号引导和未知弹窗，CI 每个宿主均先执行该专项。
 
 完整回归中的 Agent 生命周期替身覆盖审核关闭、在途结算、未知隔离、重启恢复和释放约束；这层不能替代真实模型验收。`summary.json`、SDK 清单、两种安装锁文件、回归 JSON、Web 截图及停止证明分别保留。偏好通过实际设置页保存；MCP 的联合类型配置没有 Settings 表单，按用户指南停服编辑 profile，再通过 ConfigEditor 的实际运行值核对重启回读。`state.json` 和宿主日志可能含认证 URL，只保存在私有或忽略目录，CI 不上传它们。
 
