@@ -6,15 +6,15 @@ on:
 
 jobs:
   plugin:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       matrix: ${{ steps.matrix.outputs.value }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@v7.0.1
+      - uses: pnpm/action-setup@v6.1.0
         with:
           version: 11.7.0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: 22.22.3
           cache: pnpm
@@ -44,7 +44,7 @@ jobs:
           node scripts/check-package.mjs "${RUNNER_TEMP}/plugin-package/package"
           cd "${RUNNER_TEMP}"
           sha256sum dsh-test-plugin.tgz > dsh-test-plugin.sha256
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7.0.2
         with:
           name: candidate
           path: |
@@ -53,23 +53,23 @@ jobs:
 
   host:
     needs: plugin
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plugin.outputs.matrix) }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           repository: deepseek-ai/deepseek-harness
           ref: dsh-v${{ matrix.host }}
           path: host-source
           fetch-depth: 1
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6.1.0
         with:
           version: 11.7.0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: 22.22.3
           cache: pnpm
@@ -79,7 +79,7 @@ jobs:
         run: node scripts/install-browser.mjs
       - name: 无凭据、未选工作区与慢启动浏览器回归
         run: node --test tests/browser/compat-browser.test.mjs
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8.0.2
         with:
           name: candidate
           path: ${{ runner.temp }}/candidate
@@ -92,7 +92,7 @@ jobs:
           export DSH_CANDIDATE_SHA256=$(cut -d ' ' -f 1 dsh-test-plugin.sha256)
           cd "${GITHUB_WORKSPACE}"
           pnpm compat:host "${{ matrix.host }}" "${RUNNER_TEMP}/candidate/dsh-test-plugin.tgz" host-source "${RUNNER_TEMP}/host-check"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7.0.2
         if: always()
         with:
           name: host-${{ matrix.host }}
@@ -111,7 +111,7 @@ jobs:
     name: 三个宿主全部通过
     needs: [plugin, host]
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - env:
           BUILD_RESULT: ${{ needs.plugin.result }}

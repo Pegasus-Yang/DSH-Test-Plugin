@@ -19,6 +19,22 @@ pnpm verify:package
 
 构建与检查不静默改写清单。策略随包发行，解包后仍可核对支持集合。三个宿主的门禁读取 peer，不能仅设置 `engines.dsh`。此策略文件也不是 profile 内的 `compatibility.json`：后者用于版本豁免，正式验收禁止存在该文件。
 
+## CI 运行环境
+
+所有作业固定使用 GitHub 托管的 `ubuntu-24.04`，保持迁移前的系统基线，避免随 `ubuntu-latest` 自动切换系统；标签迁移计划及固定标签的方式见 [runner-images 官方公告](https://github.com/actions/runner-images/issues/14748)。
+
+Action 自身的 JavaScript 运行时与项目脚本的 Node.js 版本分别维护。下列 Action 的 `action.yml` 均声明 `runs.using: node24`，符合 [GitHub 的 Node.js 20 迁移要求](https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/)；`setup-node` 的 `node-version` 继续固定 **22.22.3**，pnpm 继续固定 **11.7.0**。
+
+| Action | CI 固定引用 | Action 自带运行时 |
+| --- | --- | --- |
+| [checkout](https://github.com/actions/checkout/releases/tag/v7.0.1) | `actions/checkout@v7.0.1` | Node.js 24 |
+| [setup-node](https://github.com/actions/setup-node/releases/tag/v7.1.0) | `actions/setup-node@v7.1.0` | Node.js 24 |
+| [upload-artifact](https://github.com/actions/upload-artifact/releases/tag/v7.0.2) | `actions/upload-artifact@v7.0.2` | Node.js 24 |
+| [download-artifact](https://github.com/actions/download-artifact/releases/tag/v8.0.2) | `actions/download-artifact@v8.0.2` | Node.js 24 |
+| [pnpm/action-setup](https://github.com/pnpm/action-setup/releases/tag/v6.1.0) | `pnpm/action-setup@v6.1.0` | Node.js 24 |
+
+工作流保留原有 pnpm 缓存和同一候选包的上传／下载方式。运行中的作业继续使用触发时的提交；环境调整在后续推送触发的工作流中验证。
+
 ## 确定性宿主矩阵
 
 `.github/workflows/ci.yml` 在干净公开依赖下完成冻结安装、类型、回归、重建 `dist` 一致性及真实入口导入，只打包一次。三个宿主作业下载同一候选文件及 SHA-256，最终汇总门禁要求构建和全部宿主成功。
