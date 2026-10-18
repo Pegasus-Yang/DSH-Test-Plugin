@@ -2,7 +2,7 @@
 
 [文档导航](../README.md) · [使用指南](../user-guide/RunBridge远程浏览器与持续预览.md) · [历史提案](../design/runbridge-mcp/README.md)
 
-本文描述插件 0.13.0、RunBridge Hub 0.5.1 / Node 0.5.0 的实现。常规操作和持续画面仍兼容旧 Hub 0.5.0；完整的未知启动恢复要求 Hub 0.5.1 的持久请求查询合同。每次测试冻结浏览器后端和私有访问配置，继续附着在发起命令的当前 DSH Agent；没有第二个执行 Agent。
+本文描述插件 0.13.1、RunBridge Hub 0.5.1 / Node 0.5.0 的实现。常规操作和持续画面仍兼容旧 Hub 0.5.0；完整的未知启动恢复要求 Hub 0.5.1 的持久请求查询合同。每次测试冻结浏览器后端和私有访问配置，继续附着在发起命令的当前 DSH Agent；没有第二个执行 Agent。
 
 ```mermaid
 flowchart LR

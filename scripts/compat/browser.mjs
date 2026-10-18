@@ -5,18 +5,20 @@ async function withOnboarding(page, action, timeout) {
   const deadline = Date.now() + timeout;
   let lastError;
   while (Date.now() < deadline) {
-    for (const [title, button] of [
-      ["预览版说明", "继续"],
-      ["添加一个 API Key 开始使用", "稍后配置"],
-      ["开始使用", "关闭"],
-    ]) {
-      const dialog = page.getByRole("dialog", { name: title, exact: true });
-      if (await dialog.isVisible())
-        await dialog.getByRole("button", { name: button, exact: true }).click({
-          timeout: Math.max(1, deadline - Date.now()),
-        });
-    }
     try {
+      for (const [title, button] of [
+        ["预览版说明", "继续"],
+        ["添加一个 API Key 开始使用", "稍后配置"],
+        ["开始使用", "关闭"],
+      ]) {
+        const dialog = page.getByRole("dialog", { name: title, exact: true });
+        if (await dialog.isVisible())
+          await dialog
+            .getByRole("button", { name: button, exact: true })
+            .click({
+              timeout: Math.min(1000, Math.max(1, deadline - Date.now())),
+            });
+      }
       return await action(Math.min(1000, Math.max(1, deadline - Date.now())));
     } catch (error) {
       if (error.name !== "TimeoutError") throw error;

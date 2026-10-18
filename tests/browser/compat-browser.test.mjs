@@ -36,6 +36,7 @@ const modal=(title,label,action)=>{root.inert=true;const mask=document.createEle
 const credential=()=>modal('添加一个 API Key 开始使用','稍后配置',()=>{window.actions.push('later');ready();});
 const accountSetup=()=>{const dialog=modal('开始使用','关闭',()=>{window.actions.push('close-account');ready();});button('添加 API Key',()=>window.actions.push('add-api-key'),dialog);button('登录',()=>window.actions.push('sign-in'),dialog);};
 if(options.unknown){modal('需要人工确认','继续',()=>{window.actions.push('unknown');ready();});}
+else if(options.transition){const dialog=modal('预览版说明','继续',()=>window.actions.push('unexpected-continue'));dialog.querySelector('button').disabled=true;setTimeout(()=>{dialog.parentElement.remove();credential();},200);}
 else if(options.welcome){launch.disabled=true;setTimeout(()=>modal('预览版说明','继续',()=>{window.actions.push('continue');if(options.accountSetup)setTimeout(accountSetup,75);else if(options.credential)setTimeout(credential,75);else ready();}),options.delay??0);}
 else if(options.credential){credential();}
 </script></html>`,
@@ -149,4 +150,20 @@ test("未知弹窗仍阻止操作，不能按同名继续按钮绕过", async ()
       await page.getByRole("dialog", { name: "需要人工确认" }).isVisible(),
     );
   });
+});
+
+test("引导弹窗在等待期间被替换时，重新识别并完成当前引导", async () => {
+  await fixture(
+    { transition: true, noWorkspace: true },
+    async (page, state) => {
+      await enter(page, state, { timeout: 5000 });
+      await openSettings(page);
+      assert.deepEqual(await page.evaluate(() => window.actions), [
+        "later",
+        "settings",
+        "plugin",
+      ]);
+      assert.equal(await page.getByRole("dialog").count(), 0);
+    },
+  );
 });
