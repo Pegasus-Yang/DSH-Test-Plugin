@@ -19,7 +19,7 @@ async function fixture(options, run) {
       contentType: "text/html",
       body: `<!doctype html><html lang="zh-CN"><meta charset="utf-8">
 <style>.mask{position:fixed;inset:0;background:#ddd;z-index:100;display:grid;place-items:center}section{background:white;padding:40px}[contenteditable]{width:400px;height:80px}</style>
-<div id="root"><div contenteditable="true">输入消息</div><div id="launcher"></div><div id="settings"></div></div>
+<div id="root"><div contenteditable="${options.noWorkspace ? "false" : "true"}">输入消息</div><div id="launcher"></div><div id="settings"></div></div>
 <script>
 const options=${JSON.stringify(options)};
 window.actions=[];
@@ -107,6 +107,37 @@ test("alpha.3 的账号首次引导通过原生关闭退出，不登录或添加
     },
   );
 });
+
+for (const account of [false, true]) {
+  test(`未选工作区时，完成引导并通过${account ? "账号菜单" : "设置按钮"}打开插件设置`, async () => {
+    await fixture(
+      {
+        noWorkspace: true,
+        welcome: true,
+        credential: !account,
+        account,
+        accountSetup: account,
+      },
+      async (page, state) => {
+        await enter(page, state);
+        assert.equal(await page.locator('[contenteditable="true"]').count(), 0);
+        await openSettings(page);
+        assert.deepEqual(await page.evaluate(() => window.actions), [
+          "continue",
+          account ? "close-account" : "later",
+          ...(account ? ["account"] : []),
+          "settings",
+          "plugin",
+        ]);
+        assert.equal(await page.getByRole("dialog").count(), 0);
+        assert.equal(
+          await page.locator("#dsh-test-browscreen-port").inputValue(),
+          "13401",
+        );
+      },
+    );
+  });
+}
 
 test("未知弹窗仍阻止操作，不能按同名继续按钮绕过", async () => {
   await fixture({ unknown: true }, async (page, state) => {

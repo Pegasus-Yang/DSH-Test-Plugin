@@ -26,12 +26,24 @@ async function withOnboarding(page, action, timeout) {
   throw lastError ?? new Error("宿主首次引导或页面操作未按时就绪");
 }
 
+async function settingsLauncher(page) {
+  const account = page.getByRole("button", { name: "账号菜单", exact: true });
+  const accountMenu = (await account.count()) > 0;
+  return {
+    accountMenu,
+    button: accountMenu
+      ? account
+      : page.getByRole("button", { name: "设置", exact: true }),
+  };
+}
+
 export async function enter(page, state, { timeout = 30000 } = {}) {
   await page.goto(state.url);
+  // 未选工作区时聊天输入框不可编辑；页面就绪只要求设置入口可操作。
   await withOnboarding(
     page,
-    (actionTimeout) =>
-      page.locator('[contenteditable="true"]').first().click({
+    async (actionTimeout) =>
+      (await settingsLauncher(page)).button.click({
         trial: true,
         timeout: actionTimeout,
       }),
@@ -43,16 +55,9 @@ export async function openSettings(page, { timeout = 30000 } = {}) {
   await withOnboarding(
     page,
     async (actionTimeout) => {
-      const account = page.getByRole("button", {
-        name: "账号菜单",
-        exact: true,
-      });
-      accountMenu = (await account.count()) > 0;
-      await (
-        accountMenu
-          ? account
-          : page.getByRole("button", { name: "设置", exact: true })
-      ).click({ timeout: actionTimeout });
+      const launcher = await settingsLauncher(page);
+      accountMenu = launcher.accountMenu;
+      await launcher.button.click({ timeout: actionTimeout });
     },
     timeout,
   );

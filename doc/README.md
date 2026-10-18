@@ -11,7 +11,7 @@ The English guides describe the current implementation. Historical design and ac
 ## 当前版本
 
 - [0.13.0 多版本兼容验收](project/0.13.0多版本兼容验收.md)：alpha.1～3 的无豁免安装、公开 SDK、Web、真实模型分层验证、原始失败及补验状态。
-- [CI 首次引导回归验收](project/CI首次引导回归验收.md)：0.13.0 推送后首次引导遮罩失败、环境密钥掩盖原因及无凭据三版复验。
+- [CI 首次引导回归验收](project/CI首次引导回归验收.md)：0.13.0 推送后首次引导及未选工作区两次失败的原因、修正和三版复验。
 - [DSH 多版本验证](deployment/DSH多版本验证.md)：支持策略、CI 矩阵、受控真实模型验收和旧宿主使用方式。
 
 - [DSH 三个 alpha 版本兼容性核查](project/DSH三个alpha版本兼容性核查.md)：0.12.3 原包对 alpha.1、alpha.2、alpha.3 的准入、公开 SDK 回归与隔离运行；历史核查，区分原声明与兼容可行性。

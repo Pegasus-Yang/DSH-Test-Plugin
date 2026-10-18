@@ -17,8 +17,9 @@ const errors = [];
 page.on("pageerror", (error) => errors.push(error.message));
 try {
   await enter(page, state);
+  const editableComposerOnEntry =
+    (await page.locator('[contenteditable="true"]').count()) > 0;
   if (["removed", "disabled"].includes(mode)) {
-    await page.locator('[contenteditable="true"]').first().waitFor();
     assert.equal(
       await page.locator('style[data-plugin="dsh-test-plugin"]').count(),
       0,
@@ -115,6 +116,7 @@ try {
         mode,
         status: "PASS",
         default_model_env_key: state.default_model_env_key,
+        editable_composer_on_entry: editableComposerOnEntry,
         page_errors: errors,
       },
       null,
