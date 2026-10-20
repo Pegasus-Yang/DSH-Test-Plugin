@@ -1,7 +1,7 @@
 /** 服务端消费同会话画面流，访问许可不会交给浮窗页面。 */
-import type { SuiteRun } from "./contracts.js";
+import { field, type SuiteRun } from "./contracts.js";
 import type { PreviewState } from "./progress-model.js";
-import { hubPath, type RunBridge } from "./runbridge.js";
+import { hubPath, runbridgeResult, type RunBridge } from "./runbridge.js";
 
 interface Frame {
   bytes: Buffer;
@@ -70,25 +70,15 @@ export class RunBridgePreview {
       const controller = new AbortController();
       this.controller = controller;
       try {
-        const response = await fetch(
-          hubPath(browser.access.hub_url, `/v1/sessions/${remote.session_id}`),
-          {
-            headers: { Authorization: `Bearer ${browser.access.access_token}` },
-            signal: AbortSignal.any([
-              controller.signal,
-              AbortSignal.timeout(5000),
-            ]),
-            cache: "no-store",
-          },
+        const response = await browser.status(
+          AbortSignal.any([controller.signal, AbortSignal.timeout(5000)]),
         );
-        if (!response.ok) {
+        if (generation !== this.generation) return;
+        if (response.isError) {
           this.failed = true;
           throw new Error("远程画面许可或会话已失效");
         }
-        const value = (await response.json()) as {
-          visual?: Record<string, any>;
-        };
-        if (generation !== this.generation) return;
+        const value = runbridgeResult(response);
         const path = `/v1/sessions/${remote.session_id}/visual/stream`;
         if (value.visual?.stream_path !== path) {
           this.failed = true;
@@ -183,6 +173,13 @@ export class RunBridgePreview {
       } catch (error) {
         if (generation !== this.generation || controller.signal.aborted) return;
         this.frame = undefined;
+        if (
+          [401, 403, 404, 410].includes(Number(field(error, "data.status")))
+        ) {
+          this.failed = true;
+          this.reason = "远程画面许可或会话已失效";
+          return;
+        }
         this.reason =
           error instanceof Error &&
           !["TypeError", "TimeoutError"].includes(error.name)

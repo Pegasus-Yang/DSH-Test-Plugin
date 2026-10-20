@@ -42,11 +42,17 @@ const browser: any = {
     },
   },
   access: { hub_url: "http://hub.test", access_token: "SECRET_ONLY_SERVER" },
+  status: vi.fn(),
 };
 beforeEach(() => {
   vi.useFakeTimers();
   sockets = [];
   preview = new RunBridgePreview();
+  browser.status.mockReset().mockResolvedValue({
+    structuredContent: {
+      visual: { stream_path: "/v1/sessions/s/visual/stream" },
+    },
+  });
   vi.stubGlobal(
     "fetch",
     vi.fn().mockResolvedValue({
@@ -159,4 +165,65 @@ it("错误或断开立即撤图，许可拒绝禁止自动重连", async () => {
   socket.onclose({ code: 1008 });
   vi.advanceTimersByTime(5000);
   expect(sockets).toHaveLength(1);
+});
+it("旧HTTP会话入口退役不影响MCP状态读取与同页预览", async () => {
+  vi.mocked(fetch).mockResolvedValue({ ok: false, status: 410 } as Response);
+  const socket = await bind();
+  expect(browser.status).toHaveBeenCalledOnce();
+  expect(fetch).not.toHaveBeenCalled();
+  expect(String(socket.url)).toBe("ws://hub.test/v1/sessions/s/visual/stream");
+  state(socket);
+  frame(socket);
+  expect(preview.state("run-own").ready).toBe(true);
+});
+it("MCP状态查询拒绝许可时撤图并停止重连，网络错误允许重试", async () => {
+  browser.status.mockResolvedValueOnce({
+    isError: true,
+    structuredContent: { code: "SESSION_OUTSIDE_GRANT" },
+  });
+  await bind();
+  expect(preview.state("run-own")).toMatchObject({
+    ready: false,
+    failed: true,
+  });
+  expect(sockets).toHaveLength(0);
+  await vi.advanceTimersByTimeAsync(2000);
+  expect(browser.status).toHaveBeenCalledTimes(1);
+  preview.stop();
+  browser.status.mockRejectedValueOnce(new TypeError("network"));
+  await bind();
+  expect(preview.state("run-own").failed).not.toBe(true);
+  await vi.advanceTimersByTimeAsync(1001);
+  expect(sockets).toHaveLength(1);
+});
+it("切换或停止后迟到的MCP状态响应不能重建旧订阅", async () => {
+  let resolve: (value: unknown) => void;
+  browser.status.mockReturnValueOnce(
+    new Promise((done) => {
+      resolve = done;
+    }),
+  );
+  await bind();
+  preview.stop();
+  resolve!({
+    structuredContent: {
+      visual: { stream_path: "/v1/sessions/s/visual/stream" },
+    },
+  });
+  await Promise.resolve();
+  await Promise.resolve();
+  expect(sockets).toHaveLength(0);
+});
+it("MCP传输返回401时停止重连，不将许可拒绝当作网络抖动", async () => {
+  browser.status.mockRejectedValueOnce(
+    Object.assign(new Error("HTTP 401"), { data: { status: 401 } }),
+  );
+  await bind();
+  expect(preview.state("run-own")).toMatchObject({
+    ready: false,
+    failed: true,
+    reason: "远程画面许可或会话已失效",
+  });
+  await vi.advanceTimersByTimeAsync(2000);
+  expect(browser.status).toHaveBeenCalledTimes(1);
 });

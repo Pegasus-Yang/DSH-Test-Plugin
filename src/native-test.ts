@@ -400,7 +400,7 @@ export class NativeTest {
       incomplete: false,
       resource_quarantined: false,
       manifest: {
-        plugin_version: "0.13.1",
+        plugin_version: "0.13.2",
         plan_review: review,
         execution: "native-conversation",
         origin_session_id: agent.id,
@@ -440,7 +440,7 @@ export class NativeTest {
       .split("\n")
       .map((line) => {
         if (line.startsWith("实际操作说明："))
-          return '实际操作说明：浏览器动作必须调用test_execute_operation，tool_name从Schema中选择完整的mcp__runbridge__名称。导航、填写、点击、按键和等待逐个执行并附面向用户的说明。观察可直接browser_snapshot、browser_inspect_dom、browser_read或browser_tabs(action=list)。会话和页面参数由插件注入，不能传入node_id/session_id/page_id；只有browser_tabs明确选页时提供其返回的page_id。目标使用target.by/value/name；by=role时value只填button、textbox等角色，name填真实可访问名称，不能把snapshot整行作为value。含数组参数通过test_execute_operation的arguments_json传完整JSON字符串，例如{"target":{"by":"css","value":"#type"},"values":["api"]}；不要同时传arguments。iframe用frame_selector；没有Playwright snapshot ref、evaluate或run_code。先观察页面，再选择下一动作。断言实际值仅接受test_capture的固定DOM采集，覆盖text/number/count/visible/url/attribute/value；API仍在DSH宿主采集。初始化与释放只调用test_capture({})。截图与动作成功不能宣布PASS，写操作结果未知不得盲目再次提交。';
+          return '实际操作说明：浏览器动作必须调用test_execute_operation，tool_name从Schema中选择完整的mcp__runbridge__名称。导航、填写、点击、按键和等待逐个执行并附面向用户的说明。观察可直接browser_snapshot、browser_inspect_dom、browser_read或browser_tabs(action=list)。会话和页面参数由插件注入，不能传入node_id/session_id/page_id；只有browser_tabs明确选页时提供其返回的page_id。目标使用target.by/value/name；by=role时value只填button、textbox等角色，name填真实可访问名称，不能把snapshot整行作为value。含数组参数通过test_execute_operation的arguments_json传完整JSON字符串，例如{"target":{"by":"css","value":"#type"},"values":["api"]}；不要同时传arguments。iframe用frame_selector；没有Playwright snapshot ref、evaluate或run_code。先观察页面，再选择下一动作。断言实际值仅接受test_capture的固定DOM采集，覆盖text/number/count/visible/url/attribute/value；API仍在DSH宿主采集。初始化与释放只调用test_capture({})。截图与动作成功不能宣布PASS，写操作结果未知不得盲目再次提交；已取得原动作request_id时，用tool_request_status查询原结果，不能传入或覆盖会话身份，查询成功仍需test_capture验证业务结果。';
         if (line.startsWith("执行阶段："))
           return "执行阶段：按test_current完成当前业务目标，使用当前RunBridge原子工具操作虚拟机页面；不能调用本机Playwright或换另一会话。browser_fill替换整个输入，按Enter另用browser_press_key；select_option按value选择；触发弹窗前用browser_handle_dialog设置一次性策略。当前步骤的允许目标与冻结预期不可改变。浏览器由Node新建，网络回环地址指虚拟机；最多3600秒租期，许可到期不能新建浏览器续跑旧步骤。";
         return line;

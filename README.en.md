@@ -48,27 +48,27 @@ See the [visual tour](doc/user-guide/使用说明.en.md#visual-tour) for more pl
 
 Follow DSH's own instructions to install the host. See [plugin and browser configuration](doc/deployment/安装与运维.en.md#configure-the-installed-plugin).
 
-For remote or VM browsers, use **RunBridge Hub 0.5.1 / Node 0.5.0**. See the [remote browser and live preview guide (Chinese)](doc/user-guide/RunBridge远程浏览器与持续预览.md).
+For remote or VM browsers, use **RunBridge Hub/Node 0.7.0**. See the [remote browser and live preview guide (Chinese)](doc/user-guide/RunBridge远程浏览器与持续预览.md).
 
 ### 2. Install and enable the plugin
 
 For local review, install the same tgz supplied by the maintainer:
 
 ```sh
-dsh plugin --profile web add /absolute/path/dsh-test-plugin-0.13.1.tgz
+dsh plugin --profile web add /absolute/path/dsh-test-plugin-0.13.2.tgz
 dsh web
 ```
 
 After completed acceptance, review, and a manual push, enter this repository address in DSH's plugin manager, then enable the plugin:
 
 ```text
-https://github.com/Pegasus-Yang/DSH-Test-Plugin.git#v0.13.1
+https://github.com/Pegasus-Yang/DSH-Test-Plugin.git#v0.13.2
 ```
 
 Alternatively, install with the standalone DSH CLI:
 
 ```sh
-dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.13.1
+dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.13.2
 dsh web
 ```
 
@@ -76,7 +76,7 @@ Stop a running DSH normally before CLI installation. Use the same profile and `D
 
 See [installation and deployment](doc/deployment/安装与运维.en.md) for upgrades, uninstalling, and local packages.
 
-All three hosts use the same package without version exemptions. The build SDK remains alpha.3; ordinary plugin upgrades retain the supported hosts. See the [validation status (Chinese)](doc/project/0.13.1版本发布验收.md) and [dsh-compatibility.json](dsh-compatibility.json) for the exact support set.
+All three hosts use the same package without version exemptions. The build SDK remains alpha.3; ordinary plugin upgrades retain the supported hosts. See the [validation status (Chinese)](doc/project/0.13.2版本发布验收.md) and [dsh-compatibility.json](dsh-compatibility.json) for the exact support set.
 
 ### 3. Run your first test in a conversation
 
@@ -156,4 +156,4 @@ See [installation and deployment](doc/deployment/安装与运维.en.md) for loca
 
 [MIT](LICENSE). Third-party dependency and icon licenses are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-Remote or VM browsers can use RunBridge Hub/Node 0.5.0 with this plugin. See the [remote browser and live preview guide](doc/user-guide/RunBridge远程浏览器与持续预览.md) (Chinese). Live PNG preview and report screenshots are supported; remote video recording is not available.
+Remote or VM browsers can use RunBridge Hub/Node 0.7.0 with this plugin. See the [remote browser and live preview guide](doc/user-guide/RunBridge远程浏览器与持续预览.md) (Chinese). Live PNG preview and report screenshots are supported; remote video recording is not available.

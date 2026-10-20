@@ -31,6 +31,111 @@ export declare class RunBridge {
     private readonly outcomes;
     constructor(config: BrowserPreferences, workspace: string, changed?: () => void);
     connect(): Promise<void>;
+    /** 预览复用当前 MCP 连接读取会话，不依赖 HTTP 会话接口版本。 */
+    status(signal?: AbortSignal): Promise<{
+        [x: string]: unknown;
+        content: ({
+            type: "text";
+            text: string;
+            annotations?: {
+                audience?: ("user" | "assistant")[] | undefined;
+                priority?: number | undefined;
+                lastModified?: string | undefined;
+            } | undefined;
+            _meta?: {
+                [x: string]: unknown;
+            } | undefined;
+        } | {
+            type: "image";
+            data: string;
+            mimeType: string;
+            annotations?: {
+                audience?: ("user" | "assistant")[] | undefined;
+                priority?: number | undefined;
+                lastModified?: string | undefined;
+            } | undefined;
+            _meta?: {
+                [x: string]: unknown;
+            } | undefined;
+        } | {
+            type: "audio";
+            data: string;
+            mimeType: string;
+            annotations?: {
+                audience?: ("user" | "assistant")[] | undefined;
+                priority?: number | undefined;
+                lastModified?: string | undefined;
+            } | undefined;
+            _meta?: {
+                [x: string]: unknown;
+            } | undefined;
+        } | {
+            uri: string;
+            name: string;
+            type: "resource_link";
+            description?: string | undefined;
+            mimeType?: string | undefined;
+            size?: number | undefined;
+            annotations?: {
+                audience?: ("user" | "assistant")[] | undefined;
+                priority?: number | undefined;
+                lastModified?: string | undefined;
+            } | undefined;
+            _meta?: {
+                [x: string]: unknown;
+            } | undefined;
+            icons?: {
+                src: string;
+                mimeType?: string | undefined;
+                sizes?: string[] | undefined;
+                theme?: "light" | "dark" | undefined;
+            }[] | undefined;
+            title?: string | undefined;
+        } | {
+            type: "resource";
+            resource: {
+                uri: string;
+                text: string;
+                mimeType?: string | undefined;
+                _meta?: {
+                    [x: string]: unknown;
+                } | undefined;
+            } | {
+                uri: string;
+                blob: string;
+                mimeType?: string | undefined;
+                _meta?: {
+                    [x: string]: unknown;
+                } | undefined;
+            };
+            annotations?: {
+                audience?: ("user" | "assistant")[] | undefined;
+                priority?: number | undefined;
+                lastModified?: string | undefined;
+            } | undefined;
+            _meta?: {
+                [x: string]: unknown;
+            } | undefined;
+        })[];
+        _meta?: {
+            [x: string]: unknown;
+            "io.modelcontextprotocol/serverInfo"?: {
+                version: string;
+                name: string;
+                websiteUrl?: string | undefined;
+                description?: string | undefined;
+                icons?: {
+                    src: string;
+                    mimeType?: string | undefined;
+                    sizes?: string[] | undefined;
+                    theme?: "light" | "dark" | undefined;
+                }[] | undefined;
+                title?: string | undefined;
+            } | undefined;
+        } | undefined;
+        structuredContent?: unknown;
+        isError?: boolean | undefined;
+    }>;
     register(ctx: Context, only?: string[]): () => void;
     private invoke;
     outcome(callId: string): string | undefined;

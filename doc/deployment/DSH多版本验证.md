@@ -1,10 +1,10 @@
 # DSH多版本验证
 
-[安装与运维](安装与运维.md) · [方案](../design/DSH多版本兼容方案.md) · [0.13.1 验收](../project/0.13.1版本发布验收.md)
+[安装与运维](安装与运维.md) · [方案](../design/DSH多版本兼容方案.md) · [0.13.2 验收](../project/0.13.2版本发布验收.md)
 
-插件 0.13.1 的同一个包声明支持 DSH `0.2.1-alpha.1`、`0.2.1-alpha.2`、`0.2.1-alpha.3`。开发与构建 SDK 固定 alpha.3。Node.js 最低 22.19，Web、native 工具模式、单批并发 1；其他 alpha、rc、正式版不自动纳入。
+插件 0.13.2 的同一个包声明支持 DSH `0.2.1-alpha.1`、`0.2.1-alpha.2`、`0.2.1-alpha.3`。开发与构建 SDK 固定 alpha.3。Node.js 最低 22.19，Web、native 工具模式、单批并发 1；其他 alpha、rc、正式版不自动纳入。
 
-实际交付和各层验证结果见[验收记录](../project/0.13.1版本发布验收.md)。正式附注标签在必要门禁全部通过后创建，再由用户审核推送。
+实际交付和各层验证结果见[验收记录](../project/0.13.2版本发布验收.md)。正式附注标签在必要门禁全部通过后创建，再由用户审核推送。
 
 ## 维护支持集合
 
@@ -90,10 +90,10 @@ GitLab 正式回归继续使用[既有流程](../user-guide/GitLab复杂用例.m
 
 ## 旧宿主用户
 
-alpha.1～3 使用同一个 `v0.13.1` 包、安装地址及配置。维护者审核并手动推送本地标签后：
+alpha.1～3 使用同一个 `v0.13.2` 包、安装地址及配置。维护者审核并手动推送本地标签后：
 
 ```sh
-dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.13.1
+dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.13.2
 ```
 
 推送前使用本地 tgz；更换来源前正常停服、移除旧依赖后添加，保留工作区、输出和偏好。重启同一 profile 并刷新浏览器，核对实际版本。不需要版本豁免或专门的 alpha.1／alpha.2 插件变体。

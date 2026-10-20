@@ -388,7 +388,7 @@ try {
     await verify(sessionId, "ui", ["PASS"]);
     await send("请仅回复：兼容检查完成。不要调用任何工具。");
     await page
-      .getByText(/^兼容检查完成[。.!！]?$/)
+      .getByText(/^兼容检查(?:已)?完成[。.!！]?$/)
       .last()
       .waitFor({ timeout: 120000 });
     await waitIdle(sessionId);

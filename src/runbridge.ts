@@ -66,6 +66,13 @@ const managed = new Set([
   "lease_seconds",
   "request_id",
 ]);
+/** 选页和查询已有动作的标识可由调用方提供，运行身份仍由插件绑定。 */
+function callerSelected(tool: string, parameter: string): boolean {
+  return (
+    (parameter === "page_id" && tool === "browser_tabs") ||
+    (parameter === "request_id" && tool === "tool_request_status")
+  );
+}
 export function runbridgeResult(value: unknown): Record<string, any> {
   const structured = field(value, "structuredContent");
   let data = structured;
@@ -139,7 +146,12 @@ export class RunBridge {
   private readonly accessFile: string;
   resource?: BrowserResource;
   private client = new Client(
-    { name: "dsh-test-plugin", version: "0.12.1" },
+    {
+      name: "dsh-test-plugin",
+      version: JSON.parse(
+        readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+      ).version,
+    },
     { capabilities: {} },
   );
   private definitions: Awaited<ReturnType<Client["listTools"]>>["tools"] = [];
@@ -204,6 +216,15 @@ export class RunBridge {
       clearTimeout(timer!);
     }
   }
+  /** 预览复用当前 MCP 连接读取会话，不依赖 HTTP 会话接口版本。 */
+  async status(signal?: AbortSignal) {
+    const sessionId = this.resource?.remote?.session_id;
+    if (!this.connected || !sessionId) throw new Error("远程 MCP 会话不可用");
+    return this.client.callTool(
+      { name: "browser_status", arguments: { session_id: sessionId } },
+      { signal, timeout: 5000 },
+    );
+  }
   register(ctx: Context, only?: string[]): () => void {
     const disposers: (() => void)[] = [];
     try {
@@ -214,7 +235,7 @@ export class RunBridge {
           any
         >;
         for (const name of managed) {
-          if (name === "page_id" && tool.name === "browser_tabs") continue;
+          if (callerSelected(tool.name, name)) continue;
           delete inputSchema.properties?.[name];
           if (Array.isArray(inputSchema.required))
             inputSchema.required = inputSchema.required.filter(
@@ -241,10 +262,7 @@ export class RunBridge {
               outputSchema: tool.outputSchema,
               call: (args, exec) => {
                 for (const key of managed)
-                  if (
-                    key in args &&
-                    !(key === "page_id" && tool.name === "browser_tabs")
-                  )
+                  if (key in args && !callerSelected(tool.name, key))
                     throw new Error("远程身份参数由插件绑定，不能覆盖：" + key);
                 if (!validate(args)) {
                   this.outcomes.set(exec.callId, "NOT_STARTED");
@@ -274,7 +292,7 @@ export class RunBridge {
   ): Promise<unknown> {
     if (!this.connected) throw new Error("远程 MCP 连接已结束");
     for (const key of managed)
-      if (key in args && !(key === "page_id" && name === "browser_tabs"))
+      if (key in args && !callerSelected(name, key))
         throw new Error("远程身份参数由插件绑定，不能覆盖：" + key);
     const parameters = { ...args };
     if (name === "browser_file_upload") {
@@ -346,7 +364,14 @@ export class RunBridge {
       parameters.session_id = resource.remote.session_id;
       if (name === "browser_tabs" && parameters.action === "close")
         parameters.page_id ??= resource.remote.page_id;
-      if (!["browser_stop", "browser_status", "browser_tabs"].includes(name)) {
+      if (
+        ![
+          "browser_stop",
+          "browser_status",
+          "browser_tabs",
+          "tool_request_status",
+        ].includes(name)
+      ) {
         if (!resource.remote.page_id)
           throw new Error("请先通过 browser_tabs 明确选择本次页面");
         parameters.page_id = resource.remote.page_id;

@@ -12,6 +12,7 @@ import { operationTool } from "../../src/actual-operations.js";
 const sdk = vi.hoisted(() => ({ call: vi.fn(), close: vi.fn() }));
 const names = [
   "browser_start",
+  "browser_sessions",
   "browser_stop",
   "browser_status",
   "browser_snapshot",
@@ -21,6 +22,7 @@ const names = [
   "browser_screenshot",
   "browser_tabs",
   "browser_file_upload",
+  "tool_request_status",
 ];
 vi.mock("@modelcontextprotocol/client", () => ({
   Client: class {
@@ -45,9 +47,11 @@ vi.mock("@modelcontextprotocol/client", () => ({
               files: { type: "array" },
             },
             required:
-              name === "browser_tabs"
-                ? ["session_id"]
-                : ["session_id", "page_id"],
+              name === "tool_request_status"
+                ? ["session_id", "request_id"]
+                : name === "browser_tabs"
+                  ? ["session_id"]
+                  : ["session_id", "page_id"],
           },
         })),
       };
@@ -118,6 +122,103 @@ const open = async () => {
   sdk.call.mockResolvedValueOnce(result({ session, page_id: "page_own" }));
   await call("browser_start");
 };
+it("动作查询保留原动作请求ID，当前页关闭后仍只绑定本次会话", async () => {
+  const schema = defs.get("mcp__runbridge__tool_request_status").parameters;
+  expect(schema.properties.request_id).toEqual({ type: "string" });
+  expect(schema.required).toEqual(["request_id"]);
+  await open();
+  sdk.call.mockResolvedValueOnce(result({ session, pages: [] }));
+  await call("browser_tabs", { action: "close" });
+  expect(bridge.resource?.remote?.page_id).toBeUndefined();
+  const resource = structuredClone(bridge.resource);
+  sdk.call.mockResolvedValueOnce(result({ status: "SUCCEEDED" }));
+  await call("tool_request_status", { request_id: "cmd_original" });
+  expect(sdk.call.mock.calls.at(-1)![0]).toEqual({
+    name: "tool_request_status",
+    arguments: { session_id: session.session_id, request_id: "cmd_original" },
+  });
+  expect(bridge.resource).toEqual(resource);
+});
+it("查询缺少请求ID或覆盖会话身份在本机拒绝，其他工具不能接收请求ID", async () => {
+  await open();
+  sdk.call.mockClear();
+  await expect(call("tool_request_status")).rejects.toThrow("Schema");
+  for (const key of [
+    "session_id",
+    "node_id",
+    "page_id",
+    "resource_id",
+    "lease_seconds",
+  ])
+    await expect(
+      call("tool_request_status", {
+        request_id: "cmd_original",
+        [key]: "foreign",
+      }),
+    ).rejects.toThrow("不能覆盖");
+  for (const name of ["browser_start", "browser_click", "browser_sessions"])
+    await expect(call(name, { request_id: "cmd_original" })).rejects.toThrow(
+      "不能覆盖",
+    );
+  expect(sdk.call).not.toHaveBeenCalled();
+});
+it("动作仍在途或结果未知时只返回原查询结果，不重放也不改写资源状态", async () => {
+  await open();
+  const resource = structuredClone(bridge.resource);
+  sdk.call.mockClear();
+  sdk.call.mockResolvedValueOnce(
+    result({
+      status: "RUNNING",
+      request_id: "cmd_original",
+      execution_outcome: "OUTCOME_UNKNOWN",
+    }),
+  );
+  expect(
+    runbridgeResult(
+      await call("tool_request_status", { request_id: "cmd_original" }),
+    ).status,
+  ).toBe("RUNNING");
+  sdk.call.mockResolvedValueOnce(
+    result(
+      {
+        status: "UNKNOWN",
+        request_id: "cmd_original",
+        execution_outcome: "OUTCOME_UNKNOWN",
+      },
+      true,
+    ),
+  );
+  await expect(
+    call(
+      "tool_request_status",
+      { request_id: "cmd_original" },
+      "query_unknown",
+    ),
+  ).rejects.toThrow("UNKNOWN");
+  expect(bridge.outcome("query_unknown")).toBe("OUTCOME_UNKNOWN");
+  expect(bridge.resource).toEqual(resource);
+  expect(sdk.call.mock.calls.map(([value]) => value.name)).toEqual([
+    "tool_request_status",
+    "tool_request_status",
+  ]);
+});
+it("预览状态读取复用MCP并绑定当前会话，不需要页面或另建连接", async () => {
+  await expect(bridge.status()).rejects.toThrow("会话");
+  expect(sdk.call).not.toHaveBeenCalled();
+  await open();
+  delete bridge.resource!.remote!.page_id;
+  const response = result({
+    session,
+    visual: { stream_path: "/v1/sessions/session_own/visual/stream" },
+  });
+  sdk.call.mockResolvedValueOnce(response);
+  const signal = new AbortController().signal;
+  expect(await bridge.status(signal)).toEqual(response);
+  expect(sdk.call.mock.calls.at(-1)).toEqual([
+    { name: "browser_status", arguments: { session_id: session.session_id } },
+    { signal, timeout: 5000 },
+  ]);
+});
 it("身份从私有文件绑定，模型不能覆盖；启动前先保存未知资源", async () => {
   const schema = defs.get("mcp__runbridge__browser_click").parameters;
   expect(schema.properties.session_id).toBeUndefined();

@@ -1,5 +1,5 @@
 /** 服务端消费同会话画面流，访问许可不会交给浮窗页面。 */
-import type { SuiteRun } from "./contracts.js";
+import { type SuiteRun } from "./contracts.js";
 import type { PreviewState } from "./progress-model.js";
 import { type RunBridge } from "./runbridge.js";
 interface Frame {

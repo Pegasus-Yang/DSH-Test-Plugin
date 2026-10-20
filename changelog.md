@@ -4,7 +4,14 @@
 
 ## 未发布
 
-- 增加[RunBridge 升级对接核查](doc/design/RunBridge升级对接核查.md)，记录插件 0.13.1 对 Hub/Node 0.7.0 的真实隔离验证、已复现的预览／动作查询兼容缺陷及建议适配范围；本条不代表已完成修复。
+暂无。
+
+## [0.13.2](https://github.com/Pegasus-Yang/DSH-Test-Plugin/tree/v0.13.2) — 2026-10-20
+
+- 适配 RunBridge Hub/Node 0.7.0：持续预览复用当前 MCP 的 `browser_status`，避开已退役的 HTTP 会话查询；保留画面流 v1、首消息认证、身份／代次校验、过期撤图与断线重连。
+- 修复新增 `tool_request_status` 的 request_id 被过滤问题，仅允许查询工具接收原动作 ID，会话仍绑定本轮，当前页关闭后也可查询；查询不重放动作、不自动修改业务结果，启动请求身份继续受插件管理。
+- MCP Client 版本标识改为读取包清单，新运行的 plugin_version、当前中英文文档和安装标签同步为 0.13.2；远程架构和准备条件更新为 Node Python worker 执行与采集、Hub 路由和画面分发。
+- 新增路由退役、合法／缺失动作 ID、身份覆盖、无当前页面、未知查询结果、MCP 许可拒绝与迟到响应回归。前轮[升级核查](doc/design/RunBridge升级对接核查.md)保留缺陷复现原貌，实际验证与交付边界见[0.13.2 验收](doc/project/0.13.2版本发布验收.md)。
 
 ## [0.13.1](https://github.com/Pegasus-Yang/DSH-Test-Plugin/tree/v0.13.1) — 2026-10-18
 
