@@ -4,7 +4,7 @@
 
 ## 未发布
 
-暂无。
+- 增加[RunBridge 升级对接核查](doc/design/RunBridge升级对接核查.md)，记录插件 0.13.1 对 Hub/Node 0.7.0 的真实隔离验证、已复现的预览／动作查询兼容缺陷及建议适配范围；本条不代表已完成修复。
 
 ## [0.13.1](https://github.com/Pegasus-Yang/DSH-Test-Plugin/tree/v0.13.1) — 2026-10-18
 

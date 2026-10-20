@@ -73,6 +73,7 @@ The English guides describe the current implementation. Historical design and ac
 
 ## 设计与实施
 
+- [RunBridge 升级对接核查](design/RunBridge升级对接核查.md)：插件 0.13.1 对 Hub/Node 0.7.0 的真实隔离核查、持续预览与动作查询缺陷、建议适配范围；尚未实施修复。
 - [DSH 多版本兼容方案](design/DSH多版本兼容方案.md)：已按方案实施；明确 alpha.1–alpha.3 同包支持、开发基线与支持集合分离、必要改造、同一候选包的矩阵和旧宿主安装方式。
 - [RunBridge MCP 远程浏览器对接](design/runbridge-mcp/README.md)：以原 12 工具基线编写的历史提案，完整接入已在 0.12.0 实施；当前能力与修复结果以上方架构和验收记录为准。
 - [收尾约束与账本报告优化实施方案](design/收尾约束与账本报告优化实施方案.md)：已获批准，核心实现及优化指标验证完成；保留原方案及完整回归标准，实际结果和分轮复测边界见验收记录。
