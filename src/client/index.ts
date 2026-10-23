@@ -16,7 +16,7 @@ import { PreviewSettingsPage } from "./preview-settings.js";
 import type { ProgressSnapshot } from "../progress-model.js";
 import type { RecoverySnapshot } from "../recovery.js";
 import type { RecoveryActions } from "./recovery-panel.js";
-import type { ReportResult } from "../test-ui-access.js";
+import type { ReportResult, ReportTarget } from "../test-ui-access.js";
 import {
   PreviewPanel,
   ProgressDetails,
@@ -101,6 +101,11 @@ export function apply(ctx: Context): void {
             ...recovery,
             rebuildReport: (runId?: string) =>
               post<ReportResult>("report", {
+                session_id: currentSession(),
+                run_id: runId,
+              }),
+            describeReport: (runId?: string) =>
+              post<ReportTarget>("report-target", {
                 session_id: currentSession(),
                 run_id: runId,
               }),

@@ -1,4 +1,5 @@
 import { checkBrowscreen } from "./browscreen-command.js";
+import { checkRunBridgeSettings } from "./runbridge-settings.js";
 function readBody(req) {
     return new Promise((done, reject) => {
         const chunks = [];
@@ -7,7 +8,7 @@ function readBody(req) {
             length += chunk.length;
             if (length > 4096) {
                 chunks.length = 0;
-                reject(new Error("检测请求过大，请只填写命令路径。"));
+                reject(new Error("检测请求过大，请只填写配置文件或命令路径。"));
             }
             else
                 chunks.push(chunk);
@@ -19,9 +20,11 @@ function readBody(req) {
 }
 export class PreviewSettingsAccess {
     describe;
+    workspace;
     pending = new Set();
-    constructor(describe) {
+    constructor(describe, workspace = process.cwd()) {
         this.describe = describe;
+        this.workspace = workspace;
     }
     async serve(req, res) {
         res.setHeader("Cache-Control", "no-store");
@@ -29,7 +32,10 @@ export class PreviewSettingsAccess {
         const path = req.url?.split("?")[0];
         const method = path === "/test-preview-settings"
             ? "GET"
-            : path === "/test-preview-settings/check"
+            : [
+                "/test-preview-settings/check",
+                "/test-preview-settings/runbridge",
+            ].includes(path ?? "")
                 ? "POST"
                 : undefined;
         if (!method) {
@@ -46,14 +52,37 @@ export class PreviewSettingsAccess {
             res.end(JSON.stringify(this.describe()));
             return;
         }
-        let executable;
+        let executable = "";
+        let remote;
         try {
-            const body = JSON.parse(await readBody(req));
-            if (!body ||
-                typeof body.browscreenExecutable !== "string" ||
-                body.browscreenExecutable.length > 2048)
-                throw new Error("请提供有效的 browscreenExecutable 命令路径。");
-            executable = body.browscreenExecutable;
+            let body;
+            try {
+                body = JSON.parse(await readBody(req));
+            }
+            catch {
+                throw new Error("请提交有效的检测参数 JSON。");
+            }
+            if (path === "/test-preview-settings/runbridge") {
+                if (!body ||
+                    typeof body.accessFile !== "string" ||
+                    body.accessFile.length > 2048 ||
+                    typeof body.resourceId !== "string" ||
+                    !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(body.resourceId) ||
+                    !["read", "connect"].includes(String(body.action)))
+                    throw new Error("请提供访问文件路径、有效资源 ID 和 read/connect 检测动作。");
+                remote = {
+                    accessFile: body.accessFile.trim(),
+                    resourceId: body.resourceId,
+                    connect: body.action === "connect",
+                };
+            }
+            else {
+                if (!body ||
+                    typeof body.browscreenExecutable !== "string" ||
+                    body.browscreenExecutable.length > 2048)
+                    throw new Error("请提供有效的 browscreenExecutable 命令路径。");
+                executable = body.browscreenExecutable;
+            }
         }
         catch (error) {
             res.writeHead(400);
@@ -65,9 +94,9 @@ export class PreviewSettingsAccess {
         this.pending.add(controller);
         res.once("close", cancel);
         try {
-            const result = await checkBrowscreen(executable, {
-                signal: controller.signal,
-            });
+            const result = remote
+                ? await checkRunBridgeSettings(this.workspace, remote, controller.signal)
+                : await checkBrowscreen(executable, { signal: controller.signal });
             if (!res.destroyed)
                 res.end(JSON.stringify(result));
         }

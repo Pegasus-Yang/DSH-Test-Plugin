@@ -75,6 +75,10 @@ export function apply(ctx) {
                     session_id: currentSession(),
                     run_id: runId,
                 }),
+                describeReport: (runId) => post("report-target", {
+                    session_id: currentSession(),
+                    run_id: runId,
+                }),
             }),
         }, PreviewSettingsPage));
     });

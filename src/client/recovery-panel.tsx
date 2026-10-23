@@ -119,7 +119,7 @@ export function RecoveryPanel({
     >
       {!state && !failed && <p>正在读取测试环境状态…</p>}
       {state && !quarantine && !failed && !message && (
-        <p role="status">测试环境已就绪，无需释放。</p>
+        <p role="status">无待处理资源。此状态不表示 Hub 或浏览器连接已验证。</p>
       )}
       {failed && <p role="alert">无法读取测试环境状态，请检查连接后重试。</p>}
       {quarantine && (
@@ -156,8 +156,10 @@ export function RecoveryPanel({
             >
               <strong>是否关闭测试专用浏览器并释放隔离？</strong>
               <p>
-                这会关闭专用 Playwright
-                浏览器和预览。旧测试的错误与报告会保留；成功后需要重新发送用例。
+                {quarantine.browser_backend === "runbridge"
+                  ? "这会核对并关闭原许可下的远程浏览器会话及预览。"
+                  : "这会关闭测试专用的本机浏览器和预览。"}
+                旧测试的错误与报告会保留；成功后需要重新发送用例。
               </p>
               <label>
                 <input

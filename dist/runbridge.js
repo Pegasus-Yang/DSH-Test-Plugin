@@ -70,15 +70,28 @@ export function runbridgeResult(value) {
 export function readRunBridgeAccess(path) {
     let data;
     try {
+        const stat = statSync(path);
+        if (!stat.isFile() || stat.size > 32768)
+            throw new Error();
+    }
+    catch {
+        throw new Error("无法读取 RunBridge 私有访问文件，请检查路径、权限与文件大小（最多 32 KiB）。");
+    }
+    try {
         data = JSON.parse(readFileSync(path, "utf8"));
     }
     catch {
-        throw new Error("无法读取 RunBridge 私有访问文件，请检查路径和 JSON 格式");
+        throw new Error("文件内容不是连接 JSON。请使用 Node 所有者签发的访问文件；enrollment.token 用于节点登记。");
     }
     const result = data;
     if (!result ||
-        !["hub_url", "node_id", "grant_id", "access_token"].every((key) => typeof field(result, key) === "string" && !!field(result, key)))
-        throw new Error("RunBridge 访问文件缺少连接地址、节点、grant 或 access_token");
+        !["hub_url", "node_id", "grant_id", "access_token"].every((key) => typeof field(result, key) === "string" &&
+            !!String(field(result, key)).trim()))
+        throw new Error("RunBridge 访问文件缺少有效字段：" +
+            ["hub_url", "node_id", "grant_id", "access_token"]
+                .filter((key) => typeof field(result, key) !== "string" ||
+                !String(field(result, key)).trim())
+                .join("、"));
     let url;
     try {
         url = new URL(result.hub_url);
@@ -86,6 +99,8 @@ export function readRunBridgeAccess(path) {
     catch {
         throw new Error("RunBridge Hub 地址无效");
     }
+    if (url.pathname.replace(/\/$/, "").endsWith("/mcp"))
+        throw new Error("hub_url 请填写 Hub 基址，不包含末尾的 /mcp；插件会自动拼接 MCP 端点。");
     if (!["http:", "https:"].includes(url.protocol) ||
         url.username ||
         url.password ||
@@ -94,9 +109,17 @@ export function readRunBridgeAccess(path) {
         !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(result.node_id) ||
         !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(result.grant_id) ||
         result.access_token.length < 32 ||
-        result.access_token.length > 256)
+        result.access_token.length > 256 ||
+        /\s/.test(result.access_token))
         throw new Error("RunBridge 私有连接配置不符合服务合同");
     return { ...result, hub_url: url.href.replace(/\/$/, "") };
+}
+/** 运行与设置检测共享同一 SDK、版本标识。 */
+export function createRunBridgeClient() {
+    return new Client({
+        name: "dsh-test-plugin",
+        version: JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version,
+    }, { capabilities: {} });
 }
 export function hubPath(base, path) {
     return new URL(base.replace(/\/$/, "") + "/" + path.replace(/^\//, ""));
@@ -109,10 +132,7 @@ export class RunBridge {
     config;
     accessFile;
     resource;
-    client = new Client({
-        name: "dsh-test-plugin",
-        version: JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version,
-    }, { capabilities: {} });
+    client = createRunBridgeClient();
     definitions = [];
     connected = false;
     disposing;

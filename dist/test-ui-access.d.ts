@@ -6,6 +6,12 @@ export interface ReportResult {
     url: string;
     path: string;
 }
+export interface ReportTarget {
+    run_id: string;
+    name: string;
+    lifecycle: string;
+    can_rebuild: boolean;
+}
 export declare class TestUiAccess {
     private readonly tests;
     private readonly inputPath;

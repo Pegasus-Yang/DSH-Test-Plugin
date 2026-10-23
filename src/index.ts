@@ -56,10 +56,18 @@ export function apply(ctx: Context, config: PluginConfig = {}): void {
   );
   ctx.provide("nativeTests", tests);
   ctx.inject(["webServer", "connection", "agents"], (web) => {
-    const previewSettings = new PreviewSettingsAccess(() => ({
-      ...setup.describe(),
-      browserConnection: browserConnection?.get() ?? runtimeConfig.browser,
-    }));
+    const previewSettings = new PreviewSettingsAccess(() => {
+      const active = [...tests.sessions.values()].find((test) => !test.closed);
+      return {
+        ...setup.describe(),
+        browserConnection: browserConnection?.get() ?? runtimeConfig.browser,
+        activeBrowser: active
+          ? active.browser
+            ? "runbridge"
+            : "playwright"
+          : undefined,
+      };
+    }, tests.config.workspace);
     web.effect(() => () => previewSettings.dispose());
     const interfaceActions = new TestUiAccess(
       tests,

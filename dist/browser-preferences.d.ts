@@ -7,3 +7,5 @@ export interface BrowserPreferences {
     previewEnabled: boolean;
 }
 export declare const browserPreferenceDefaults: BrowserPreferences;
+/** 仅解释文件格式，不携带可用许可。 */
+export declare const runbridgeAccessTemplate: string;

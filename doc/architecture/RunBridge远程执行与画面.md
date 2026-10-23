@@ -2,7 +2,7 @@
 
 [文档导航](../README.md) · [使用指南](../user-guide/RunBridge远程浏览器与持续预览.md) · [历史提案](../design/runbridge-mcp/README.md)
 
-本文描述插件 0.13.2 与 RunBridge Hub/Node 0.7.0 的实现。每次测试冻结浏览器后端和私有访问配置，继续附着在发起命令的当前 DSH Agent。旧版 MCP 的工具兼容路径保留；旧 Hub 0.5.1 / Node 0.5.0 的历史验收见原记录，不作为本轮新版实测。
+本文描述插件 0.14.0 与 RunBridge Hub/Node 0.7.0 的实现。每次测试冻结浏览器后端和私有访问配置，继续附着在发起命令的当前 DSH Agent。旧版 MCP 的工具兼容路径保留；旧 Hub 0.5.1 / Node 0.5.0 的历史验收见原记录，不作为本轮新版实测。
 
 ```mermaid
 flowchart LR
@@ -17,6 +17,10 @@ flowchart LR
 ```
 
 `runbridge.ts` 使用官方 MCP Client 2.0.0 和公开 DSH `createMcpToolDefinition`，在 Agent 作用域注册 `mcp__runbridge__*`；沿用原生审批、取消、错误及图片附件投影。私有令牌只用于服务端 HTTP 和 WebSocket 首消息认证，浮窗不直接访问 Hub。运行状态暴露资源身份，省略私有文件路径和令牌。
+
+设置页保留访问文件作为连接来源。`runbridge-settings.ts` 在宿主读取最大 32 KiB 的 JSON，仅回传 Hub 基址、实际 MCP 端点、节点、许可、可选到期时间和文件摘要；令牌不进入页面。读取不联网；“检测连接”使用相同 MCP Client 工厂，最多等待 10 秒，完成握手、工具清单与一次只读 `node_inspect`，不会调用 `browser_start`。Node 查询按实际令牌授权范围筛选受管理 Chromium 资源。查询不返回实际许可 ID，因此本检测不证明文件中的 `grant_id` 与令牌配套，也不保证稍后可成功分配；会话身份继续在真实运行时校验。
+
+浏览器连接与本机画面偏好使用一份页面草稿，通过同一 namespace revision 的两个设置操作原子保存。关闭设置后再次打开保留草稿；整页刷新离开前使用浏览器标准提示，不把凭据或草稿存入浏览器持久存储。模式、访问路径、资源或租期修改会清除旧检测；设置可见时每 15 秒及窗口重新获得焦点时重读文件，文件摘要改变即撤销旧连接结论。保存只重新验证格式，不强制连接；运行中的测试保留原后端，新配置下次运行生效。
 
 插件管理 node_id/resource_id/lease/启动 request_id；启动后管理 session_id/page_id。页面选择只能使用本会话返回的 ID；默认列页保持绑定，关闭当前页后必须明确新建或选择。`tool_request_status` 单独保留原动作 request_id，session_id 继续绑定本轮，不注入或依赖 page_id。所选后端以外的浏览器 MCP 被当前测试守卫拒绝。接口用例不会申请浏览器。MCP Client 标识从包清单读取版本。
 
@@ -43,4 +47,4 @@ Node Python worker 对执行所用同一 Page 约每 300 毫秒采集 PNG，独�
 
 新版动作结果带 request_id。`tool_request_status` 查询原动作，不重放写入，也不把 SUCCEEDED 直接转换成业务 PASS。只有取得动作 ID 时才能查询；整个响应丢失且 ID 未知时继续保留未知状态，通过业务观察或原有恢复路径核实，不能猜测 ID 或重试提交。
 
-受管理浏览器临时目录使用短 `/tmp/rb-*` 私有目录，仅在 Node 按所有权记录确认所属 worker／浏览器退出后删除。插件继续通过 MCP 创建独立受管理浏览器，不增加借用已有 Chrome 的入口。当前交付与旧版缺陷复现分别见[0.13.2 验收](../project/0.13.2版本发布验收.md)和[升级核查](../design/RunBridge升级对接核查.md)。
+受管理浏览器临时目录使用短 `/tmp/rb-*` 私有目录，仅在 Node 按所有权记录确认所属 worker／浏览器退出后删除。插件继续通过 MCP 创建独立受管理浏览器，不增加借用已有 Chrome 的入口。本轮配置交付见[0.14.0 验收](../project/0.14.0版本发布验收.md)。0.7.0 执行与画面适配及旧版缺陷复现分别见[0.13.2 验收](../project/0.13.2版本发布验收.md)和[升级核查](../design/RunBridge升级对接核查.md)。

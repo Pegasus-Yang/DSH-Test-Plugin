@@ -24,7 +24,7 @@ export interface PluginConfig extends Partial<TestConfig> {
     browserPreview?: Volatile<PreviewPreferences | undefined>;
     browserConnection?: Volatile<BrowserPreferences | undefined>;
 }
-/** 只有预览偏好可即时保存；下一次测试读取它，不重载执行中的插件。 */
+/** 浏览器连接与画面偏好可原子保存；下次测试读取，不重载执行中的插件。 */
 export declare const Config: z<Partial<TestConfig> & {
     browserPreview?: PreviewPreferences;
     browserConnection?: BrowserPreferences;

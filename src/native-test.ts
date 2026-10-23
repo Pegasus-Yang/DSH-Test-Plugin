@@ -400,7 +400,7 @@ export class NativeTest {
       incomplete: false,
       resource_quarantined: false,
       manifest: {
-        plugin_version: "0.13.2",
+        plugin_version: "0.14.0",
         plan_review: review,
         execution: "native-conversation",
         origin_session_id: agent.id,

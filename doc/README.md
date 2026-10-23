@@ -10,7 +10,8 @@ The English guides describe the current implementation. Historical design and ac
 
 ## 当前版本
 
-- [0.13.2 版本发布验收](project/0.13.2版本发布验收.md)：RunBridge 0.7.0 的持续预览与动作结果查询适配、真实浏览器验证和同包宿主矩阵。
+- [0.14.0 版本发布验收](project/0.14.0版本发布验收.md)：访问文件引导与只读连接检测、浏览器设置统一草稿与保存、同包多版本验证。
+- [0.13.2 历史版本发布验收](project/0.13.2版本发布验收.md)：RunBridge 0.7.0 的持续预览与动作结果查询适配、真实浏览器验证和同包宿主矩阵。
 - [0.13.1 历史版本发布验收](project/0.13.1版本发布验收.md)：CI 首次引导与未选工作区修复、Node.js 24 Action 和固定 Ubuntu 基线、发行与三版验证。
 - [0.13.0 历史多版本兼容验收](project/0.13.0多版本兼容验收.md)：alpha.1～3 的无豁免安装、公开 SDK、Web、真实模型分层验证、原始失败及补验状态。
 - [CI 首次引导回归验收](project/CI首次引导回归验收.md)：0.13.0 推送后首次引导及未选工作区两次失败的原因、修正和三版复验。
@@ -74,6 +75,7 @@ The English guides describe the current implementation. Historical design and ac
 
 ## 设计与实施
 
+- [配置展现与交互优化方案](design/配置展现与交互优化方案.md)：访问文件方式、状态分层与统一保存；实施结果见 0.14.0 验收。
 - [RunBridge 升级对接核查](design/RunBridge升级对接核查.md)：插件 0.13.1 的缺陷复现与原适配建议，实施结果见 0.13.2 验收。
 - [DSH 多版本兼容方案](design/DSH多版本兼容方案.md)：已按方案实施；明确 alpha.1–alpha.3 同包支持、开发基线与支持集合分离、必要改造、同一候选包的矩阵和旧宿主安装方式。
 - [RunBridge MCP 远程浏览器对接](design/runbridge-mcp/README.md)：以原 12 工具基线编写的历史提案，完整接入已在 0.12.0 实施；当前能力与修复结果以上方架构和验收记录为准。

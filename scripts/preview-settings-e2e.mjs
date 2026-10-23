@@ -47,7 +47,7 @@ async function openSettings() {
   if (!(await item.isVisible()))
     await page.getByRole("button", { name: "设置", exact: true }).click();
   await item.click();
-  await page.locator("#dsh-test-browscreen-port").waitFor();
+  await page.locator("#dsh-test-browser-backend").waitFor();
 }
 try {
   await page.goto(state.url);
@@ -56,15 +56,18 @@ try {
   await welcome.waitFor({ state: "visible", timeout: 5000 }).catch(() => {});
   if (await welcome.isVisible()) await welcome.click();
   await openSettings();
-  const checkbox = page.getByRole("checkbox", { name: "启用浏览器实时预览" });
+  const checkbox = page.getByRole("checkbox", {
+    name: "显示实时画面",
+    exact: true,
+  });
   await checkbox.check();
-  await page
-    .getByText("高级设置：Browscreen 命令路径", { exact: true })
-    .click();
+  await page.getByText("高级设置：命令路径与采集端口", { exact: true }).click();
   await page
     .locator("#dsh-test-browscreen-executable")
     .fill("/not-installed-browscreen/browscreen");
-  await page.getByRole("button", { name: "检测安装", exact: true }).click();
+  await page
+    .getByRole("button", { name: "检测命令与版本", exact: true })
+    .click();
   await page
     .locator("[data-test-browscreen-check]")
     .filter({ hasText: "未找到 Browscreen" })
@@ -75,11 +78,18 @@ try {
     0,
     "修改入口后保留了旧检测结果",
   );
-  await page.getByRole("button", { name: "检测安装", exact: true }).click();
+  await page
+    .getByRole("button", { name: "检测命令与版本", exact: true })
+    .click();
   await page
     .locator("[data-test-browscreen-check]")
-    .filter({ hasText: "Browscreen 0.2.1 已安装" })
+    .filter({ hasText: /Browscreen 0\.3\.\d+ 已安装/ })
     .waitFor();
+  const detected = await page
+    .locator("[data-test-browscreen-check]")
+    .innerText();
+  const detectedVersion = detected.match(/Browscreen (0\.3\.\d+) 已安装/)?.[1];
+  assert(detectedVersion, "未取得受支持的实际命令版本");
   const beforeSave = parse(
     await readFile(join(state.home, "profiles/web/cordis.patch.yml"), "utf8"),
   );
@@ -87,13 +97,15 @@ try {
     !beforeSave.some(
       (row) => row.id === "harness-test" && row.config?.browserPreview,
     ),
-    "检测安装提前保存了配置",
+    "检测命令与版本提前保存了配置",
   );
   await page.locator("#dsh-test-browscreen-port").fill(String(port));
   await page
     .locator("#dsh-test-preview-mcp")
     .selectOption("mcp-test-playwright");
-  await page.getByRole("button", { name: "保存设置", exact: true }).click();
+  await page
+    .getByRole("button", { name: "保存浏览器设置", exact: true })
+    .click();
   await page.getByRole("status").filter({ hasText: "已保存" }).waitFor();
   const profile = join(state.home, "profiles/web/cordis.patch.yml");
   const rows = parse(await readFile(profile, "utf8"));
@@ -101,6 +113,7 @@ try {
     rows.find((row) => row.id === "harness-test").config.browserPreview,
     {
       enabled: true,
+      recordingEnabled: false,
       browscreenExecutable: executable,
       port,
       mcpId: "mcp-test-playwright",
@@ -114,6 +127,7 @@ try {
   await page.reload();
   await openSettings();
   assert(await checkbox.isChecked());
+  await page.getByText("高级设置：命令路径与采集端口", { exact: true }).click();
   assert.equal(
     await page.locator("#dsh-test-browscreen-executable").inputValue(),
     executable,
@@ -134,7 +148,7 @@ try {
       {
         saved: true,
         installationDetected: true,
-        detectedVersion: "0.2.1",
+        detectedVersion,
         missingCommandExplained: true,
         detectionDidNotSave: true,
         reloaded: true,

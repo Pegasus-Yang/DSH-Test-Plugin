@@ -97,6 +97,30 @@ const request = (
   body: unknown = {},
   method = "POST",
 ) => begin(service, action, body, method).pending;
+it("读取目标运行摘要不写入任何报告，活动运行只展示不可重建", async () => {
+  const t = setup();
+  const one = t.save();
+  const files = readdirSync(one.directory);
+  const first = await request(t.service, "report-target", {
+    session_id: "one",
+  });
+  expect(first.data.value).toMatchObject({
+    run_id: "run-one",
+    name: "报告重建验收",
+    can_rebuild: true,
+  });
+  expect(readdirSync(one.directory)).toEqual(files);
+  t.tests.sessions.set("one", { run: one.run, closed: false } as never);
+  expect(
+    (await request(t.service, "report-target", { run_id: "run-one" })).data
+      .value.can_rebuild,
+  ).toBe(false);
+  expect(readdirSync(one.directory)).toEqual(files);
+  expect(
+    (await request(t.service, "report-target", { session_id: "empty" })).data
+      .message,
+  ).toContain("没有报告");
+});
 it("重建当前会话或指定历史报告只读取账本，保留原报告、原结果和事件", async () => {
   const t = setup();
   const one = t.save();
@@ -133,6 +157,18 @@ it("重建当前会话或指定历史报告只读取账本，保留原报告、�
   ).toBe("run-two");
   expect(t.recover).not.toHaveBeenCalled();
   expect(result.headers["Cache-Control"]).toBe("no-store");
+});
+it("损坏的报告摘要只返回安全提示，不回显文件内容", async () => {
+  const t = setup();
+  const one = t.save();
+  writeFileSync(join(one.directory, "results.json"), "PRIVATE_INPUT not json");
+  const result = await request(t.service, "report-target", {
+    run_id: "run-one",
+  });
+  expect(result.status).toBe(400);
+  expect(result.data.message).toContain("无法读取该运行摘要");
+  expect(JSON.stringify(result.data)).not.toContain("PRIVATE_INPUT");
+  expect(existsSync(join(one.directory, "report-rebuilt.html"))).toBe(false);
 });
 it("中断记录仍能生成明确不完整的报告，活动测试拒绝重建", async () => {
   const t = setup();

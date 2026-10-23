@@ -11,6 +11,7 @@ export interface QuarantineState {
     overdue: boolean;
     can_recover: boolean;
     unavailable_reason?: string;
+    browser_backend?: "playwright" | "runbridge";
 }
 export interface RecoverySnapshot {
     quarantine: QuarantineState | null;

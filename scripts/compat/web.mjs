@@ -47,14 +47,33 @@ try {
     await anonymous.close();
     await openSettings(page);
     if (mode === "save") {
+      await page
+        .getByRole("checkbox", { name: "显示实时画面", exact: true })
+        .check();
+      await page
+        .getByText("高级设置：命令路径与采集端口", { exact: true })
+        .click();
       await page.locator("#dsh-test-browscreen-port").fill("13402");
       await page
         .locator("#dsh-test-preview-mcp")
         .selectOption("compat-playwright");
-      await page.getByRole("button", { name: "保存设置", exact: true }).click();
+      await page
+        .getByRole("checkbox", { name: "显示实时画面", exact: true })
+        .uncheck();
+      await page
+        .getByRole("button", { name: "保存浏览器设置", exact: true })
+        .click();
       await page.getByRole("status").filter({ hasText: "已保存" }).waitFor();
     }
     if (["save", "read"].includes(mode)) {
+      {
+        await page
+          .getByRole("checkbox", { name: "显示实时画面", exact: true })
+          .check();
+        await page
+          .getByText("高级设置：命令路径与采集端口", { exact: true })
+          .click();
+      }
       assert.equal(
         await page.locator("#dsh-test-browscreen-port").inputValue(),
         "13402",

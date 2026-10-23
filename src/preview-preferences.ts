@@ -18,6 +18,7 @@ export interface PreviewSettingsInfo {
   namespace: string;
   mcpInstances: { id: string; label: string; compatible: boolean }[];
   message: string;
+  activeBrowser?: "playwright" | "runbridge";
 }
 
 export const browscreenVersionRange = ">=0.3.0,<0.4.0";

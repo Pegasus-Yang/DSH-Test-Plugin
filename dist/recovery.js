@@ -46,6 +46,7 @@ export class RecoveryManager {
         const validTime = Number.isFinite(timestamp) && timestamp <= now;
         const validId = typeof id === "string" && /^run-[\w-]+$/.test(id);
         let browser = false;
+        let backend;
         if (validId) {
             try {
                 const run = JSON.parse(readFileSync(join(this.outputRoot, id, "results.json"), "utf8"));
@@ -54,6 +55,9 @@ export class RecoveryManager {
                         run.instances.some((instance) => instance.resources.browser_context?.state === "exists" ||
                             (instance.resources.browser_context?.remote &&
                                 instance.resources.browser_context.state === "unknown"));
+                backend = run.instances.some((instance) => instance.resources.browser_context?.remote)
+                    ? "runbridge"
+                    : "playwright";
             }
             catch {
                 /* 缺少资源归属时保留手工处置入口。 */
@@ -71,6 +75,7 @@ export class RecoveryManager {
         return {
             quarantine: {
                 token: this.token(current.raw),
+                ...(backend ? { browser_backend: backend } : {}),
                 ...(validId ? { run_id: id } : {}),
                 reason: typeof current.marker.details?.reason === "string"
                     ? current.marker.details.reason

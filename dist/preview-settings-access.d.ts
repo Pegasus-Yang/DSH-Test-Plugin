@@ -3,8 +3,9 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { PreviewSettingsInfo } from "./preview-preferences.js";
 export declare class PreviewSettingsAccess {
     private readonly describe;
+    private readonly workspace;
     private readonly pending;
-    constructor(describe: () => PreviewSettingsInfo);
+    constructor(describe: () => PreviewSettingsInfo, workspace?: string);
     serve(req: IncomingMessage, res: ServerResponse): Promise<void>;
     dispose(): void;
 }

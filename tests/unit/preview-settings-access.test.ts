@@ -3,19 +3,23 @@ import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import { PreviewSettingsAccess } from "../../src/preview-settings-access.js";
 import { checkBrowscreen } from "../../src/browscreen-command.js";
+import { checkRunBridgeSettings } from "../../src/runbridge-settings.js";
+vi.mock("../../src/runbridge-settings.js", () => ({
+  checkRunBridgeSettings: vi
+    .fn()
+    .mockResolvedValue({ ok: true, code: "FILE_VALID", message: "已解析" }),
+}));
 
 vi.mock("../../src/browscreen-command.js", () => ({
   checkBrowscreen: vi.fn(),
 }));
 beforeEach(() => {
-  vi.mocked(checkBrowscreen)
-    .mockReset()
-    .mockResolvedValue({
-      ok: true,
-      executable: "/installed/browscreen",
-      version: "0.2.1",
-      message: "已安装",
-    });
+  vi.mocked(checkBrowscreen).mockReset().mockResolvedValue({
+    ok: true,
+    executable: "/installed/browscreen",
+    version: "0.2.1",
+    message: "已安装",
+  });
 });
 const services: PreviewSettingsAccess[] = [];
 afterEach(() => services.splice(0).forEach((service) => service.dispose()));
@@ -109,4 +113,57 @@ it("宿主卸载时取消尚未完成的设置页查询", async () => {
   await vi.waitFor(() => expect(checkBrowscreen).toHaveBeenCalled());
   service.dispose();
   expect((await pending).result.code).toBe("CHECK_CANCELLED");
+});
+it("远程检查只接收路径，读取与连接动作分开，不保存配置", async () => {
+  const service = setup();
+  const result = await request(
+    service,
+    "/test-preview-settings/runbridge",
+    "POST",
+    JSON.stringify({
+      accessFile: "/private/access.json",
+      resourceId: "chromium",
+      action: "read",
+    }),
+  );
+  expect(result.result.code).toBe("FILE_VALID");
+  expect(checkRunBridgeSettings).toHaveBeenLastCalledWith(
+    process.cwd(),
+    {
+      accessFile: "/private/access.json",
+      resourceId: "chromium",
+      connect: false,
+    },
+    expect.any(AbortSignal),
+  );
+  expect(result.headers["Cache-Control"]).toBe("no-store");
+  await request(
+    service,
+    "/test-preview-settings/runbridge",
+    "POST",
+    JSON.stringify({
+      accessFile: "/private/access.json",
+      resourceId: "chromium",
+      action: "connect",
+    }),
+  );
+  expect(checkRunBridgeSettings).toHaveBeenLastCalledWith(
+    process.cwd(),
+    expect.objectContaining({ connect: true }),
+    expect.any(AbortSignal),
+  );
+});
+it.each([
+  "null",
+  '{"accessFile":5}',
+  JSON.stringify({
+    accessFile: "path",
+    resourceId: "../outside",
+    action: "connect",
+  }),
+])("非法远程检查参数被拒绝", async (body) => {
+  expect(
+    (await request(setup(), "/test-preview-settings/runbridge", "POST", body))
+      .status,
+  ).toBe(400);
 });

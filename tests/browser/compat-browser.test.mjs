@@ -27,7 +27,7 @@ const root=document.getElementById('root');
 const launcher=document.getElementById('launcher');
 const settings=document.getElementById('settings');
 const button=(label,action,parent=launcher)=>{const b=document.createElement('button');b.textContent=label;b.onclick=action;parent.append(b);return b;};
-const showSettings=()=>{window.actions.push('settings');settings.replaceChildren();button('测试插件',()=>{window.actions.push('plugin');settings.innerHTML='<input id="dsh-test-browscreen-port" value="13401">';},settings);};
+const showSettings=()=>{window.actions.push('settings');settings.replaceChildren();button('测试插件',()=>{window.actions.push('plugin');settings.innerHTML='<select id="dsh-test-browser-backend"><option value="playwright">本机 Playwright MCP</option></select><input id="dsh-test-browscreen-port" value="13401">';},settings);};
 let launch;
 if(options.account){launch=button('账号菜单',()=>{window.actions.push('account');const item=button('设置',showSettings);item.setAttribute('role','menuitem');});}
 else launch=button('设置',showSettings);

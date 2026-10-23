@@ -80,7 +80,7 @@ export async function openSettings(page, { timeout = 30000 } = {}) {
       }),
     timeout,
   );
-  await page.locator("#dsh-test-browscreen-port").waitFor();
+  await page.locator("#dsh-test-browser-backend").waitFor();
 }
 export async function rpc(page, method, args) {
   const response = await page.evaluate(

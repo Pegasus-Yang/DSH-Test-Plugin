@@ -81,7 +81,7 @@ const PreferencesSchema = z.object({
 // 对象 schema 默认补成 {}；保留“没有保存新偏好”与“明确关闭”的区别。
 delete PreviewSchema.meta.default;
 delete PreferencesSchema.meta.default;
-/** 只有预览偏好可即时保存；下一次测试读取它，不重载执行中的插件。 */
+/** 浏览器连接与画面偏好可原子保存；下次测试读取，不重载执行中的插件。 */
 export const Config = z.object({
   workspace: z.string().default(defaults.workspace),
   outputRoot: z.string().default(defaults.outputRoot),

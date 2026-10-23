@@ -1,6 +1,7 @@
-import type { ReportResult } from "../test-ui-access.js";
+import type { ReportResult, ReportTarget } from "../test-ui-access.js";
 export interface ReportActions {
     rebuildReport: (runId?: string) => Promise<ReportResult>;
+    describeReport?: (runId?: string) => Promise<ReportTarget>;
 }
 export declare function RebuildReport({ rebuildReport, runId, }: ReportActions & {
     runId?: string;

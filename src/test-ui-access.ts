@@ -1,6 +1,6 @@
 /** 设置页的报告重建与隔离处置；宿主外层负责认证，操作沿用现有执行服务。 */
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { NativeTests } from "./native-test.js";
 import { atomicJson, rebuild } from "./recorder.js";
@@ -11,6 +11,12 @@ export interface ReportResult {
   run_id: string;
   url: string;
   path: string;
+}
+export interface ReportTarget {
+  run_id: string;
+  name: string;
+  lifecycle: string;
+  can_rebuild: boolean;
 }
 
 export class TestUiAccess {
@@ -28,7 +34,7 @@ export class TestUiAccess {
   async serve(req: IncomingMessage, res: ServerResponse): Promise<void> {
     res.setHeader("Content-Type", "application/json; charset=utf-8");
     res.setHeader("Cache-Control", "no-store");
-    const action = /^\/test-ui\/(report|recover|release)$/.exec(
+    const action = /^\/test-ui\/(report|report-target|recover|release)$/.exec(
       req.url?.split("?")[0] ?? "",
     )?.[1];
     if (!action || req.method !== "POST") {
@@ -69,8 +75,8 @@ export class TestUiAccess {
         },
       );
       if (controller.signal.aborted) throw new Error("操作已取消");
-      let value: ReportResult | string;
-      if (action === "report") {
+      let value: ReportResult | ReportTarget | string;
+      if (action === "report" || action === "report-target") {
         if (
           (body.run_id !== undefined && typeof body.run_id !== "string") ||
           (body.session_id !== undefined && typeof body.session_id !== "string")
@@ -83,14 +89,34 @@ export class TestUiAccess {
           this.tests.reportId(sessionId);
         if (!id || !/^run-[\w-]+$/.test(id))
           throw new Error("当前对话没有报告，请填写合法运行ID。");
-        if (
-          [...this.tests.sessions.values()].some(
-            (test) => test.run.suite_run_id === id && !test.closed,
-          )
-        )
+        const active = [...this.tests.sessions.values()].some(
+          (test) => test.run.suite_run_id === id && !test.closed,
+        );
+        if (active && action === "report")
           throw new Error("当前测试尚未结束，不能重建报告。");
         const directory = join(this.tests.config.outputRoot, id);
         if (!existsSync(directory)) throw new Error("运行记录不存在");
+        if (action === "report-target") {
+          let run;
+          try {
+            run = JSON.parse(
+              readFileSync(join(directory, "results.json"), "utf8"),
+            );
+          } catch {
+            throw new Error("无法读取该运行摘要，请检查运行记录是否完整。");
+          }
+          if (!run || typeof run !== "object" || Array.isArray(run))
+            throw new Error("运行摘要格式无效。");
+          if (run.suite_run_id !== id) throw new Error("运行记录身份不一致");
+          value = {
+            run_id: id,
+            name: typeof run.name === "string" ? run.name : "未命名测试",
+            lifecycle: String(run.lifecycle),
+            can_rebuild: !active,
+          };
+          if (!res.destroyed) res.end(JSON.stringify({ ok: true, value }));
+          return;
+        }
         const run = await rebuild(directory, controller.signal);
         controller.signal.throwIfAborted();
         writeManualCases(directory, run, true);

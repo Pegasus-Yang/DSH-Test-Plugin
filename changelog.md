@@ -6,6 +6,11 @@
 
 暂无。
 
+## [0.14.0](https://github.com/Pegasus-Yang/DSH-Test-Plugin/tree/v0.14.0) — 2026-10-23
+
+- 配置页面优化：保留 RunBridge 私有访问文件，增加格式说明、空白模板、无秘密解析摘要与只读连接检测；检测不分配浏览器。
+- 浏览器位置、画面和录像共用草稿及原子保存，模式即时联动，关闭设置后保留未保存草稿；改善空状态、错误定位、只读说明、高级参数、资源处置和报告目标确认。
+
 ## [0.13.2](https://github.com/Pegasus-Yang/DSH-Test-Plugin/tree/v0.13.2) — 2026-10-20
 
 - 适配 RunBridge Hub/Node 0.7.0：持续预览复用当前 MCP 的 `browser_status`，避开已退役的 HTTP 会话查询；保留画面流 v1、首消息认证、身份／代次校验、过期撤图与断线重连。
