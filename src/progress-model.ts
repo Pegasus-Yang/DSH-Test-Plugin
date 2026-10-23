@@ -6,6 +6,7 @@ import type {
   SuiteRun,
   TestCase,
   TestSuite,
+  NodeLeaseRecord,
 } from "./contracts.js";
 
 export type ProgressPhase =
@@ -65,6 +66,7 @@ export interface ProgressSnapshot {
   settled_steps: number;
   report_url?: string;
   preview: PreviewState;
+  node_lease?: Omit<NodeLeaseRecord, "access_file">;
 }
 
 function stepView(
@@ -197,6 +199,11 @@ export function projectProgress(input: {
         ),
       );
   const business = instances.flatMap((instance) => instance.steps);
+  const lease = run.node_lease
+    ? (Object.fromEntries(
+        Object.entries(run.node_lease).filter(([key]) => key !== "access_file"),
+      ) as Omit<NodeLeaseRecord, "access_file">)
+    : undefined;
   return {
     session_id: String(run.manifest.origin_session_id ?? ""),
     run_id: run.suite_run_id,
@@ -226,5 +233,6 @@ export function projectProgress(input: {
       ? { report_url: input.reportUrl }
       : {}),
     preview: { ready: false },
+    ...(lease ? { node_lease: lease } : {}),
   };
 }

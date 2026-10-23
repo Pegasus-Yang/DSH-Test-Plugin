@@ -123,3 +123,26 @@ it("结算后保留真实结束时间与报告，后续读取不会继续增加�
     preview: { ready: false },
   });
 });
+
+it("进度显示独立的 Node 到期和空闲状态，不暴露恢复凭据文件位置", () => {
+  const value = run();
+  value.node_lease = {
+    source: "hub",
+    hub_url: "http://hub.test",
+    node_id: "node_one",
+    grant_id: "grant_one",
+    state: "RELEASING",
+    cleanup: "PENDING",
+    expires_at: "2030-01-01T01:00:00Z",
+    idle_deadline_at: "2030-01-01T00:10:00Z",
+    inflight: false,
+    access_file: "/private/.runbridge-access/secret.json",
+  };
+  const snapshot = projectProgress({ run: value, phase: "cleanup" });
+  expect(snapshot.node_lease).toMatchObject({
+    state: "RELEASING",
+    cleanup: "PENDING",
+    idle_deadline_at: "2030-01-01T00:10:00Z",
+  });
+  expect(JSON.stringify(snapshot)).not.toContain(".runbridge-access");
+});

@@ -77,6 +77,21 @@ const result = (data: unknown, isError = false) => ({
 beforeEach(async () => {
   sdk.call.mockReset();
   sdk.close.mockReset().mockResolvedValue(undefined);
+  vi.spyOn(globalThis, "fetch").mockImplementation(
+    async (_url, init) =>
+      new Response(
+        JSON.stringify({
+          node_id: "node_own",
+          grant_id: "grant_own",
+          state: init?.method === "DELETE" ? "RELEASED" : "HELD",
+          cleanup: "COMPLETE",
+          expires_at: new Date(Date.now() + 3600000).toISOString(),
+          idle_deadline_at: new Date(Date.now() + 600000).toISOString(),
+          inflight: false,
+          close_reason: init?.method === "DELETE" ? "RELEASED_BY_HOLDER" : null,
+        }),
+      ),
+  );
   root = mkdtempSync(join(tmpdir(), "runbridge-test-"));
   writeFileSync(
     join(root, "access.json"),
@@ -108,6 +123,7 @@ beforeEach(async () => {
 });
 afterEach(async () => {
   await bridge.close();
+  vi.restoreAllMocks();
   rmSync(root, { recursive: true, force: true });
 });
 const call = (
@@ -615,4 +631,118 @@ it("恢复拒绝不同 grant，配置异常不回显秘密", () => {
     }),
   );
   expect(() => readRunBridgeAccess(join(root, "bad.json"))).toThrow("不符合");
+});
+
+async function hubBridge(mismatch = false) {
+  const tools = await (bridge as any).client.listTools();
+  await bridge.close();
+  const file = join(root, "hub.yaml");
+  writeFileSync(
+    file,
+    'hub_url: "http://hub.test"\nhub_token: "' + "h".repeat(48) + '"\n',
+  );
+  const http = vi.mocked(fetch).mockImplementation(async (input, init) => {
+    const url = new URL(String(input));
+    if (url.pathname.endsWith("/tools"))
+      return new Response(
+        JSON.stringify({
+          node: { node_id: "node_own" },
+          tools: mismatch
+            ? tools.tools.map((tool: any, index: number) =>
+                index ? tool : { ...tool, description: "审核时目录说明" },
+              )
+            : tools.tools,
+        }),
+      );
+    const lease = {
+      node_id: "node_own",
+      grant_id: "grant_own",
+      state: init?.method === "DELETE" ? "RELEASED" : "HELD",
+      cleanup: "COMPLETE",
+      expires_at: new Date(Date.now() + 3600000).toISOString(),
+      idle_deadline_at: new Date(Date.now() + 600000).toISOString(),
+      inflight: false,
+      close_reason: init?.method === "DELETE" ? "RELEASED_BY_HOLDER" : null,
+    };
+    if (url.pathname === "/v1/nodes/node_own/grants")
+      return new Response(
+        JSON.stringify({
+          ...lease,
+          token_available: true,
+          access_token: "x".repeat(48),
+          access_config: {
+            hub_url: "http://hub.test",
+            node_id: "node_own",
+            grant_id: "grant_own",
+            access_token: "x".repeat(48),
+            expires_at: lease.expires_at,
+          },
+        }),
+        { status: 201 },
+      );
+    return new Response(JSON.stringify(lease));
+  });
+  bridge = new RunBridge(
+    {
+      ...browserPreferenceDefaults,
+      backend: "runbridge",
+      connectionSource: "hub",
+      hubFile: file,
+      nodeId: "node_own",
+      accessFile: "",
+    },
+    root,
+    () => {},
+    {
+      credentialFile: join(root, "private", "access.json"),
+      cleanupTimeoutMs: 1000,
+      invalid: () => {},
+    },
+  );
+  await bridge.preparePlanning();
+  defs.clear();
+  bridge.register({
+    tools: {
+      register: (definition: any) => {
+        defs.set(definition.name, definition);
+        return () => defs.delete(definition.name);
+      },
+    },
+  } as any);
+  return http;
+}
+it("Hub 目录只投影声明，可信首次初始化后才领取并核对实际 MCP 定义", async () => {
+  const http = await hubBridge();
+  expect((bridge as any).connected).toBe(false);
+  expect(
+    http.mock.calls.filter(([, init]) => init?.method === "POST"),
+  ).toHaveLength(0);
+  expect(sdk.call).not.toHaveBeenCalled();
+  await open();
+  expect(sdk.call).toHaveBeenCalledOnce();
+  expect(bridge.lease.record).toMatchObject({
+    source: "hub",
+    node_id: "node_own",
+    grant_id: "grant_own",
+    state: "HELD",
+  });
+  await bridge.close();
+  expect(bridge.lease.record?.state).toBe("RELEASED");
+});
+it("实际 MCP 与目录不一致在业务前停止，归还已领取的原 Node", async () => {
+  await hubBridge(true);
+  await expect(open()).rejects.toThrow("工具定义与审核时目录不一致");
+  expect(sdk.call).not.toHaveBeenCalled();
+  await bridge.close();
+  expect(bridge.lease.record).toMatchObject({
+    state: "RELEASED",
+    cleanup: "COMPLETE",
+  });
+});
+
+it("初始化前的远程观察不会领取或接管 Node", async () => {
+  await expect(call("browser_status")).rejects.toThrow("尚未启动");
+  expect(fetch).not.toHaveBeenCalled();
+  expect(bridge.lease.record).toBeUndefined();
+  expect(sdk.call).not.toHaveBeenCalled();
 });

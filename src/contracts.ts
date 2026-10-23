@@ -255,6 +255,30 @@ export interface BrowserRecording {
   duration_ms?: number;
   reason?: string;
 }
+/** 节点使用权与单条用例的浏览器资源分别记录，不包含原始令牌。 */
+export interface NodeLeaseRecord {
+  source: "hub" | "access-file";
+  hub_url: string;
+  node_id: string;
+  grant_id?: string;
+  request_id?: string;
+  access_file?: string;
+  state:
+    | "CLAIMING"
+    | "NOT_ACQUIRED"
+    | "HELD"
+    | "RELEASING"
+    | "QUARANTINED"
+    | "RELEASED"
+    | "UNKNOWN";
+  cleanup?: "COMPLETE" | "PENDING" | "UNKNOWN";
+  expires_at?: string;
+  idle_deadline_at?: string | null;
+  inflight?: boolean;
+  close_reason?: string | null;
+  error?: string;
+  checked_at?: string;
+}
 export interface SuiteRun {
   schema_version: "1";
   suite_run_id: string;
@@ -266,6 +290,7 @@ export interface SuiteRun {
   instances: CaseRun[];
   evidence: Evidence[];
   recordings?: BrowserRecording[];
+  node_lease?: NodeLeaseRecord;
   incomplete: boolean;
   resource_quarantined: boolean;
   manifest: Record<string, Json>;

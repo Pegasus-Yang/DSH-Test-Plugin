@@ -9,12 +9,19 @@ import {
   runbridgeResult,
 } from "./runbridge.js";
 import { field } from "./contracts.js";
+import { readRunBridgeHubCredentials } from "./runbridge-access.js";
+import {
+  queryNodeLease,
+  readNodeCatalog,
+  RunBridgeHttpError,
+  type NodeLeaseState,
+} from "./runbridge-lease.js";
 
 export interface RunBridgeFileInfo {
   hub_url: string;
   mcp_url: string;
   node_id: string;
-  grant_id: string;
+  grant_id?: string;
   expires_at?: string;
   revision: string;
 }
@@ -32,13 +39,144 @@ export interface RunBridgeSettingsResult {
   node_status?: string;
   resources?: RunBridgeResourceInfo[];
   checked_at?: string;
+  node_lease?: NodeLeaseState;
+  pool_lease?: { state: string; claimable: boolean };
+}
+
+export interface RunBridgeSettingsInput {
+  accessFile: string;
+  resourceId: string;
+  connect: boolean;
+  connectionSource?: "access-file" | "hub";
+  hubFile?: string;
+  nodeId?: string;
+}
+
+function managedResources(node: any): RunBridgeResourceInfo[] {
+  return (
+    Array.isArray(node?.capabilities?.resources)
+      ? node.capabilities.resources
+      : []
+  )
+    .filter(
+      (r: any) =>
+        r.kind === "MANAGED_CHROMIUM" &&
+        /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(r.resource_id),
+    )
+    .map((r: any) => ({
+      resource_id: r.resource_id,
+      readiness: [
+        "READY",
+        "NEEDS_PROBE",
+        "NEEDS_AUTHORIZATION",
+        "UNAVAILABLE",
+      ].includes(r.readiness)
+        ? r.readiness
+        : "UNAVAILABLE",
+      occupancy: ["FREE", "BUSY", "UNKNOWN"].includes(r.occupancy)
+        ? r.occupancy
+        : "UNKNOWN",
+    }));
+}
+
+async function checkHubSettings(
+  workspace: string,
+  input: RunBridgeSettingsInput,
+  signal: AbortSignal,
+): Promise<RunBridgeSettingsResult> {
+  let credentials: ReturnType<typeof readRunBridgeHubCredentials>;
+  try {
+    if (!input.hubFile?.trim())
+      throw new Error("请填写 DSH 运行机器上的 Hub 认证文件路径。");
+    credentials = readRunBridgeHubCredentials(
+      resolve(workspace, input.hubFile),
+    );
+  } catch (error) {
+    return {
+      ok: false,
+      code: "ACCESS_FILE_INVALID",
+      message: (error as Error).message,
+    };
+  }
+  if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(input.nodeId ?? ""))
+    return {
+      ok: false,
+      code: "NODE_ID_INVALID",
+      message: "请填写有效的目标 Node ID。",
+    };
+  const file: RunBridgeFileInfo = {
+    hub_url: credentials.hub_url,
+    mcp_url: hubPath(credentials.hub_url, "/mcp").href,
+    node_id: input.nodeId!,
+    revision: createHash("sha256")
+      .update(JSON.stringify([credentials, input.nodeId]))
+      .digest("hex"),
+  };
+  if (!input.connect)
+    return {
+      ok: true,
+      code: "FILE_VALID",
+      message: "Hub 认证文件已解析；尚未检测目录，也未领取 Node。",
+      file,
+    };
+  try {
+    const { node } = await readNodeCatalog(credentials, input.nodeId!, signal);
+    const resources = managedResources(node);
+    const pool = {
+      state: ["UNCLAIMED", "HELD", "RELEASING", "QUARANTINED"].includes(
+        node.lease?.state,
+      )
+        ? node.lease.state
+        : "UNKNOWN",
+      claimable: node.lease?.claimable === true,
+    };
+    const ready =
+      node.connection_status === "ONLINE" &&
+      !node.capabilities_stale &&
+      pool.claimable &&
+      resources.some(
+        (r) =>
+          r.resource_id === input.resourceId &&
+          r.readiness === "READY" &&
+          r.occupancy === "FREE",
+      );
+    return {
+      ok: ready,
+      code: ready ? "HUB_CATALOG_READY" : "NODE_NOT_CLAIMABLE",
+      message: ready
+        ? "Hub 申请凭据与只读工具目录可用；检测没有领取 Node 或建立 MCP 执行连接。"
+        : "Hub 目录可达，目标 Node 的使用权或浏览器资源当前不可领取；检测没有改变占用。",
+      file,
+      hub_connected: true,
+      node_status: String(node.connection_status ?? "UNKNOWN"),
+      resources,
+      pool_lease: pool,
+      checked_at: new Date().toISOString(),
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      code: signal.aborted
+        ? "CHECK_CANCELLED"
+        : error instanceof RunBridgeHttpError
+          ? error.code
+          : "HUB_UNAVAILABLE",
+      message: signal.aborted
+        ? "检测已取消。"
+        : "无法验证 Hub 申请凭据与节点目录，请核对地址、凭据、节点及服务版本。",
+      file,
+      checked_at: new Date().toISOString(),
+    };
+  }
 }
 
 export async function checkRunBridgeSettings(
   workspace: string,
-  input: { accessFile: string; resourceId: string; connect: boolean },
+  input: RunBridgeSettingsInput,
   signal: AbortSignal,
 ): Promise<RunBridgeSettingsResult> {
+  if (input.connectionSource === "hub")
+    return checkHubSettings(workspace, input, signal);
   let access: ReturnType<typeof readRunBridgeAccess>;
   try {
     if (!input.accessFile.trim())
@@ -75,6 +213,7 @@ export async function checkRunBridgeSettings(
   const deadline = AbortSignal.any([signal, AbortSignal.timeout(10000)]);
   let cancel: () => void = () => {};
   let hub = false;
+  let lease: NodeLeaseState | undefined;
   const done = (
     ok: boolean,
     code: string,
@@ -87,12 +226,21 @@ export async function checkRunBridgeSettings(
     file,
     hub_connected: hub,
     checked_at: new Date().toISOString(),
+    ...(lease ? { node_lease: lease } : {}),
     ...details,
   });
   try {
     return await Promise.race([
       (async () => {
         deadline.throwIfAborted();
+        lease = await queryNodeLease(access, deadline);
+        hub = true;
+        if (lease.state !== "HELD")
+          return done(
+            false,
+            "NODE_LEASE_INACTIVE",
+            "这份 Node 使用权已失效或正在回收，不能继续执行；请重新领取或使用 Hub 自动模式。",
+          );
         await client.connect(
           new StreamableHTTPClientTransport(new URL(file.mcp_url), {
             requestInit: {
@@ -143,30 +291,7 @@ export async function checkRunBridgeSettings(
             "NODE_RESULT_INVALID",
             "Hub 返回的节点身份或状态无效，请核对服务版本。",
           );
-        const resources: RunBridgeResourceInfo[] = (
-          Array.isArray(node.capabilities?.resources)
-            ? node.capabilities.resources
-            : []
-        )
-          .filter(
-            (r: any) =>
-              r.kind === "MANAGED_CHROMIUM" &&
-              /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(r.resource_id),
-          )
-          .map((r: any) => ({
-            resource_id: r.resource_id,
-            readiness: [
-              "READY",
-              "NEEDS_PROBE",
-              "NEEDS_AUTHORIZATION",
-              "UNAVAILABLE",
-            ].includes(r.readiness)
-              ? r.readiness
-              : "UNAVAILABLE",
-            occupancy: ["FREE", "BUSY", "UNKNOWN"].includes(r.occupancy)
-              ? r.occupancy
-              : "UNKNOWN",
-          }));
+        const resources = managedResources(node);
         const details = { node_status: node.connection_status, resources };
         if (node.connection_status !== "ONLINE")
           return done(
@@ -220,7 +345,10 @@ export async function checkRunBridgeSettings(
       }),
     ]);
   } catch (error) {
-    const status = Number(field(error, "data.status"));
+    const status =
+      error instanceof RunBridgeHttpError
+        ? error.status
+        : Number(field(error, "data.status"));
     return done(
       false,
       signal.aborted

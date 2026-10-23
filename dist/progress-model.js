@@ -86,6 +86,9 @@ export function projectProgress(input) {
         }, instance, instance.data_id))
         : plan.cases.flatMap((spec) => spec.datasets.map((data) => instanceView(spec, undefined, data.data_id)));
     const business = instances.flatMap((instance) => instance.steps);
+    const lease = run.node_lease
+        ? Object.fromEntries(Object.entries(run.node_lease).filter(([key]) => key !== "access_file"))
+        : undefined;
     return {
         session_id: String(run.manifest.origin_session_id ?? ""),
         run_id: run.suite_run_id,
@@ -112,5 +115,6 @@ export function projectProgress(input) {
             ? { report_url: input.reportUrl }
             : {}),
         preview: { ready: false },
+        ...(lease ? { node_lease: lease } : {}),
     };
 }

@@ -16,6 +16,12 @@ const BrowserSchema = z.object({
         .union([z.const("playwright"), z.const("runbridge")])
         .default("playwright"),
     accessFile: z.string().default(""),
+    connectionSource: z
+        .union([z.const("access-file"), z.const("hub")])
+        .default("access-file"),
+    hubFile: z.string().default(""),
+    nodeId: z.string().default(""),
+    nodeLeaseSeconds: z.number().step(1).min(1),
     resourceId: z.string().default(browserPreferenceDefaults.resourceId),
     leaseSeconds: z
         .number()

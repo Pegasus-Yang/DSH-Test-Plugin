@@ -3,7 +3,7 @@ import type { Agent } from "@deepseek-ai/dsh-agent";
 import { ToolCallId } from "@deepseek-ai/dsh-llm/brand";
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, readFileSync, unlinkSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import type { SuiteRun } from "./contracts.js";
 import { atomicJson } from "./recorder.js";
 import {
@@ -12,6 +12,8 @@ import {
   remoteReleaseConfirmed,
 } from "./runbridge.js";
 import { browserPreferenceDefaults } from "./browser-preferences.js";
+import { readRunBridgeAccess } from "./runbridge-access.js";
+import { NodeLease } from "./runbridge-lease.js";
 
 export interface QuarantineState {
   token: string;
@@ -71,25 +73,32 @@ export class RecoveryManager {
     const validTime = Number.isFinite(timestamp) && timestamp <= now;
     const validId = typeof id === "string" && /^run-[\w-]+$/.test(id);
     let browser = false;
+    let missingLeaseCredentials = false;
     let backend: "playwright" | "runbridge" | undefined;
     if (validId) {
       try {
         const run = JSON.parse(
           readFileSync(join(this.outputRoot, id, "results.json"), "utf8"),
         ) as SuiteRun;
+        missingLeaseCredentials =
+          !!run.node_lease &&
+          !(run.node_lease.grant_id && run.node_lease.access_file);
         browser =
           run.suite_run_id === id &&
+          (!!(run.node_lease?.grant_id && run.node_lease.access_file) ||
+            run.instances.some(
+              (instance) =>
+                instance.resources.browser_context?.state === "exists" ||
+                (instance.resources.browser_context?.remote &&
+                  instance.resources.browser_context.state === "unknown"),
+            ));
+        backend =
+          run.node_lease ||
           run.instances.some(
-            (instance) =>
-              instance.resources.browser_context?.state === "exists" ||
-              (instance.resources.browser_context?.remote &&
-                instance.resources.browser_context.state === "unknown"),
-          );
-        backend = run.instances.some(
-          (instance) => instance.resources.browser_context?.remote,
-        )
-          ? "runbridge"
-          : "playwright";
+            (instance) => instance.resources.browser_context?.remote,
+          )
+            ? "runbridge"
+            : "playwright";
       } catch {
         /* 缺少资源归属时保留手工处置入口。 */
       }
@@ -100,9 +109,11 @@ export class RecoveryManager {
         ? "当前测试尚未结束，请先停止测试并等待收尾。"
         : !validTime || !validId
           ? "隔离记录或时间异常，请核实后在设置页提交处置证据。"
-          : !browser
-            ? "未能确认浏览器资源归属，请核实外部环境后在设置页提交处置证据。"
-            : undefined;
+          : missingLeaseCredentials
+            ? "原 Node 领取没有取得可恢复的节点令牌，请由 Hub 维护者核查后提交处置证据。"
+            : !browser
+              ? "未能确认浏览器资源归属，请核实外部环境后在设置页提交处置证据。"
+              : undefined;
     return {
       quarantine: {
         token: this.token(current.raw),
@@ -191,6 +202,7 @@ export class RecoveryManager {
         "utf8",
       ),
     ) as SuiteRun;
+    if (saved.node_lease) return this.recoverNodeLease(saved, token, signal);
     const resource = saved.instances
       .map((instance) => instance.resources.browser_context)
       .find(
@@ -271,6 +283,7 @@ export class RecoveryManager {
       const remoteProof = remote ? runbridgeResult(result.value) : undefined;
       if (remote && !remoteReleaseConfirmed(remoteProof, remote.resource))
         throw new Error("远程会话清理未确认，隔离仍保留");
+      await remote?.close();
       await this.stopPreview();
       if (controller.signal.aborted)
         throw new Error("释放未在期限内确认，隔离仍保留");
@@ -290,6 +303,15 @@ export class RecoveryManager {
           started_at: startedAt,
           finished_at: new Date().toISOString(),
           browser_close_is_error: false,
+          ...(remote?.lease.record
+            ? {
+                node_lease: Object.fromEntries(
+                  Object.entries(remote.lease.record).filter(
+                    ([key]) => key !== "access_file",
+                  ),
+                ),
+              }
+            : {}),
           ...(remoteProof?.session
             ? { remote_session: remoteProof.session }
             : {}),
@@ -300,9 +322,9 @@ export class RecoveryManager {
         },
       });
       return "测试环境已释放。请重新发送原测试命令；旧测试结果未修改。";
-    })().finally(() => {
+    })().finally(async () => {
       unregister?.();
-      void remote?.close();
+      await remote?.close().catch(() => {});
       clearTimeout(timer);
       signal.removeEventListener("abort", abort);
       this.busy = false;
@@ -313,6 +335,89 @@ export class RecoveryManager {
     } catch (error) {
       this.lastError = error instanceof Error ? error.message : String(error);
       throw error;
+    }
+  }
+
+  /** 节点租约统一回收负责原租约下遗留会话，不用新许可接管旧资源。 */
+  private async recoverNodeLease(
+    saved: SuiteRun,
+    token: string,
+    signal: AbortSignal,
+  ): Promise<string> {
+    const original = saved.node_lease!;
+    if (!original.grant_id || !original.access_file)
+      throw new Error(
+        "原 Node 领取缺少执行令牌，需由 Hub 维护者核查后提交处置证据",
+      );
+    const access = readRunBridgeAccess(original.access_file);
+    if (
+      access.hub_url !== original.hub_url ||
+      access.node_id !== original.node_id ||
+      access.grant_id !== original.grant_id
+    )
+      throw new Error("访问文件与原 Node 租约不一致，不能使用新许可解除隔离");
+    const lease = new NodeLease({
+      kind: "access-file",
+      access,
+      file: original.access_file,
+    });
+    const controller = new AbortController();
+    const deadline = AbortSignal.any([
+      signal,
+      controller.signal,
+      AbortSignal.timeout(this.timeoutMs),
+    ]);
+    this.busy = true;
+    this.lastError = undefined;
+    this.cancelPending = () => controller.abort();
+    const started = new Date().toISOString();
+    try {
+      await lease.inspectExisting(deadline);
+      await lease.release(this.timeoutMs, deadline);
+      deadline.throwIfAborted();
+      await this.stopPreview();
+      deadline.throwIfAborted();
+      const { access_file: _privateFile, ...proof } = lease.record!;
+      this.commit(token, {
+        operator: "DSH 页面确认的操作者",
+        external_stopped: true,
+        environment_reset: true,
+        details:
+          "原节点令牌核对确认原租约 RELEASED 且清理 COMPLETE；停止预览，旧业务断言与 UNKNOWN 记录保持原样。",
+        evidence: {
+          method: "confirmed-node-lease-recovery",
+          started_at: started,
+          finished_at: new Date().toISOString(),
+          node_lease: proof,
+          preview_stopped: true,
+        },
+      });
+      if (
+        original.source === "hub" &&
+        resolve(original.access_file) ===
+          resolve(
+            this.outputRoot,
+            ".runbridge-access",
+            saved.suite_run_id + ".json",
+          )
+      ) {
+        try {
+          unlinkSync(original.access_file);
+        } catch {
+          /* 已确认归还；本机文件回收失败不更改原结果。 */
+        }
+      }
+      return "原 Node 使用权已确认归还。请重新发送测试命令；旧测试结果未修改。";
+    } catch (error) {
+      this.lastError = deadline.aborted
+        ? "节点归还已取消或超时，隔离仍保留"
+        : error instanceof Error
+          ? error.message
+          : "节点归还未获确认，隔离仍保留";
+      throw new Error(this.lastError);
+    } finally {
+      this.busy = false;
+      this.cancelPending = undefined;
     }
   }
 }

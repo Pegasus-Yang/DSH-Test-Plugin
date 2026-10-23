@@ -54,6 +54,9 @@ export declare class NativeTest {
     private cancelled;
     private cleanupTurn;
     private finalizing;
+    private finishing?;
+    private disposal?;
+    private disposalDone;
     private nudges;
     private planningQuestion;
     private cursor;
@@ -77,7 +80,7 @@ export declare class NativeTest {
     private previousPlanMode?;
     private announcement?;
     constructor(owner: NativeTests, agent: Agent, task: string, review?: boolean, input?: TextInput | undefined);
-    prepareRuntime(): Promise<void>;
+    preparePlanning(): Promise<void>;
     private get browserPrefix();
     private get closeTool();
     private guidance;
@@ -95,6 +98,7 @@ export declare class NativeTest {
     private freeze;
     private advance;
     private finishStep;
+    private publicLease;
     state(): {
         current: {
             instance: string;
@@ -124,6 +128,21 @@ export declare class NativeTest {
             [k: string]: string | number;
         } | undefined;
         browser_backend?: string | undefined;
+        node_lease?: {
+            source: "hub" | "access-file";
+            hub_url: string;
+            node_id: string;
+            grant_id?: string;
+            request_id?: string;
+            state: "CLAIMING" | "NOT_ACQUIRED" | "HELD" | "RELEASING" | "QUARANTINED" | "RELEASED" | "UNKNOWN";
+            cleanup?: "COMPLETE" | "PENDING" | "UNKNOWN";
+            expires_at?: string;
+            idle_deadline_at?: string | null;
+            inflight?: boolean;
+            close_reason?: string | null;
+            error?: string;
+            checked_at?: string;
+        } | undefined;
         run_id: string;
         session_id: string;
     };
@@ -138,6 +157,7 @@ export declare class NativeTest {
     stop(reason?: string): void;
     private turnEnded;
     private finish;
+    private finalize;
     private requireSettled;
     private cleanupAllowed;
     private releaseStep;
@@ -146,6 +166,7 @@ export declare class NativeTest {
     private exportManualCases;
     private save;
     private emergency;
-    dispose(): void;
+    get disposing(): boolean;
+    dispose(): Promise<void>;
     shutdown(): Promise<void>;
 }

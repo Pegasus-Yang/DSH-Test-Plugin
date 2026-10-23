@@ -2,7 +2,6 @@
 import { readFileSync, statSync } from "node:fs";
 import { basename, extname, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
-import { parseDocument } from "yaml";
 import type { Context } from "@deepseek-ai/cordis";
 import { createMcpToolDefinition } from "@deepseek-ai/dsh-mcp-client";
 import {
@@ -10,6 +9,23 @@ import {
   StreamableHTTPClientTransport,
 } from "@modelcontextprotocol/client";
 import type { BrowserPreferences } from "./browser-preferences.js";
+import {
+  hubPath,
+  readRunBridgeAccess,
+  readRunBridgeHubCredentials,
+  type RunBridgeAccess,
+  type RunBridgeHubCredentials,
+} from "./runbridge-access.js";
+export {
+  hubPath,
+  readRunBridgeAccess,
+  type RunBridgeAccess,
+} from "./runbridge-access.js";
+import {
+  NodeLease,
+  readNodeCatalog,
+  type RunBridgeTools,
+} from "./runbridge-lease.js";
 import { ajv, field, type BrowserResource } from "./contracts.js";
 
 export const runbridgePrefix = "mcp__runbridge__";
@@ -92,91 +108,6 @@ export function runbridgeResult(value: unknown): Record<string, any> {
   return data as Record<string, any>;
 }
 
-export interface RunBridgeAccess {
-  hub_url: string;
-  node_id: string;
-  grant_id: string;
-  access_token: string;
-  expires_at?: string | null;
-}
-/** 读取配置时不回显原值，业务站点不会收到 Hub 凭据。 */
-export function readRunBridgeAccess(path: string): RunBridgeAccess {
-  let data: unknown;
-  try {
-    const stat = statSync(path);
-    if (!stat.isFile() || stat.size > 32768) throw new Error();
-  } catch {
-    throw new Error(
-      "无法读取 RunBridge 私有访问文件，请检查路径、权限与文件大小（最多 32 KiB）。",
-    );
-  }
-  try {
-    const content = readFileSync(path, "utf8");
-    try {
-      data = JSON.parse(content);
-    } catch {
-      const document = parseDocument(content, {
-        schema: "core",
-        prettyErrors: false,
-      });
-      if (document.errors.length || document.warnings.length) throw new Error();
-      data = document.toJS();
-      // 后续摘要和运行记录使用 JSON，拒绝 YAML 别名产生的循环对象。
-      JSON.stringify(data);
-    }
-  } catch {
-    throw new Error(
-      "访问文件格式无效，请使用一个 JSON 或 YAML 配置对象；enrollment.token 仅用于节点登记。",
-    );
-  }
-  if (!data || typeof data !== "object" || Array.isArray(data))
-    throw new Error(
-      "访问文件必须是包含 hub_url、node_id、grant_id、access_token 的 JSON 或 YAML 对象；enrollment.token 仅用于节点登记。",
-    );
-  const result = data as RunBridgeAccess;
-  if (
-    !result ||
-    !["hub_url", "node_id", "grant_id", "access_token"].every(
-      (key) =>
-        typeof field(result, key) === "string" &&
-        !!String(field(result, key)).trim(),
-    )
-  )
-    throw new Error(
-      "RunBridge 访问文件缺少有效字段：" +
-        ["hub_url", "node_id", "grant_id", "access_token"]
-          .filter(
-            (key) =>
-              typeof field(result, key) !== "string" ||
-              !String(field(result, key)).trim(),
-          )
-          .join("、"),
-    );
-  let url: URL;
-  try {
-    url = new URL(result.hub_url);
-  } catch {
-    throw new Error("RunBridge Hub 地址无效");
-  }
-  if (url.pathname.replace(/\/$/, "").endsWith("/mcp"))
-    throw new Error(
-      "hub_url 请填写 Hub 基址，不包含末尾的 /mcp；插件会自动拼接 MCP 端点。",
-    );
-  if (
-    !["http:", "https:"].includes(url.protocol) ||
-    url.username ||
-    url.password ||
-    url.search ||
-    url.hash ||
-    !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(result.node_id) ||
-    !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(result.grant_id) ||
-    result.access_token.length < 32 ||
-    result.access_token.length > 256 ||
-    /\s/.test(result.access_token)
-  )
-    throw new Error("RunBridge 私有连接配置不符合服务合同");
-  return { ...result, hub_url: url.href.replace(/\/$/, "") };
-}
 /** 运行与设置检测共享同一 SDK、版本标识。 */
 export function createRunBridgeClient(): Client {
   return new Client(
@@ -189,15 +120,30 @@ export function createRunBridgeClient(): Client {
     { capabilities: {} },
   );
 }
-export function hubPath(base: string, path: string): URL {
-  return new URL(base.replace(/\/$/, "") + "/" + path.replace(/^\//, ""));
+/** 同源目录与实际 MCP 定义按内容核对，不受对象字段排列影响。 */
+function toolSignature(tools: RunBridgeTools): string {
+  const canonical = (value: any): any =>
+    Array.isArray(value)
+      ? value.map(canonical)
+      : value && typeof value === "object"
+        ? Object.fromEntries(
+            Object.keys(value)
+              .sort()
+              .map((key) => [key, canonical(value[key])]),
+          )
+        : value;
+  return JSON.stringify(
+    canonical([...tools].sort((a, b) => a.name.localeCompare(b.name))),
+  );
 }
 
 export class RunBridge {
   readonly prefix = runbridgePrefix;
-  readonly access: RunBridgeAccess;
+  readonly lease: NodeLease;
   readonly config: BrowserPreferences;
   private readonly accessFile: string;
+  private readonly hubCredentials?: RunBridgeHubCredentials;
+  private catalogSignature?: string;
   resource?: BrowserResource;
   private client = createRunBridgeClient();
   private definitions: Awaited<ReturnType<Client["listTools"]>>["tools"] = [];
@@ -208,6 +154,12 @@ export class RunBridge {
     config: BrowserPreferences,
     private readonly workspace: string,
     private readonly changed: () => void = () => {},
+    private readonly runtime?: {
+      credentialFile: string;
+      cleanupTimeoutMs: number;
+      invalid: (reason: string) => void;
+      retainAccessFile?: () => boolean;
+    },
   ) {
     this.config = { ...config };
     if (
@@ -216,10 +168,66 @@ export class RunBridge {
       config.leaseSeconds > 3600
     )
       throw new Error("远程浏览器租期须为 1 到 3600 秒的整数");
-    this.accessFile = resolve(workspace, config.accessFile);
-    this.access = readRunBridgeAccess(this.accessFile);
+    if (config.connectionSource === "hub") {
+      if (!runtime?.credentialFile)
+        throw new Error("Hub 自动领取需要本批专用的私有凭据保存位置");
+      if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(config.nodeId ?? ""))
+        throw new Error("请配置有效的目标 Node ID");
+      this.hubCredentials = readRunBridgeHubCredentials(
+        resolve(workspace, config.hubFile ?? ""),
+      );
+      this.accessFile = resolve(runtime.credentialFile);
+      this.lease = new NodeLease(
+        {
+          kind: "hub",
+          credentials: this.hubCredentials,
+          nodeId: config.nodeId!,
+          file: this.accessFile,
+          leaseSeconds: config.nodeLeaseSeconds,
+          retainFile: runtime.retainAccessFile,
+        },
+        changed,
+        runtime.invalid,
+      );
+    } else {
+      this.accessFile = resolve(workspace, config.accessFile);
+      this.lease = new NodeLease(
+        {
+          kind: "access-file",
+          access: readRunBridgeAccess(this.accessFile),
+          file: this.accessFile,
+        },
+        changed,
+        runtime?.invalid,
+      );
+    }
+  }
+  get access(): RunBridgeAccess {
+    if (!this.lease.access) throw new Error("本批尚未取得 Node 执行令牌");
+    return this.lease.access;
+  }
+  /** Hub 模式在审核前只读目录；现成文件模式只建立只读 MCP 准备连接。 */
+  async preparePlanning(): Promise<void> {
+    if (this.hubCredentials) {
+      const catalog = await readNodeCatalog(
+        this.hubCredentials,
+        this.config.nodeId!,
+      );
+      this.definitions = catalog.tools;
+      this.catalogSignature = toolSignature(catalog.tools);
+    } else await this.connect();
+  }
+  private async prepareExecution(signal?: AbortSignal): Promise<void> {
+    signal?.throwIfAborted();
+    if (this.disposing) throw new Error("本批正在收尾，不能继续执行");
+    await this.lease.activate(signal);
+    signal?.throwIfAborted();
+    if (this.disposing) throw new Error("本批正在收尾，不能继续执行");
+    if (!this.connected) await this.connect();
+    await this.lease.maintain(signal);
   }
   async connect(): Promise<void> {
+    if (this.connected) return;
     const transport = new StreamableHTTPClientTransport(
       hubPath(this.access.hub_url, "/mcp"),
       {
@@ -229,6 +237,8 @@ export class RunBridge {
       },
     );
     let timer: ReturnType<typeof setTimeout>;
+    let failure =
+      "RunBridge MCP 接入失败，请核对服务启用状态、租约、版本和网络；未申请浏览器";
     try {
       await Promise.race([
         this.client.connect(transport),
@@ -240,6 +250,14 @@ export class RunBridge {
         }),
       ]);
       this.definitions = (await this.client.listTools()).tools;
+      if (
+        this.catalogSignature &&
+        toolSignature(this.definitions) !== this.catalogSignature
+      ) {
+        failure =
+          "实际 MCP 工具定义与审核时目录不一致，未执行业务，将归还本批 Node";
+        throw new Error();
+      }
       for (const name of [
         "browser_start",
         "browser_stop",
@@ -255,9 +273,7 @@ export class RunBridge {
       this.connected = true;
     } catch {
       await this.client.close().catch(() => {});
-      throw new Error(
-        "RunBridge MCP 接入失败，请核对服务启用状态、许可、版本和网络；未申请浏览器",
-      );
+      throw new Error(failure);
     } finally {
       clearTimeout(timer!);
     }
@@ -336,7 +352,9 @@ export class RunBridge {
     signal?: AbortSignal,
     callId?: string,
   ): Promise<unknown> {
-    if (!this.connected) throw new Error("远程 MCP 连接已结束");
+    if (name !== "browser_start" && !this.resource?.remote)
+      throw new Error("尚未启动本次远程浏览器");
+    await this.prepareExecution(signal);
     for (const key of managed)
       if (key in args && !callerSelected(name, key))
         throw new Error("远程身份参数由插件绑定，不能覆盖：" + key);
@@ -588,8 +606,14 @@ export class RunBridge {
   }
   async close(): Promise<void> {
     if (!this.disposing) {
-      this.connected = false;
-      this.disposing = this.client.close().catch(() => {});
+      this.disposing = (async () => {
+        try {
+          await this.lease.release(this.runtime?.cleanupTimeoutMs ?? 60000);
+        } finally {
+          this.connected = false;
+          await this.client.close().catch(() => {});
+        }
+      })();
     }
     await this.disposing;
   }

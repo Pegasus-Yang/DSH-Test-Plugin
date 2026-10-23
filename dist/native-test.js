@@ -100,7 +100,8 @@ export class NativeTests {
         this.preparePreview = preparePreview;
         this.config = { ...defaults, ...config };
         this.preview = new PreviewManager(this.config.preview);
-        this.recovery = new RecoveryManager(this.config.outputRoot, this.config.cleanupTimeoutMs, () => this.starting || [...this.sessions.values()].some((s) => !s.closed), () => this.preview.shutdown());
+        this.recovery = new RecoveryManager(this.config.outputRoot, this.config.cleanupTimeoutMs, () => this.starting ||
+            [...this.sessions.values()].some((s) => !s.closed || s.disposing), () => this.preview.shutdown());
         for (const key of [
             "stepTimeoutMs",
             "cleanupTimeoutMs",
@@ -144,7 +145,7 @@ export class NativeTests {
             throw new Error(`测试环境尚未释放，已隔离：${quarantine.reason}。${quarantine.overdue ? "隔离时间已超过清理超时，可能异常卡住。" : ""}请进入“设置 → 测试插件 → 测试环境”，确认旧操作已停止后处理并释放，再重新执行测试命令；无法自动处理时，在同一设置页提交实际处置证据。`);
         if (this.starting ||
             this.recovery.busy ||
-            [...this.sessions.values()].some((s) => !s.closed))
+            [...this.sessions.values()].some((s) => !s.closed || s.disposing))
             throw new Error("已有测试使用共享浏览器，请先结束或停止该测试");
         if (review && !this.ctx.commands.find(agent, "plan"))
             throw new Error("/test-plan 需要宿主启用原生 dsh-plan-mode 和用户审核通道");
@@ -154,7 +155,7 @@ export class NativeTests {
             const test = new NativeTest(this, agent, task, review, input);
             this.sessions.set(agent.id, test);
             try {
-                await test.prepareRuntime();
+                await test.preparePlanning();
                 if (review)
                     await test.enterPlanMode();
                 test.attach();
@@ -163,7 +164,7 @@ export class NativeTests {
                 return await test.start(task);
             }
             catch (error) {
-                test.dispose();
+                await test.dispose();
                 throw error;
             }
         }
@@ -222,6 +223,8 @@ export class NativeTests {
         for (const test of this.sessions.values())
             if (!test.closed)
                 await test.shutdown();
+            else
+                await test.dispose();
         await this.preview.shutdown();
     }
 }
@@ -239,6 +242,9 @@ export class NativeTest {
     cancelled = false;
     cleanupTurn = false;
     finalizing = false;
+    finishing;
+    disposal;
+    disposalDone = false;
     nudges = 0;
     planningQuestion = false;
     cursor = 0;
@@ -292,7 +298,7 @@ export class NativeTest {
             incomplete: false,
             resource_quarantined: false,
             manifest: {
-                plugin_version: "0.14.1",
+                plugin_version: "0.15.0",
                 plan_review: review,
                 execution: "native-conversation",
                 origin_session_id: agent.id,
@@ -303,14 +309,30 @@ export class NativeTest {
         this.manualSource = new ManualSource(this.recorder.directory, id);
         if (owner.config.browser?.backend === "runbridge")
             this.browser = new RunBridge(owner.config.browser, owner.config.workspace, () => {
+                if (this.browser?.lease.record)
+                    this.run.node_lease = structuredClone(this.browser.lease.record);
                 if (this.current && this.browser?.resource) {
                     this.current.instance.resources.browser_context = structuredClone(this.browser.resource);
-                    this.save();
                 }
+                this.save();
+            }, {
+                credentialFile: join(owner.config.outputRoot, ".runbridge-access", id + ".json"),
+                cleanupTimeoutMs: owner.config.cleanupTimeoutMs,
+                invalid: (reason) => {
+                    if (!this.closed && !this.finishing && !this.reportReady)
+                        this.stop(reason);
+                },
+                retainAccessFile: () => this.run.resource_quarantined ||
+                    this.run.incomplete ||
+                    this.run.instances.some((instance) => {
+                        const resource = instance.resources.browser_context;
+                        return (!!resource?.remote &&
+                            ["exists", "unknown"].includes(resource.state));
+                    }),
             });
     }
-    async prepareRuntime() {
-        await this.browser?.connect();
+    async preparePlanning() {
+        await this.browser?.preparePlanning();
     }
     get browserPrefix() {
         return this.browser?.prefix ?? "mcp__playwright__";
@@ -329,7 +351,7 @@ export class NativeTest {
             if (line.startsWith("实际操作说明："))
                 return '实际操作说明：浏览器动作必须调用test_execute_operation，tool_name从Schema中选择完整的mcp__runbridge__名称。导航、填写、点击、按键和等待逐个执行并附面向用户的说明。观察可直接browser_snapshot、browser_inspect_dom、browser_read或browser_tabs(action=list)。会话和页面参数由插件注入，不能传入node_id/session_id/page_id；只有browser_tabs明确选页时提供其返回的page_id。目标使用target.by/value/name；by=role时value只填button、textbox等角色，name填真实可访问名称，不能把snapshot整行作为value。含数组参数通过test_execute_operation的arguments_json传完整JSON字符串，例如{"target":{"by":"css","value":"#type"},"values":["api"]}；不要同时传arguments。iframe用frame_selector；没有Playwright snapshot ref、evaluate或run_code。先观察页面，再选择下一动作。断言实际值仅接受test_capture的固定DOM采集，覆盖text/number/count/visible/url/attribute/value；API仍在DSH宿主采集。初始化与释放只调用test_capture({})。截图与动作成功不能宣布PASS，写操作结果未知不得盲目再次提交；已取得原动作request_id时，用tool_request_status查询原结果，不能传入或覆盖会话身份，查询成功仍需test_capture验证业务结果。';
             if (line.startsWith("执行阶段："))
-                return "执行阶段：按test_current完成当前业务目标，使用当前RunBridge原子工具操作虚拟机页面；不能调用本机Playwright或换另一会话。browser_fill替换整个输入，按Enter另用browser_press_key；select_option按value选择；触发弹窗前用browser_handle_dialog设置一次性策略。当前步骤的允许目标与冻结预期不可改变。浏览器由Node新建，网络回环地址指虚拟机；最多3600秒租期，许可到期不能新建浏览器续跑旧步骤。";
+                return "执行阶段：按test_current完成当前业务目标，使用当前RunBridge原子工具操作虚拟机页面；不能调用本机Playwright或换另一会话。browser_fill替换整个输入，按Enter另用browser_press_key；select_option按value选择；触发弹窗前用browser_handle_dialog设置一次性策略。当前步骤的允许目标与冻结预期不可改变。浏览器由Node新建，网络回环地址指虚拟机；每条会话最多3600秒，整批Node使用权由插件领取、按需续租并在test_finish等待归还。租约失效后不能领取新令牌续跑旧步骤。";
             return line;
         })
             .join("\n");
@@ -930,6 +952,8 @@ export class NativeTest {
         own(scope.tools.guard((exec) => {
             if (this.closed || this.reportReady)
                 return;
+            if (this.finishing && exec.agent?.id === this.id)
+                return "正在等待本批 Node 使用权收尾，暂不派发新工具";
             if (this.recorder.failed)
                 return "测试账本写入失败，停止工具派发";
             if (this.cancelled && !this.cleanupTurn)
@@ -939,6 +963,10 @@ export class NativeTest {
             if (/^mcp__.+__browser_/.test(exec.name) &&
                 !exec.name.startsWith(this.browserPrefix))
                 return "本次测试只允许所选浏览器后端，不能切换浏览器";
+            if (this.browser &&
+                exec.name.startsWith(this.browser.prefix) &&
+                this.current?.step.action?.capability !== "browser")
+                return "当前步骤不是浏览器步骤，不允许远程工具或领取 Node";
             if (this.browser &&
                 this.current?.step.action?.capture &&
                 Object.values(this.current.step.action.capture).every((item) => item.kind === "browser_open") &&
@@ -1036,7 +1064,7 @@ export class NativeTest {
         }));
         own(this.owner.ctx.effect(() => () => {
             if (!this.closed)
-                void this.shutdown();
+                return this.shutdown();
         }));
     }
     missingAnnouncement() {
@@ -1254,11 +1282,18 @@ export class NativeTest {
             this.stop("浏览器释放失败，禁止后续业务");
         }
     }
+    publicLease() {
+        if (!this.run.node_lease)
+            return undefined;
+        const { access_file: _privateFile, ...lease } = this.run.node_lease;
+        return lease;
+    }
     state() {
         const c = this.current;
         return {
             run_id: this.run.suite_run_id,
             session_id: this.id,
+            ...(this.run.node_lease ? { node_lease: this.publicLease() } : {}),
             ...(this.browser
                 ? {
                     browser_backend: "runbridge",
@@ -1272,13 +1307,15 @@ export class NativeTest {
             ...(!this.planned && this.input ? { planning_input: this.input } : {}),
             phase: this.reportReady
                 ? "finished"
-                : this.planned
-                    ? this.cleanupTurn || c?.phase === "cleanup"
-                        ? "cleanup"
-                        : "executing"
-                    : this.draft
-                        ? "reviewing"
-                        : "planning",
+                : this.finishing
+                    ? "cleanup"
+                    : this.planned
+                        ? this.cleanupTurn || c?.phase === "cleanup"
+                            ? "cleanup"
+                            : "executing"
+                        : this.draft
+                            ? "reviewing"
+                            : "planning",
             ...(this.review && !this.planned && this.draft
                 ? { review_markdown: this.reviewMarkdown() }
                 : {}),
@@ -1331,7 +1368,7 @@ export class NativeTest {
         };
     }
     presentation() {
-        const phase = this.cleanupTurn || this.current?.phase === "cleanup"
+        const phase = this.finishing || this.cleanupTurn || this.current?.phase === "cleanup"
             ? "cleanup"
             : this.cancelled
                 ? "stopping"
@@ -1462,7 +1499,7 @@ export class NativeTest {
         }
     }
     stop(reason = "用户停止") {
-        if (this.closed || this.reportReady)
+        if (this.closed || this.reportReady || this.finishing)
             return;
         this.cancelled = true;
         this.run.lifecycle = "CANCELLING";
@@ -1493,7 +1530,7 @@ export class NativeTest {
             if (this.stoppingTimer)
                 clearTimeout(this.stoppingTimer);
             if (this.reportReady) {
-                this.dispose();
+                await this.dispose();
                 return;
             }
             if (!aborted && !this.planned) {
@@ -1524,11 +1561,11 @@ export class NativeTest {
                 [...this.calls.values()].some((c) => !c.finished_at)) {
                 this.owner.quarantine(this.run, "在途工具未结算");
                 this.run.incomplete = true;
-                this.emergency("原生轮次结束后仍有未结算工具，不能启动清理");
+                await this.emergency("原生轮次结束后仍有未结算工具，不能启动清理");
                 return;
             }
             if (this.cleanupTurn) {
-                this.emergency("清理轮次未正常完成");
+                await this.emergency("清理轮次未正常完成");
                 return;
             }
             if (this.current)
@@ -1593,8 +1630,8 @@ export class NativeTest {
             this.nudges = 0;
             this.advance();
             if (!this.current) {
-                this.finish();
-                this.dispose();
+                await this.finish();
+                await this.dispose();
                 return;
             }
             this.agent.followup(notice("测试已停止业务动作；在途工具已结算。现在仅执行test_current指定的冻结清理步骤（禁止业务步骤和新增目标）。按当前步骤完成清理、test_capture、test_finish_step，最后test_finish，并在正常回复中说明取消结果和报告链接。"));
@@ -1604,7 +1641,23 @@ export class NativeTest {
         }
     }
     finish() {
+        return (this.finishing ??= this.finalize());
+    }
+    async finalize() {
         if (!this.reportReady) {
+            if (this.timer)
+                clearTimeout(this.timer);
+            if (this.stoppingTimer)
+                clearTimeout(this.stoppingTimer);
+            try {
+                await this.browser?.close();
+            }
+            catch {
+                this.run.incomplete = true;
+                this.run.manifest.node_lease_cleanup_error =
+                    "Node 使用权归还未获确认，请按原租约处理";
+                this.owner.quarantine(this.run, "Node 使用权归还未获确认");
+            }
             sealOperations(this.run, "测试已封存，在途操作未获得最终结果");
             for (const i of this.run.instances) {
                 if (this.run.incomplete) {
@@ -1651,6 +1704,7 @@ export class NativeTest {
             actual_steps: join(this.recorder.directory, "actual-steps.json"),
             manual_cases: join(this.recorder.directory, "manual-cases.md"),
             actual_steps_export_error: this.run.manifest.actual_steps_export_error,
+            ...(this.run.node_lease ? { node_lease: this.publicLease() } : {}),
             message: "请在正常最终回复中提供以上统计、断言实际/预期、保存位置和Markdown报告链接。报告为静态HTML，可离线打开。",
         };
     }
@@ -1717,10 +1771,10 @@ export class NativeTest {
         if (this.stoppingTimer)
             return;
         this.stoppingTimer = setTimeout(() => {
-            if (this.closed)
+            if (this.closed || this.finishing)
                 return;
             this.owner.quarantine(this.run, "停止等待在途操作超时，禁止启动清理");
-            this.emergency("在途操作未在取消宽限期内结算，请人工确认外部停止并重置环境");
+            void this.emergency("在途操作未在取消宽限期内结算，请人工确认外部停止并重置环境");
         }, this.owner.config.cancelGraceMs);
     }
     exportManualCases() {
@@ -1778,7 +1832,7 @@ export class NativeTest {
             this.owner.ctx.logger.warn("更新浏览器预览归属失败：%s", String(error));
         }
     }
-    emergency(error) {
+    async emergency(error) {
         this.mediaDeadline = Date.now();
         this.owner.preview.sealRecordings(this.run.suite_run_id, "测试紧急截止，视频收尾未获确认");
         this.run.incomplete = true;
@@ -1789,15 +1843,21 @@ export class NativeTest {
             i.issues.push(String(error));
         }
         try {
-            this.finish();
+            await this.finish();
+        }
+        catch {
+            this.owner.ctx.logger?.warn("测试报告封存失败，保留原记录与隔离供核查");
         }
         finally {
-            this.dispose();
+            await this.dispose();
         }
     }
+    get disposing() {
+        return !!this.disposal && !this.disposalDone;
+    }
     dispose() {
-        if (this.closed)
-            return;
+        if (this.disposal)
+            return this.disposal;
         this.closed = true;
         if (this.timer)
             clearTimeout(this.timer);
@@ -1805,16 +1865,30 @@ export class NativeTest {
             clearTimeout(this.stoppingTimer);
         for (const dispose of this.disposers.splice(0).reverse())
             dispose();
-        void this.browser?.close();
-        if (this.previousPlanMode !== undefined && !this.planned)
-            void this.setPlanMode(this.previousPlanMode).catch((error) => this.owner.ctx.logger.warn("恢复计划模式失败: %s", String(error)));
+        this.disposal = (async () => {
+            try {
+                await this.browser?.close();
+            }
+            catch {
+                if (!this.reportReady) {
+                    this.run.incomplete = true;
+                    this.owner.quarantine(this.run, "Node 使用权归还未获确认");
+                    this.save();
+                }
+            }
+            if (this.previousPlanMode !== undefined && !this.planned)
+                await this.setPlanMode(this.previousPlanMode).catch((error) => this.owner.ctx.logger?.warn("恢复计划模式失败: %s", String(error)));
+        })().finally(() => {
+            this.disposalDone = true;
+        });
+        return this.disposal;
     }
     async shutdown() {
         if (this.closed)
-            return;
+            return this.dispose();
         this.finalizing = true;
         this.agent.cancel({ kind: "user" });
         this.owner.quarantine(this.run, "插件卸载，需确认外部操作停止和环境重置");
-        this.emergency("插件卸载，测试中断；不再派发工具");
+        await this.emergency("插件卸载，测试中断；不再派发工具");
     }
 }

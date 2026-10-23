@@ -8,9 +8,9 @@ import { rebuild } from "../../src/recorder.js";
 import { projectActualCase } from "../../src/actual-operations.js";
 import { ManualSource } from "../../src/manual-source.js";
 
-const cleanups: (() => void)[] = [];
-afterEach(() => {
-  cleanups.splice(0).forEach((f) => f());
+const cleanups: (() => void | Promise<void>)[] = [];
+afterEach(async () => {
+  for (const cleanup of cleanups.splice(0)) await cleanup();
   vi.useRealTimers();
 });
 // 生命周期替身只驱动官方公开接口；真实宿主与模型在网页验收中单独验证。
@@ -196,8 +196,8 @@ function setup(value = 3, preparePreview?: () => Promise<void>) {
     { outputRoot: root, cancelGraceMs: 25 },
     preparePreview,
   );
-  cleanups.push(() => {
-    for (const test of manager.sessions.values()) test.dispose();
+  cleanups.push(async () => {
+    for (const test of manager.sessions.values()) await test.dispose();
     rmSync(root, { recursive: true, force: true });
   });
   const end = async (aborted = false) => {
@@ -229,8 +229,8 @@ function setup(value = 3, preparePreview?: () => Promise<void>) {
   return {
     manager,
     planMode,
-    unload: () => {
-      for (const dispose of [...effects]) dispose();
+    unload: async () => {
+      for (const dispose of [...effects]) await dispose();
     },
     agent,
     followups,
@@ -1089,7 +1089,7 @@ it("预先提交JSON计划只保留当前步骤计时器，释放后不遗留取
 it("插件作用域卸载会取消当前原生Agent并隔离未清理资源", async () => {
   const t = setup();
   await t.manager.start(t.agent, "测试", sample());
-  t.unload();
+  await t.unload();
   expect(t.agent.cancel).toHaveBeenCalledOnce();
   expect(t.manager.sessions.get("origin")!.closed).toBe(true);
   expect(existsSync(join(t.root, "quarantine.json"))).toBe(true);
@@ -2344,7 +2344,7 @@ it("预览接入准备也保持互斥，不能在准备过程中启动第二条�
   expect(t.manager.sessions.size).toBe(1);
 });
 
-async function remoteSetup() {
+async function remoteSetup(hub = false) {
   const { RunBridge } = await import("../../src/runbridge.js");
   const { writeFileSync } = await import("node:fs");
   const { browserPreferenceDefaults } = await import(
@@ -2367,6 +2367,20 @@ async function remoteSetup() {
     accessFile: access,
     previewEnabled: false,
   };
+  if (hub) {
+    const hubFile = join(t.root, "hub.yaml");
+    writeFileSync(
+      hubFile,
+      'hub_url: "http://hub.test"\nhub_token: "' + "h".repeat(48) + '"\n',
+    );
+    Object.assign(t.manager.config.browser!, {
+      connectionSource: "hub",
+      hubFile,
+      nodeId: "node_own",
+    });
+  }
+  let claimHandler: (() => Promise<Response>) | undefined;
+  let releaseHandler: (() => Promise<Response>) | undefined;
   let cleanup = "COMPLETE";
   const session = {
     session_id: "session_own",
@@ -2377,6 +2391,27 @@ async function remoteSetup() {
     state: "ACTIVE",
     cleanup: "PENDING",
   };
+  const remoteTools = [
+    "browser_start",
+    "browser_stop",
+    "browser_capture",
+    "browser_click",
+    "browser_select_option",
+    "browser_screenshot",
+  ].map((name) => ({
+    name,
+    inputSchema: {
+      type: "object",
+      properties: {
+        values: { type: "array", items: { type: "string" } },
+        target: { type: "object" },
+        captures: { type: "object" },
+        allowed_origins: { type: "array", items: { type: "string" } },
+        full_page: { type: "boolean" },
+      },
+      additionalProperties: false,
+    },
+  }));
   const wire = vi.fn(async ({ name }: any) => {
     const data =
       name === "browser_start"
@@ -2395,38 +2430,81 @@ async function remoteSetup() {
       structuredContent: data,
     };
   });
+  const leaseState = (ended = false) => ({
+    node_id: "node_own",
+    grant_id: "grant_own",
+    state: ended ? "RELEASED" : "HELD",
+    cleanup: "COMPLETE",
+    expires_at: new Date(Date.now() + 3600000).toISOString(),
+    idle_deadline_at: new Date(Date.now() + 600000).toISOString(),
+    inflight: false,
+    close_reason: ended ? "RELEASED_BY_HOLDER" : null,
+  });
+  const originalFetch = globalThis.fetch;
+  const leaseHttp = vi
+    .spyOn(globalThis, "fetch")
+    .mockImplementation(async (input, init) => {
+      const url = new URL(String(input));
+      if (url.host === "api.test")
+        return new Response(JSON.stringify({ likes: 3 }));
+      if (url.host !== "hub.test") return originalFetch(input, init);
+      if (url.pathname === "/v1/pool/nodes/node_own/tools")
+        return new Response(
+          JSON.stringify({
+            node: { node_id: "node_own" },
+            tools: remoteTools,
+          }),
+        );
+      if (url.pathname === "/v1/nodes/node_own/grants") {
+        if (claimHandler) return claimHandler();
+        const state = leaseState();
+        return new Response(
+          JSON.stringify({
+            ...state,
+            token_available: true,
+            access_token: "x".repeat(48),
+            access_config: {
+              hub_url: "http://hub.test",
+              node_id: "node_own",
+              grant_id: "grant_own",
+              access_token: "x".repeat(48),
+              expires_at: state.expires_at,
+            },
+          }),
+          { status: 201 },
+        );
+      }
+      if (url.pathname === "/v1/grants/grant_own") {
+        if (init?.method === "DELETE" && releaseHandler)
+          return releaseHandler();
+        return new Response(
+          JSON.stringify(leaseState(init?.method === "DELETE")),
+        );
+      }
+      throw new Error("本夹具未授权的 HTTP 路径");
+    });
+  cleanups.push(() => leaseHttp.mockRestore());
   const spy = vi
     .spyOn(RunBridge.prototype, "connect")
     .mockImplementation(async function (this: RunBridge) {
       const internal = this as any;
       internal.connected = true;
       internal.client.callTool = wire;
-      internal.definitions = [
-        "browser_start",
-        "browser_stop",
-        "browser_capture",
-        "browser_click",
-        "browser_select_option",
-        "browser_screenshot",
-      ].map((name) => ({
-        name,
-        inputSchema: {
-          type: "object",
-          properties: {
-            values: { type: "array", items: { type: "string" } },
-            target: { type: "object" },
-            captures: { type: "object" },
-            allowed_origins: { type: "array", items: { type: "string" } },
-            full_page: { type: "boolean" },
-          },
-          additionalProperties: false,
-        },
-      }));
+      internal.definitions = remoteTools;
     });
   cleanups.push(() => spy.mockRestore());
   return {
     ...t,
     wire,
+    leaseHttp,
+    connectSpy: spy,
+    leaseState,
+    setClaimHandler: (handler: () => Promise<Response>) => {
+      claimHandler = handler;
+    },
+    setReleaseHandler: (handler: () => Promise<Response>) => {
+      releaseHandler = handler;
+    },
     setCleanup: (value: string) => {
       cleanup = value;
     },
@@ -2595,4 +2673,228 @@ it("远程写响应丢失记录 UNKNOWN；清理 UNKNOWN 不得解除隔离或�
     "unknown",
   );
   expect(test.run.instances[0].status).not.toBe("PASS");
+});
+
+it("Hub 模式审核与取消只读目录，批准本身也不会提前领取设备", async () => {
+  const t = await remoteSetup(true);
+  await t.manager.start(t.agent, "核对点赞", undefined, true);
+  const submitted = await t.call("test_submit_plan", reviewPlan());
+  expect(submitted.isError).toBe(false);
+  expect(
+    (
+      await t.call("test_define_step", {
+        capability: "browser",
+        allowed_targets: ["https://example.test"],
+        reason: "不得在审核前执行",
+      })
+    ).isError,
+  ).toBe(true);
+  expect(t.leaseHttp.mock.calls.map(([, init]) => init?.method)).toEqual([
+    "GET",
+  ]);
+  expect(t.connectSpy).not.toHaveBeenCalled();
+  t.definitions.set("exit_plan_mode", { execute: () => ({ approved: true }) });
+  await t.call("exit_plan_mode", { plan: submitted.value.review_markdown });
+  expect(t.leaseHttp.mock.calls.map(([, init]) => init?.method)).toEqual([
+    "GET",
+  ]);
+  const run = t.manager.sessions.get("origin")!;
+  run.stop();
+  await t.end(true);
+  expect(run.closed).toBe(true);
+  expect(run.run.node_lease).toBeUndefined();
+  expect(t.connectSpy).not.toHaveBeenCalled();
+});
+it("Hub 模式的纯接口计划不领取、不续租、不释放 Node，也不建立执行 MCP", async () => {
+  const t = await remoteSetup(true),
+    plan = sample();
+  const action = plan.cases[0].steps[0].action!;
+  action.capability = "api";
+  action.allowed_targets = ["https://api.test"];
+  action.capture = {
+    likes: { kind: "http", url: "https://api.test/get", field: "body.likes" },
+  } as any;
+  await t.manager.start(t.agent, "只检查接口", plan);
+  expect((await t.call("mcp__runbridge__browser_screenshot")).isError).toBe(
+    true,
+  );
+  await t.step();
+  expect((await t.call("test_finish")).isError).toBe(false);
+  const run = t.manager.sessions.get("origin")!;
+  expect(run.run.instances[0].status).toBe("PASS");
+  expect(run.run.node_lease).toBeUndefined();
+  expect(t.connectSpy).not.toHaveBeenCalled();
+  expect(
+    t.leaseHttp.mock.calls.filter(([url]) => String(url).includes("/grants")),
+  ).toHaveLength(0);
+});
+it("Hub 整批两实例只领取一次，逐用例关闭浏览器，报告前才归还 Node", async () => {
+  const t = await remoteSetup(true),
+    plan = sample();
+  plan.cases[0].datasets.push({
+    data_id: "b",
+    inputs: {},
+    expected: { likes: 0 },
+  });
+  await t.manager.start(t.agent, "两实例", plan);
+  const run = t.manager.sessions.get("origin")!;
+  expect(run.run.node_lease).toBeUndefined();
+  for (let i = 0; i < 6; i++) await t.step();
+  expect(
+    t.wire.mock.calls.filter(([input]) => input.name === "browser_start"),
+  ).toHaveLength(2);
+  expect(
+    t.wire.mock.calls.filter(([input]) => input.name === "browser_stop"),
+  ).toHaveLength(2);
+  expect(
+    t.leaseHttp.mock.calls.filter(([url]) =>
+      String(url).endsWith("/nodes/node_own/grants"),
+    ),
+  ).toHaveLength(1);
+  expect(
+    t.leaseHttp.mock.calls.filter(([, init]) => init?.method === "DELETE"),
+  ).toHaveLength(0);
+  expect(run.run.node_lease?.state).toBe("HELD");
+  const file = run.run.node_lease!.access_file!;
+  expect(file).not.toContain(run.recorder.directory + "/");
+  expect(existsSync(file)).toBe(true);
+  await t.call("test_finish");
+  expect(run.run.node_lease).toMatchObject({
+    state: "RELEASED",
+    cleanup: "COMPLETE",
+  });
+  expect(existsSync(file)).toBe(false);
+  expect(
+    t.leaseHttp.mock.calls.filter(([, init]) => init?.method === "DELETE"),
+  ).toHaveLength(1);
+  expect(JSON.stringify(run.state())).not.toContain("x".repeat(48));
+  expect(JSON.stringify(run.state())).not.toContain("h".repeat(48));
+  expect(JSON.stringify(run.state())).not.toContain(".runbridge-access");
+  expect((await rebuild(run.recorder.directory)).node_lease).toEqual(
+    run.run.node_lease,
+  );
+});
+it("报告封存和下一批启动都等待异步 Node 释放，不把浏览器 COMPLETE 当作整 Node 归还", async () => {
+  const t = await remoteSetup(true);
+  await t.manager.start(t.agent, "等待归还", sample());
+  const run = t.manager.sessions.get("origin")!;
+  for (let i = 0; i < 3; i++) await t.step();
+  let release!: (response: Response) => void;
+  const called = vi.fn();
+  t.setReleaseHandler(() => {
+    called();
+    return new Promise<Response>((done) => {
+      release = done;
+    });
+  });
+  const pending = t.call("test_finish");
+  await vi.waitFor(() => expect(called).toHaveBeenCalledOnce());
+  expect(run.run.lifecycle).toBe("RUNNING");
+  expect(existsSync(join(run.recorder.directory, "report.html"))).toBe(false);
+  await expect(
+    t.manager.start(
+      { ...t.agent, id: "other", status: "idle" },
+      "下一批",
+      sample(),
+    ),
+  ).rejects.toThrow("已有测试");
+  release(new Response(JSON.stringify(t.leaseState(true))));
+  expect((await pending).isError).toBe(false);
+  expect(run.run.lifecycle).toBe("FINISHED");
+  expect(
+    readFileSync(join(run.recorder.directory, "report.html"), "utf8"),
+  ).toContain("Node 使用权：已归还");
+});
+it("节点清理 UNKNOWN 时仍保留原业务断言并隔离，恢复令牌不删除", async () => {
+  const t = await remoteSetup(true);
+  await t.manager.start(t.agent, "业务成功但设备待核查", sample());
+  const run = t.manager.sessions.get("origin")!;
+  for (let i = 0; i < 3; i++) await t.step();
+  t.setReleaseHandler(
+    async () =>
+      new Response(
+        JSON.stringify({
+          ...t.leaseState(true),
+          state: "QUARANTINED",
+          cleanup: "UNKNOWN",
+        }),
+      ),
+  );
+  await t.call("test_finish");
+  await t.end();
+  expect(run.run.node_lease).toMatchObject({
+    state: "QUARANTINED",
+    cleanup: "UNKNOWN",
+  });
+  expect(run.run.resource_quarantined).toBe(true);
+  expect(
+    run.run.instances[0].steps.find((step) => step.assertion)?.assertion
+      ?.status,
+  ).toBe("PASS");
+  expect(existsSync(run.run.node_lease!.access_file!)).toBe(true);
+  expect(t.manager.recovery.status().quarantine?.can_recover).toBe(true);
+  expect(
+    readFileSync(join(run.recorder.directory, "report.html"), "utf8"),
+  ).toContain("归还未获确认");
+});
+it("领取响应丢失先保留原请求记录，不重放领取，报告与恢复保持未知隔离", async () => {
+  const t = await remoteSetup(true);
+  await t.manager.start(t.agent, "响应丢失", sample());
+  const run = t.manager.sessions.get("origin")!;
+  t.setClaimHandler(async () => {
+    expect(
+      JSON.parse(
+        readFileSync(join(run.recorder.directory, "results.json"), "utf8"),
+      ).node_lease.state,
+    ).toBe("CLAIMING");
+    throw new Error("h".repeat(48));
+  });
+  expect((await t.call("test_capture")).isError).toBe(true);
+  expect((await t.call("test_capture")).isError).toBe(true);
+  expect(
+    t.leaseHttp.mock.calls.filter(([url]) =>
+      String(url).endsWith("/nodes/node_own/grants"),
+    ),
+  ).toHaveLength(1);
+  await t.call("test_fail_step", { reason: "领取结果未知，不能继续业务" });
+  await t.call("test_finish");
+  expect(run.run.node_lease?.state).toBe("UNKNOWN");
+  expect(run.run.resource_quarantined).toBe(true);
+  expect(t.manager.recovery.status().quarantine?.can_recover).toBe(false);
+  expect(JSON.stringify(run.run)).not.toContain("h".repeat(48));
+});
+
+it("旧浏览器 UNKNOWN 隔离在 Node 已归还后仍保留恢复凭据，用户确认原租约后才回收", async () => {
+  const t = await remoteSetup(true);
+  await t.manager.start(t.agent, "保留原隔离", sample());
+  const run = t.manager.sessions.get("origin")!;
+  await t.step();
+  await t.step();
+  t.setCleanup("UNKNOWN");
+  expect((await t.call("test_capture")).isError).toBe(true);
+  await t.call("test_fail_step", { reason: "原浏览器清理未知，不得改写" });
+  await t.end(true);
+  expect(run.run.node_lease).toMatchObject({
+    state: "RELEASED",
+    cleanup: "COMPLETE",
+  });
+  expect(run.run.resource_quarantined).toBe(true);
+  const file = run.run.node_lease!.access_file!;
+  expect(existsSync(file)).toBe(true);
+  const original = readFileSync(
+    join(run.recorder.directory, "results.json"),
+    "utf8",
+  );
+  const marker = t.manager.recovery.status().quarantine!;
+  expect(marker.can_recover).toBe(true);
+  await t.manager.recovery.recover(
+    t.agent,
+    marker.token,
+    new AbortController().signal,
+  );
+  expect(existsSync(file)).toBe(false);
+  expect(t.manager.recovery.status().quarantine).toBeNull();
+  expect(
+    readFileSync(join(run.recorder.directory, "results.json"), "utf8"),
+  ).toBe(original);
 });

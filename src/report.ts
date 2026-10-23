@@ -212,6 +212,42 @@ export function writeReport(
     .join("");
   const eventPath = safePath(directory, "events.jsonl");
   const links = `<div class="footer-links">${download("actual-steps.json", Buffer.from(JSON.stringify(actualStepsDocument(run), null, 2)), "application/json", "下载完整批次实际步骤")}${manualDownload()}${download("results.json", Buffer.from(JSON.stringify(redact(run), null, 2)), "application/json", "下载运行数据")}${download("plan.json", Buffer.from(JSON.stringify(redact(run.plan), null, 2)), "application/json", "下载冻结计划")}${existsSync(eventPath) ? `<a href="events.jsonl?download=1" download="events.jsonl">下载事件账本</a>` : ""}</div>`;
+  const lease = run.node_lease;
+  const leaseConfirmed =
+    lease?.state === "RELEASED" && lease.cleanup === "COMPLETE";
+  const leaseSummary = lease
+    ? '<aside class="issue' +
+      (leaseConfirmed || lease.state === "NOT_ACQUIRED" ? "" : " danger") +
+      '"><strong>Node 使用权：' +
+      escape(
+        leaseConfirmed
+          ? "已归还"
+          : lease.state === "NOT_ACQUIRED"
+            ? "未领取"
+            : "归还未获确认",
+      ) +
+      "</strong><p>" +
+      escape(lease.node_id) +
+      " / " +
+      escape(lease.grant_id ?? lease.request_id) +
+      " · " +
+      escape(lease.state) +
+      " · 清理 " +
+      escape(lease.cleanup ?? "尚未确认") +
+      "</p><p>到期：" +
+      escape(lease.expires_at ? time(lease.expires_at) : "尚未取得") +
+      " · 空闲截止：" +
+      escape(
+        lease.idle_deadline_at
+          ? time(lease.idle_deadline_at)
+          : lease.inflight
+            ? "真实执行中，空闲倒计时暂停"
+            : "尚未取得",
+      ) +
+      "</p>" +
+      (lease.error ? "<p>" + escape(lease.error) + "</p>" : "") +
+      "<p>业务断言与设备归还分别记录；浏览器关闭不代表整 Node 已交还。</p></aside>"
+    : "";
   const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escape(run.name)} · 测试报告</title><style>${reportStyle}</style></head><body><nav class="rail" aria-label="报告导航"><div class="brand">DSH / TEST REPORT</div>${[
     ["overview", "home", "概览"],
     ["cases", "list-details", "测试用例"],
@@ -223,7 +259,7 @@ export function writeReport(
     )
     .join(
       "",
-    )}<small>静态测试报告<br>可离线查看</small></nav><main class="app"><header class="run-header"><h1>${escape(run.name)}</h1><div class="run-meta"><span>${escape(time(run.created_at))}</span><span>${run.lifecycle === "FINISHED" ? "已结束" : "记录未结算"}</span><span>静态报告</span></div><div class="metrics"><div class="metric"><strong>${stats.total}</strong><span>用例总数</span></div><div class="metric"><strong class="positive">${stats.PASS ?? 0}</strong><span>通过</span></div><div class="metric"><strong class="${stats.total - (stats.PASS ?? 0) ? "negative" : ""}">${stats.total - (stats.PASS ?? 0)}</strong><span>未通过 / 未完成</span></div><div class="metric"><strong>${duration(totalMs)}</strong><span>运行总耗时（含规划）</span></div></div></header>${run.manifest.plan_approved === false ? '<aside class="issue">计划未获批准，未执行任何业务。</aside>' : ""}${run.incomplete || run.resource_quarantined ? `<aside class="issue danger">${run.incomplete ? "记录不完整。" : ""}${run.resource_quarantined ? "环境已隔离，外部执行可能仍未停止。" : ""}</aside>` : ""}${run.manifest.actual_steps_export_error ? `<aside class="issue">${escape(run.manifest.actual_steps_export_error)}</aside>` : ""}<section class="workspace" data-view="cases"><aside class="case-list"><div class="list-title"><h3>测试用例</h3><span>${stats.total} 个实例</span></div><label class="search">${icon("search")}<input id="search" type="search" placeholder="搜索用例名称或标识…" aria-label="搜索用例"></label><div class="filters"><label>用例<select id="case"><option value="">全部</option>${options("case_id")}</select></label><label>数据<select id="data"><option value="">全部</option>${options("data_id")}</select></label><label>状态<select id="status"><option value="">全部</option>${options("status")}</select></label></div><div class="list-subtitle"><span id="count" aria-live="polite"></span><button id="clear" class="text-button">清除筛选</button></div><div class="case-rows">${list}</div><p class="empty" id="empty" hidden>没有符合筛选条件的实例</p></aside><div class="detail">${cases}<div id="no-detail" class="empty" hidden>没有可展示的用例，请调整筛选条件。</div></div></section><section class="overview" data-view="overview" hidden><h2>运行总览</h2>${input ? `<p>原始用例 ${input.templates.length} 条 · CSV 数据 ${input.rows.length} 行 · 执行实例 ${input.instances.length} 个</p>` : ""}<p>${stats.total ? (((stats.PASS ?? 0) / stats.total) * 100).toFixed(1) + "%" : "—"} 用例通过率 · ${passedAssertions} / ${assertionCount} 条已执行断言通过</p><div class="distribution">${Object.entries(
+    )}<small>静态测试报告<br>可离线查看</small></nav><main class="app"><header class="run-header"><h1>${escape(run.name)}</h1><div class="run-meta"><span>${escape(time(run.created_at))}</span><span>${run.lifecycle === "FINISHED" ? "已结束" : "记录未结算"}</span><span>静态报告</span></div><div class="metrics"><div class="metric"><strong>${stats.total}</strong><span>用例总数</span></div><div class="metric"><strong class="positive">${stats.PASS ?? 0}</strong><span>通过</span></div><div class="metric"><strong class="${stats.total - (stats.PASS ?? 0) ? "negative" : ""}">${stats.total - (stats.PASS ?? 0)}</strong><span>未通过 / 未完成</span></div><div class="metric"><strong>${duration(totalMs)}</strong><span>运行总耗时（含规划）</span></div></div>${leaseSummary}</header>${run.manifest.plan_approved === false ? '<aside class="issue">计划未获批准，未执行任何业务。</aside>' : ""}${run.incomplete || run.resource_quarantined ? `<aside class="issue danger">${run.incomplete ? "记录不完整。" : ""}${run.resource_quarantined ? "环境已隔离，外部执行可能仍未停止。" : ""}</aside>` : ""}${run.manifest.actual_steps_export_error ? `<aside class="issue">${escape(run.manifest.actual_steps_export_error)}</aside>` : ""}<section class="workspace" data-view="cases"><aside class="case-list"><div class="list-title"><h3>测试用例</h3><span>${stats.total} 个实例</span></div><label class="search">${icon("search")}<input id="search" type="search" placeholder="搜索用例名称或标识…" aria-label="搜索用例"></label><div class="filters"><label>用例<select id="case"><option value="">全部</option>${options("case_id")}</select></label><label>数据<select id="data"><option value="">全部</option>${options("data_id")}</select></label><label>状态<select id="status"><option value="">全部</option>${options("status")}</select></label></div><div class="list-subtitle"><span id="count" aria-live="polite"></span><button id="clear" class="text-button">清除筛选</button></div><div class="case-rows">${list}</div><p class="empty" id="empty" hidden>没有符合筛选条件的实例</p></aside><div class="detail">${cases}<div id="no-detail" class="empty" hidden>没有可展示的用例，请调整筛选条件。</div></div></section><section class="overview" data-view="overview" hidden><h2>运行总览</h2>${input ? `<p>原始用例 ${input.templates.length} 条 · CSV 数据 ${input.rows.length} 行 · 执行实例 ${input.instances.length} 个</p>` : ""}<p>${stats.total ? (((stats.PASS ?? 0) / stats.total) * 100).toFixed(1) + "%" : "—"} 用例通过率 · ${passedAssertions} / ${assertionCount} 条已执行断言通过</p><div class="distribution">${Object.entries(
     stats,
   )
     .filter(([k, v]) => k !== "total" && v > 0)

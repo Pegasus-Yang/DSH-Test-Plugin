@@ -93,7 +93,9 @@ function RecoveryPanel({
     if (!checked || !quarantine?.can_recover || confirmation !== quarantine.token || pending || failed)
       return;
     setPending(true);
-    setMessage("\u6B63\u5728\u5173\u95ED\u6D4B\u8BD5\u4E13\u7528\u6D4F\u89C8\u5668\u5E76\u505C\u6B62\u9884\u89C8\uFF0C\u8BF7\u7559\u610F\u5BBF\u4E3B\u7684\u5DE5\u5177\u5BA1\u6279\u3002");
+    setMessage(
+      quarantine.browser_backend === "runbridge" ? "\u6B63\u5728\u7528\u539F\u8282\u70B9\u4EE4\u724C\u5F52\u8FD8 Node \u5E76\u7B49\u5F85\u6E05\u7406\u786E\u8BA4\uFF0C\u671F\u95F4\u4FDD\u7559\u9694\u79BB\u3002" : "\u6B63\u5728\u5173\u95ED\u6D4B\u8BD5\u4E13\u7528\u6D4F\u89C8\u5668\u5E76\u505C\u6B62\u9884\u89C8\uFF0C\u8BF7\u7559\u610F\u5BBF\u4E3B\u7684\u5DE5\u5177\u5BA1\u6279\u3002"
+    );
     setError(false);
     try {
       setMessage(await recover(quarantine.token));
@@ -155,9 +157,9 @@ function RecoveryPanel({
               role: "group",
               "aria-label": "\u91CA\u653E\u9694\u79BB\u786E\u8BA4",
               children: [
-                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: "\u662F\u5426\u5173\u95ED\u6D4B\u8BD5\u4E13\u7528\u6D4F\u89C8\u5668\u5E76\u91CA\u653E\u9694\u79BB\uFF1F" }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: quarantine.browser_backend === "runbridge" ? "\u662F\u5426\u5F52\u8FD8\u539F Node \u4F7F\u7528\u6743\u5E76\u91CA\u653E\u9694\u79BB\uFF1F" : "\u662F\u5426\u5173\u95ED\u6D4B\u8BD5\u4E13\u7528\u6D4F\u89C8\u5668\u5E76\u91CA\u653E\u9694\u79BB\uFF1F" }),
                 /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", { children: [
-                  quarantine.browser_backend === "runbridge" ? "\u8FD9\u4F1A\u6838\u5BF9\u5E76\u5173\u95ED\u539F\u8BB8\u53EF\u4E0B\u7684\u8FDC\u7A0B\u6D4F\u89C8\u5668\u4F1A\u8BDD\u53CA\u9884\u89C8\u3002" : "\u8FD9\u4F1A\u5173\u95ED\u6D4B\u8BD5\u4E13\u7528\u7684\u672C\u673A\u6D4F\u89C8\u5668\u548C\u9884\u89C8\u3002",
+                  quarantine.browser_backend === "runbridge" ? "\u8FD9\u4F1A\u4F7F\u7528\u539F\u8282\u70B9\u4EE4\u724C\u56DE\u6536\u8BE5\u79DF\u7EA6\u4E0B\u7684\u8FDC\u7A0B\u4F1A\u8BDD\u4E0E\u9884\u89C8\uFF0C\u5E76\u7B49\u5F85\u786E\u8BA4 Node \u5F52\u8FD8\uFF1B\u5171\u4EAB\u540C\u4E00\u4EE4\u724C\u7684\u5176\u4ED6\u5BA2\u6237\u7AEF\u4E5F\u4F1A\u5931\u53BB\u8FD9\u4EFD\u4F7F\u7528\u6743\u3002" : "\u8FD9\u4F1A\u5173\u95ED\u6D4B\u8BD5\u4E13\u7528\u7684\u672C\u673A\u6D4F\u89C8\u5668\u548C\u9884\u89C8\u3002",
                   "\u65E7\u6D4B\u8BD5\u7684\u9519\u8BEF\u4E0E\u62A5\u544A\u4F1A\u4FDD\u7559\uFF1B\u6210\u529F\u540E\u9700\u8981\u91CD\u65B0\u53D1\u9001\u7528\u4F8B\u3002"
                 ] }),
                 /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { children: [
@@ -170,7 +172,7 @@ function RecoveryPanel({
                       onChange: (event) => setChecked(event.target.checked)
                     }
                   ),
-                  "\u6211\u5DF2\u786E\u8BA4\u65E7\u6D4B\u8BD5\u53CA\u5176\u4ED6\u5916\u90E8\u64CD\u4F5C\u5DF2\u505C\u6B62\uFF0C\u5141\u8BB8\u5173\u95ED\u6D4B\u8BD5\u4E13\u7528\u6D4F\u89C8\u5668\u3002"
+                  quarantine.browser_backend === "runbridge" ? "\u6211\u5DF2\u786E\u8BA4\u65E7\u6D4B\u8BD5\u53CA\u5171\u4EAB\u8FD9\u4EFD\u79DF\u7EA6\u7684\u5176\u4ED6\u64CD\u4F5C\u5DF2\u505C\u6B62\uFF0C\u5141\u8BB8\u5F52\u8FD8\u539F Node \u4F7F\u7528\u6743\u3002" : "\u6211\u5DF2\u786E\u8BA4\u65E7\u6D4B\u8BD5\u53CA\u5176\u4ED6\u5916\u90E8\u64CD\u4F5C\u5DF2\u505C\u6B62\uFF0C\u5141\u8BB8\u5173\u95ED\u6D4B\u8BD5\u4E13\u7528\u6D4F\u89C8\u5668\u3002"
                 ] }),
                 /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "dsh-test-actions", children: [
                   /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
@@ -379,6 +381,9 @@ var import_react5 = require("react");
 var browserPreferenceDefaults = {
   backend: "playwright",
   accessFile: "",
+  connectionSource: "access-file",
+  hubFile: "",
+  nodeId: "",
   resourceId: "chromium",
   leaseSeconds: 1800,
   previewEnabled: true
@@ -386,13 +391,19 @@ var browserPreferenceDefaults = {
 var runbridgeAccessTemplate = `# RunBridge \u79C1\u6709\u8BBF\u95EE\u914D\u7F6E\uFF1B\u4E5F\u652F\u6301\u539F\u6709 JSON \u6587\u4EF6\u3002
 # Hub \u57FA\u5740\uFF0C\u4E0D\u542B\u672B\u5C3E /mcp\uFF1B\u53CD\u5411\u4EE3\u7406\u524D\u7F00\u53EF\u4EE5\u4FDD\u7559\u3002
 hub_url: "http://hub.example:8787"
-# \u4EE5\u4E0B\u4E09\u9879\u7531 Node \u6240\u6709\u8005\u914D\u5957\u7B7E\u53D1\uFF0C\u4E0D\u4F7F\u7528 enrollment.token \u767B\u8BB0\u4EE4\u724C\u3002
+# \u4EE5\u4E0B\u4E09\u9879\u7531 Hub \u672C\u6B21\u9886\u53D6\u914D\u5957\u7B7E\u53D1\uFF0C\u4E0D\u4F7F\u7528 enrollment.token \u767B\u8BB0\u4EE4\u724C\u3002
 node_id: "node_example"
 grant_id: "grant_example"
 # \u4EE4\u724C\u4F7F\u7528\u5F15\u53F7\u5305\u88F9\uFF0C\u4FDD\u7559\u539F\u59CB\u5185\u5BB9\uFF1B\u8BF7\u52FF\u63D0\u4EA4\u5230 Git \u6216\u53D1\u9001\u5230\u5BF9\u8BDD\u3002
-access_token: "<Node\u6240\u6709\u8005\u7B7E\u53D1\u7684\u8BBF\u95EE\u4EE4\u724C>"
-# \u53EF\u9009\uFF1A\u7B7E\u53D1\u6587\u4EF6\u6807\u6CE8\u7684\u5230\u671F\u65F6\u95F4\uFF0C\u6388\u6743\u4ECD\u4EE5 Hub \u4E3A\u51C6\u3002
-# expires_at: "2030-01-01T00:00:00Z"
+access_token: "<Hub\u672C\u6B21\u7B7E\u53D1\u7684\u8282\u70B9\u4EE4\u724C>"
+# Hub \u7B7E\u53D1\u7684\u5230\u671F\u65F6\u95F4\uFF1B\u5B9E\u9645\u671F\u9650\u4E0E\u7A7A\u95F2\u56DE\u6536\u4EE5 Hub \u67E5\u8BE2\u4E3A\u51C6\u3002
+expires_at: "2030-01-01T00:00:00Z"
+`;
+var runbridgeHubTemplate = `# Hub \u5171\u4EAB\u7533\u8BF7\u51ED\u636E\uFF1B\u652F\u6301 YAML \u6CE8\u91CA\uFF0C\u4E5F\u652F\u6301 JSON\u3002
+# \u53EA\u7528\u4E8E\u53EA\u8BFB\u8D44\u6E90\u6C60\u548C\u7533\u8BF7 Node\uFF0C\u4E0D\u80FD\u76F4\u63A5\u6267\u884C\u8BBE\u5907\u52A8\u4F5C\u3002
+hub_url: "http://hub.example:8787"
+# \u7531 Hub \u7EF4\u62A4\u8005\u63D0\u4F9B\uFF1B\u4E0D\u662F\u8282\u70B9\u4EE4\u724C\u3001\u767B\u8BB0\u4EE4\u724C\u6216 node_token\u3002
+hub_token: "<Hub\u5171\u4EAB\u7533\u8BF7\u51ED\u636E>"
 `;
 
 // src/preview-preferences.ts
@@ -420,10 +431,16 @@ function RunBridgeConnection({
   errors
 }) {
   const [copied, setCopied] = (0, import_react3.useState)("");
+  const hub = value.connectionSource === "hub";
+  const template = hub ? runbridgeHubTemplate : runbridgeAccessTemplate;
+  const fileKey = hub ? "hubFile" : "accessFile";
+  const fileId = hub ? "dsh-test-runbridge-hub" : "dsh-test-runbridge-access";
+  const path = hub ? value.hubFile ?? "" : value.accessFile;
+  (0, import_react3.useEffect)(() => setCopied(""), [hub]);
   const copyTemplate = async () => {
     try {
       if (!navigator.clipboard?.writeText) throw new Error();
-      await navigator.clipboard.writeText(runbridgeAccessTemplate);
+      await navigator.clipboard.writeText(template);
       setCopied("\u6A21\u677F\u5DF2\u590D\u5236\uFF0C\u8BF7\u66FF\u6362\u4E3A\u771F\u5B9E\u7B7E\u53D1\u4FE1\u606F\u3002");
     } catch {
       setCopied("\u672A\u80FD\u8BBF\u95EE\u526A\u8D34\u677F\uFF0C\u8BF7\u9009\u62E9\u5E76\u590D\u5236\u4E0A\u65B9\u6A21\u677F\uFF0C\u6216\u4E0B\u8F7D\u7A7A\u767D\u6A21\u677F\u3002");
@@ -432,39 +449,97 @@ function RunBridgeConnection({
   const file = result?.file;
   const expires = file?.expires_at ? Date.parse(file.expires_at) : void 0;
   return /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)(import_jsx_runtime3.Fragment, { children: [
-    /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("label", { htmlFor: "dsh-test-runbridge-access", children: "\u8BBF\u95EE\u6587\u4EF6\uFF08DSH \u8FD0\u884C\u673A\u5668\u4E0A\u7684 YAML / JSON\uFF09" }),
+    /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("label", { htmlFor: "dsh-test-runbridge-source", children: "\u8FDE\u63A5\u6765\u6E90" }),
+    /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)(
+      "select",
+      {
+        id: "dsh-test-runbridge-source",
+        value: value.connectionSource ?? "access-file",
+        onChange: (e) => edit({ connectionSource: e.target.value }),
+        children: [
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("option", { value: "hub", children: "Hub \u81EA\u52A8\u9886\u53D6\uFF08\u63A8\u8350\uFF09" }),
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("option", { value: "access-file", children: "\u73B0\u6210\u8BBF\u95EE\u6587\u4EF6" })
+        ]
+      }
+    ),
+    /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { className: "dsh-test-setting-hint", children: hub ? "\u89C4\u5212\u548C\u5BA1\u6838\u53EA\u8BFB\u5DE5\u5177\u76EE\u5F55\uFF1B\u6267\u884C\u6D4F\u89C8\u5668\u4EFB\u52A1\u65F6\u9886\u53D6\u6574 Node\uFF0C\u6574\u6279\u7ED3\u675F\u540E\u5F52\u8FD8\u3002" : "\u4F7F\u7528\u5DF2\u9886\u53D6\u7684\u6709\u9650\u79DF\u7EA6\uFF1B\u6D4F\u89C8\u5668\u6574\u6279\u7ED3\u675F\u540E\u4F1A\u5F52\u8FD8\uFF0C\u4E0B\u4E00\u6279\u9700\u65B0\u8BBF\u95EE\u6587\u4EF6\u3002\u540C\u4E00\u6587\u4EF6\u7684\u6240\u6709\u6301\u6709\u8005\u5171\u7528\u4F7F\u7528\u6743\u3002" }),
+    /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("label", { htmlFor: fileId, children: hub ? "Hub \u8BA4\u8BC1\u6587\u4EF6\uFF08DSH \u8FD0\u884C\u673A\u5668\u4E0A\u7684 YAML / JSON\uFF09" : "\u8BBF\u95EE\u6587\u4EF6\uFF08DSH \u8FD0\u884C\u673A\u5668\u4E0A\u7684 YAML / JSON\uFF09" }),
     /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(
       "input",
       {
-        id: "dsh-test-runbridge-access",
-        value: value.accessFile,
-        placeholder: "/path/to/runbridge-access.yaml",
+        id: fileId,
+        value: path,
+        placeholder: hub ? "/path/to/runbridge-hub.yaml" : "/path/to/runbridge-access.yaml",
         "aria-describedby": "dsh-test-access-help dsh-test-access-error",
-        "aria-invalid": !!errors.accessFile || result?.code === "ACCESS_FILE_INVALID",
-        onChange: (e) => edit({ accessFile: e.target.value })
+        "aria-invalid": !!errors[fileKey] || result?.code === "ACCESS_FILE_INVALID",
+        onChange: (e) => edit({ [fileKey]: e.target.value })
       }
     ),
-    /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { id: "dsh-test-access-help", className: "dsh-test-setting-hint", children: "\u5411 Node \u6240\u6709\u8005\u53D6\u5F97\u5DF2\u7B7E\u53D1\u7684\u8BBF\u95EE\u6587\u4EF6\uFF0C\u653E\u5230\u8FD0\u884C DSH \u7684\u673A\u5668\u4E0A\u3002\u6587\u4EF6\u5305\u542B Hub \u5730\u5740\u4E0E\u8BBF\u95EE\u8BB8\u53EF\uFF1B\u652F\u6301\u5E26\u6CE8\u91CA\u7684 YAML \u53CA\u539F\u6709 JSON\uFF0C\u4E0D\u4F7F\u7528 enrollment.token \u767B\u8BB0\u4EE4\u724C\u3002" }),
-    (errors.accessFile || result?.code === "ACCESS_FILE_INVALID") && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { id: "dsh-test-access-error", role: "alert", children: errors.accessFile || result?.message }),
+    /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { id: "dsh-test-access-help", className: "dsh-test-setting-hint", children: hub ? "\u5411 Hub \u7EF4\u62A4\u8005\u53D6\u5F97\u5171\u4EAB\u7533\u8BF7\u51ED\u636E\u6587\u4EF6\uFF0C\u4EC5\u542B hub_url \u548C hub_token\uFF1B\u51ED\u636E\u53EA\u5728\u5BBF\u4E3B\u8BFB\u53D6\uFF0C\u4E0D\u80FD\u76F4\u63A5\u6267\u884C\u8BBE\u5907\u52A8\u4F5C\u3002" : "\u4F7F\u7528 Hub \u9886\u53D6\u65F6\u5BFC\u51FA\u7684\u8BBF\u95EE\u6587\u4EF6\uFF0C\u5305\u542B\u8282\u70B9\u3001\u79DF\u7EA6\u548C\u6267\u884C\u4EE4\u724C\uFF1B\u652F\u6301 YAML \u6CE8\u91CA\u53CA\u539F\u6709 JSON\u3002\u6587\u4EF6\u4E0D\u662F enrollment.token\uFF0C\u4E0D\u80FD\u4F5C\u4E3A\u6C38\u4E45\u6388\u6743\u3002" }),
+    (errors[fileKey] || result?.code === "ACCESS_FILE_INVALID") && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { id: "dsh-test-access-error", role: "alert", children: errors[fileKey] || result?.message }),
+    hub && /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)(import_jsx_runtime3.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("label", { htmlFor: "dsh-test-runbridge-node", children: "\u76EE\u6807 Node ID" }),
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(
+        "input",
+        {
+          id: "dsh-test-runbridge-node",
+          value: value.nodeId ?? "",
+          placeholder: "node_example",
+          "aria-invalid": !!errors.nodeId,
+          onChange: (e) => edit({ nodeId: e.target.value })
+        }
+      ),
+      errors.nodeId && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { role: "alert", children: errors.nodeId }),
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("label", { htmlFor: "dsh-test-runbridge-node-lease", children: "\u6574\u6279 Node \u79DF\u671F\uFF08\u79D2\uFF0C\u53EF\u7559\u7A7A\uFF09" }),
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(
+        "input",
+        {
+          id: "dsh-test-runbridge-node-lease",
+          type: "number",
+          min: 1,
+          value: value.nodeLeaseSeconds ?? "",
+          placeholder: "\u7559\u7A7A\u4F7F\u7528 Hub \u9ED8\u8BA4\u503C",
+          "aria-describedby": "dsh-test-node-lease-help",
+          "aria-invalid": !!errors.nodeLeaseSeconds,
+          onChange: (e) => edit({
+            nodeLeaseSeconds: e.target.value === "" ? void 0 : Number(e.target.value)
+          })
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { id: "dsh-test-node-lease-help", className: "dsh-test-setting-hint", children: "\u7559\u7A7A\u7531 Hub \u91C7\u7528\u9ED8\u8BA4\u79DF\u671F\uFF0C\u901A\u5E38\u4E3A 3600 \u79D2\uFF1B\u4E0A\u9650\u548C\u7A7A\u95F2\u671F\u9650\u4EE5 Hub \u914D\u7F6E\u4E3A\u51C6\u3002\u8FD0\u884C\u4E2D\u6309\u9700\u7EED\u79DF\uFF0C\u7EED\u79DF\u4E0D\u4F1A\u5237\u65B0\u7A7A\u95F2\u8BA1\u65F6\u3002" }),
+      errors.nodeLeaseSeconds && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { role: "alert", children: errors.nodeLeaseSeconds })
+    ] }),
     /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("details", { className: "dsh-test-command-advanced", children: [
       /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("summary", { children: "\u67E5\u770B\u6587\u4EF6\u683C\u5F0F\u4E0E\u7A7A\u767D\u6A21\u677F" }),
-      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { children: "\u9ED8\u8BA4\u63D0\u4F9B\u5E26\u6CE8\u91CA\u7684 YAML \u6A21\u677F\uFF1B\u539F\u6709 JSON \u6587\u4EF6\u4ECD\u53EF\u76F4\u63A5\u4F7F\u7528\u3002\u793A\u4F8B ID \u548C\u5360\u4F4D\u4EE4\u724C\u4E0D\u53EF\u76F4\u63A5\u8FDE\u63A5\uFF0C\u4E5F\u4E0D\u4F1A\u751F\u6210\u8BBF\u95EE\u8BB8\u53EF\u3002" }),
-      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("pre", { tabIndex: 0, "aria-label": "RunBridge \u8BBF\u95EE\u6587\u4EF6 YAML \u6A21\u677F", children: runbridgeAccessTemplate }),
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { children: "\u9ED8\u8BA4\u63D0\u4F9B\u5E26\u6CE8\u91CA\u7684 YAML \u6A21\u677F\uFF1B\u539F\u6709 JSON \u6587\u4EF6\u4ECD\u53EF\u76F4\u63A5\u4F7F\u7528\u3002\u793A\u4F8B ID \u548C\u5360\u4F4D\u4EE4\u724C\u4E0D\u53EF\u76F4\u63A5\u8FDE\u63A5\uFF0C\u6A21\u677F\u4E0D\u4F1A\u7B7E\u53D1\u79DF\u7EA6\u3002" }),
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(
+        "pre",
+        {
+          tabIndex: 0,
+          "aria-label": hub ? "RunBridge Hub \u8BA4\u8BC1\u6587\u4EF6 YAML \u6A21\u677F" : "RunBridge \u8BBF\u95EE\u6587\u4EF6 YAML \u6A21\u677F",
+          children: template
+        }
+      ),
       /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("dl", { className: "dsh-test-field-guide", children: [
         /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("dt", { children: "hub_url" }),
         /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("dd", { children: "Hub \u57FA\u5740\uFF1B\u63D2\u4EF6\u81EA\u52A8\u62FC\u63A5 /mcp\u3002\u4FDD\u7559\u53CD\u5411\u4EE3\u7406\u524D\u7F00\uFF0C\u4E0D\u586B\u5199\u5B8C\u6574 MCP \u7AEF\u70B9\u3002" }),
-        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("dt", { children: "node_id / grant_id" }),
-        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("dd", { children: "Node \u6240\u6709\u8005\u63D0\u4F9B\u7684\u8282\u70B9\u548C\u914D\u5957\u8BB8\u53EF ID\u3002" }),
-        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("dt", { children: "access_token" }),
-        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("dd", { children: "\u8BE5\u8BB8\u53EF\u7684\u8BBF\u95EE\u4EE4\u724C\uFF0C\u4E0D\u80FD\u66FF\u6362\u6210\u8282\u70B9\u767B\u8BB0\u4EE4\u724C\u3002" })
+        hub ? /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)(import_jsx_runtime3.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("dt", { children: "hub_token" }),
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("dd", { children: "\u5171\u4EAB\u7533\u8BF7\u51ED\u636E\uFF0C\u7528\u4E8E\u76EE\u5F55\u548C\u9886\u53D6\uFF0C\u4E0D\u80FD\u4EE3\u66FF\u8282\u70B9\u6267\u884C\u4EE4\u724C\u3002" })
+        ] }) : /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)(import_jsx_runtime3.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("dt", { children: "node_id / grant_id" }),
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("dd", { children: "\u672C\u6B21\u9886\u53D6\u7684 Node \u548C\u79DF\u7EA6 ID\u3002" }),
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("dt", { children: "access_token" }),
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("dd", { children: "\u672C\u6B21\u79DF\u7EA6\u7684\u8282\u70B9\u6267\u884C\u4EE4\u724C\uFF0C\u5171\u4EAB\u5B83\u5373\u5171\u4EAB\u540C\u4E00\u4EFD\u4F7F\u7528\u6743\u3002" })
+        ] })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: "dsh-test-setting-actions", children: [
         /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("button", { type: "button", onClick: () => void copyTemplate(), children: "\u590D\u5236\u6A21\u677F" }),
         /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(
           "a",
           {
-            href: "data:application/yaml;charset=utf-8," + encodeURIComponent(runbridgeAccessTemplate),
-            download: "runbridge-access.example.yaml",
+            href: "data:application/yaml;charset=utf-8," + encodeURIComponent(template),
+            download: hub ? "runbridge-hub.example.yaml" : "runbridge-access.example.yaml",
             children: "\u4E0B\u8F7D\u7A7A\u767D\u6A21\u677F"
           }
         ),
@@ -477,7 +552,7 @@ function RunBridgeConnection({
         "button",
         {
           type: "button",
-          disabled: checking || !value.accessFile.trim(),
+          disabled: checking || !path.trim() || hub && !value.nodeId?.trim(),
           onClick: () => read(false),
           children: "\u8BFB\u53D6\u914D\u7F6E"
         }
@@ -486,14 +561,14 @@ function RunBridgeConnection({
         "button",
         {
           type: "button",
-          disabled: checking || !value.accessFile.trim(),
+          disabled: checking || !path.trim() || hub && !value.nodeId?.trim(),
           onClick: () => read(true),
           children: checking ? "\u6B63\u5728\u68C0\u67E5\u2026" : "\u68C0\u6D4B\u8FDE\u63A5"
         }
       ),
       checking && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("button", { type: "button", onClick: cancel, children: "\u53D6\u6D88\u68C0\u6D4B" })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { className: "dsh-test-setting-hint", children: "\u68C0\u6D4B\u53EA\u67E5\u8BE2 Hub \u548C\u6388\u6743\u8282\u70B9\uFF0C\u4E0D\u542F\u52A8\u6D4F\u89C8\u5668\uFF1B\u5B9E\u9645\u4F1A\u8BDD\u8EAB\u4EFD\u5728\u8FD0\u884C\u65F6\u6838\u5BF9\u3002\u4FDD\u5B58\u4E0D\u4F1A\u81EA\u52A8\u6267\u884C\u8FDE\u63A5\u68C0\u6D4B\u3002" }),
+    /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { className: "dsh-test-setting-hint", children: "\u68C0\u6D4B\u53EA\u8BFB\uFF0C\u4E0D\u9886\u53D6 Node\u3001\u4E0D\u542F\u52A8\u6D4F\u89C8\u5668\u3001\u4E0D\u5237\u65B0\u7A7A\u95F2\u671F\u9650\u3002Hub \u6A21\u5F0F\u9A8C\u8BC1\u7533\u8BF7\u51ED\u636E\u548C\u76EE\u5F55\uFF1B\u73B0\u6210\u6587\u4EF6\u6A21\u5F0F\u68C0\u67E5\u539F\u79DF\u7EA6\u4E0E MCP\u3002\u4FDD\u5B58\u4E0D\u4F1A\u81EA\u52A8\u68C0\u6D4B\u3002" }),
     file && /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("dl", { className: "dsh-test-connection-summary", "data-test-runbridge-summary": true, children: [
       /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("dt", { children: "Hub \u57FA\u5740" }),
       /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("dd", { children: file.hub_url }),
@@ -501,9 +576,11 @@ function RunBridgeConnection({
       /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("dd", { children: file.mcp_url }),
       /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("dt", { children: "\u8282\u70B9 ID" }),
       /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("dd", { children: file.node_id }),
-      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("dt", { children: "\u8BB8\u53EF ID" }),
-      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("dd", { children: file.grant_id }),
-      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("dt", { children: "\u8BBF\u95EE\u4EE4\u724C" }),
+      file.grant_id && /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)(import_jsx_runtime3.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("dt", { children: "\u79DF\u7EA6 ID" }),
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("dd", { children: file.grant_id })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("dt", { children: hub ? "\u7533\u8BF7\u51ED\u636E" : "\u8282\u70B9\u4EE4\u724C" }),
       /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("dd", { children: "\u5DF2\u914D\u7F6E\uFF0C\u4EC5\u5728\u5BBF\u4E3B\u8BFB\u53D6" }),
       file.expires_at && /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)(import_jsx_runtime3.Fragment, { children: [
         /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("dt", { children: "\u6587\u4EF6\u6807\u6CE8\u5230\u671F\u65F6\u95F4" }),
@@ -517,7 +594,7 @@ function RunBridgeConnection({
         role: result.ok ? "status" : "alert",
         "data-test-runbridge-check": true,
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("strong", { children: result.code === "FILE_VALID" ? "\u6587\u4EF6\u5DF2\u89E3\u6790 \xB7 \u8FDE\u63A5\u672A\u9A8C\u8BC1" : result.ok ? "\u6700\u8FD1\u68C0\u6D4B\u901A\u8FC7" : result.hub_connected ? "Hub \u5DF2\u8FDE\u63A5 \xB7 \u8282\u70B9\u6216\u8D44\u6E90\u9700\u8981\u5904\u7406" : "\u6700\u8FD1\u8FDE\u63A5\u68C0\u6D4B\u672A\u901A\u8FC7" }),
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("strong", { children: result.code === "FILE_VALID" ? "\u6587\u4EF6\u5DF2\u89E3\u6790 \xB7 \u5C1A\u672A\u68C0\u6D4B" : result.ok ? hub ? "Hub \u76EE\u5F55\u5DF2\u9A8C\u8BC1 \xB7 \u5C1A\u672A\u9886\u53D6" : "\u6700\u8FD1\u68C0\u6D4B\u901A\u8FC7" : result.hub_connected ? "Hub \u5DF2\u8FDE\u63A5 \xB7 \u8282\u70B9\u6216\u8D44\u6E90\u9700\u8981\u5904\u7406" : "\u6700\u8FD1\u8FDE\u63A5\u68C0\u6D4B\u672A\u901A\u8FC7" }),
           /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { children: result.message }),
           result.checked_at && /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("p", { children: [
             "\u68C0\u6D4B\u65F6\u95F4\uFF1A",
@@ -527,11 +604,27 @@ function RunBridgeConnection({
           result.node_status && /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("p", { children: [
             "\u8282\u70B9\u72B6\u6001\uFF1A",
             result.node_status
+          ] }),
+          result.pool_lease && /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("p", { children: [
+            "Node \u4F7F\u7528\u6743\uFF1A",
+            result.pool_lease.state,
+            " \xB7",
+            " ",
+            result.pool_lease.claimable ? "\u5F53\u524D\u53EF\u9886\u53D6" : "\u5F53\u524D\u4E0D\u53EF\u9886\u53D6"
+          ] }),
+          result.node_lease && /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("p", { children: [
+            "\u79DF\u7EA6\u72B6\u6001\uFF1A",
+            result.node_lease.state,
+            " \xB7 \u5230\u671F\uFF1A",
+            new Date(result.node_lease.expires_at).toLocaleString(),
+            " \xB7",
+            " ",
+            result.node_lease.idle_deadline_at ? "\u7A7A\u95F2\u622A\u6B62\uFF1A" + new Date(result.node_lease.idle_deadline_at).toLocaleString() : "\u771F\u5B9E\u6267\u884C\u4E2D\uFF0C\u7A7A\u95F2\u5012\u8BA1\u65F6\u6682\u505C"
           ] })
         ]
       }
     ),
-    expires !== void 0 && expires - Date.now() < value.leaseSeconds * 1e3 && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { role: "status", children: "\u6587\u4EF6\u6807\u6CE8\u7684\u8BB8\u53EF\u5269\u4F59\u65F6\u95F4\u5C0F\u4E8E\u5F53\u524D\u79DF\u671F\uFF0C\u8BF7\u8054\u7CFB\u6240\u6709\u8005\u6838\u5BF9\u8BB8\u53EF\uFF1B\u6388\u6743\u6709\u6548\u6027\u4EE5 Hub \u4E3A\u51C6\u3002" }),
+    expires !== void 0 && expires - Date.now() < value.leaseSeconds * 1e3 && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { role: "status", children: "\u6587\u4EF6\u6807\u6CE8\u7684\u79DF\u7EA6\u65F6\u95F4\u5C0F\u4E8E\u6D4F\u89C8\u5668\u4F1A\u8BDD\u79DF\u671F\uFF0C\u5B9E\u9645\u671F\u9650\u53CA\u7A7A\u95F2\u56DE\u6536\u4EE5 Hub \u72B6\u6001\u4E3A\u51C6\uFF1B\u5931\u6548\u540E\u4E0D\u80FD\u81EA\u52A8\u6362\u4EE4\u724C\u7EE7\u7EED\u672C\u6279\u3002" }),
     /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("label", { htmlFor: "dsh-test-runbridge-resource", children: "\u53D7\u7BA1\u7406\u6D4F\u89C8\u5668\u8D44\u6E90 ID" }),
     /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(
       "input",
@@ -549,7 +642,7 @@ function RunBridgeConnection({
       " / ",
       r.occupancy
     ] }, r.resource_id)) }),
-    /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { id: "dsh-test-resource-help", className: "dsh-test-setting-hint", children: "\u901A\u5E38\u4E3A chromium\u3002\u68C0\u6D4B\u540E\u53EF\u9009\u62E9\u8FD4\u56DE\u7684\u6388\u6743\u8D44\u6E90\uFF0C\u79BB\u7EBF\u65F6\u4ECD\u53EF\u586B\u5199\u6240\u6709\u8005\u63D0\u4F9B\u7684\u8D44\u6E90 ID\u3002" }),
+    /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { id: "dsh-test-resource-help", className: "dsh-test-setting-hint", children: "\u901A\u5E38\u4E3A chromium\u3002\u68C0\u6D4B\u540E\u53EF\u9009\u62E9\u8FD4\u56DE\u7684\u53D7\u7BA1\u7406\u8D44\u6E90\uFF0C\u79BB\u7EBF\u65F6\u4ECD\u53EF\u586B\u5199\u5DF2\u77E5\u8D44\u6E90 ID\u3002" }),
     errors.resourceId && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { id: "dsh-test-resource-error", role: "alert", children: errors.resourceId }),
     /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("label", { htmlFor: "dsh-test-runbridge-lease", children: "\u6BCF\u6761\u7528\u4F8B\u7684\u4F1A\u8BDD\u79DF\u671F\uFF08\u79D2\uFF09" }),
     /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(
@@ -569,7 +662,7 @@ function RunBridgeConnection({
     ),
     /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("p", { id: "dsh-test-lease-help", className: "dsh-test-setting-hint", children: [
       Number.isFinite(value.leaseSeconds) ? `${value.leaseSeconds} \u79D2\uFF0C\u7EA6 ${Math.round(value.leaseSeconds / 60 * 10) / 10} \u5206\u949F\u3002` : "",
-      "\u8303\u56F4 1\uFF5E3600 \u79D2\uFF0C\u9700\u8986\u76D6\u6267\u884C\u548C\u6536\u5C3E\uFF1B\u5B83\u4E0D\u662F\u5355\u4E2A\u5DE5\u5177\u7684\u8D85\u65F6\u3002"
+      "\u8303\u56F4 1\uFF5E3600 \u79D2\uFF0C\u9700\u8986\u76D6\u672C\u6761\u7528\u4F8B\u7684\u6267\u884C\u548C\u6536\u5C3E\uFF1B\u5B83\u4E0E\u6574\u6279 Node \u79DF\u671F\u3001\u5355\u4E2A\u5DE5\u5177\u8D85\u65F6\u5206\u522B\u8BA1\u7B97\u3002"
     ] }),
     errors.leaseSeconds && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { id: "dsh-test-lease-error", role: "alert", children: errors.leaseSeconds })
   ] });
@@ -812,9 +905,15 @@ function BrowserSettings({
   const formRef = (0, import_react5.useRef)(null);
   const dirty = !same(base, draft);
   const browser = draft.browser;
+  const hubSource = browser.connectionSource === "hub";
+  const activeFile = hubSource ? browser.hubFile ?? "" : browser.accessFile;
   const requestKey = JSON.stringify([
     browser.backend,
     browser.accessFile.trim(),
+    browser.connectionSource,
+    browser.hubFile?.trim(),
+    browser.nodeId?.trim(),
+    browser.nodeLeaseSeconds,
     browser.resourceId,
     browser.leaseSeconds
   ]);
@@ -862,6 +961,9 @@ function BrowserSettings({
         body: JSON.stringify({
           action: connect ? "connect" : "read",
           accessFile: browser.accessFile.trim(),
+          connectionSource: browser.connectionSource ?? "access-file",
+          hubFile: browser.hubFile?.trim(),
+          nodeId: browser.nodeId?.trim(),
           resourceId: browser.resourceId.trim()
         }),
         signal: current.controller.signal
@@ -895,7 +997,7 @@ function BrowserSettings({
   (0, import_react5.useEffect)(() => {
     cancel();
     setResult(void 0);
-    if (browser.backend !== "runbridge" || !browser.accessFile.trim() || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(browser.resourceId))
+    if (browser.backend !== "runbridge" || !activeFile.trim() || hubSource && !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(browser.nodeId ?? "") || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(browser.resourceId))
       return;
     const timer = setTimeout(() => void inspect(false), 450);
     return () => {
@@ -924,6 +1026,9 @@ function BrowserSettings({
   const focusError = (key) => {
     const ids = {
       accessFile: "dsh-test-runbridge-access",
+      hubFile: "dsh-test-runbridge-hub",
+      nodeId: "dsh-test-runbridge-node",
+      nodeLeaseSeconds: "dsh-test-runbridge-node-lease",
       resourceId: "dsh-test-runbridge-resource",
       leaseSeconds: "dsh-test-runbridge-lease",
       mcpId: "dsh-test-preview-mcp",
@@ -938,8 +1043,12 @@ function BrowserSettings({
   const save = async () => {
     const invalid = {};
     if (browser.backend === "runbridge") {
-      if (!browser.accessFile.trim())
-        invalid.accessFile = "\u8BF7\u586B\u5199 DSH \u8FD0\u884C\u673A\u5668\u4E0A\u7684\u8BBF\u95EE YAML \u6216 JSON \u6587\u4EF6\u8DEF\u5F84\u3002";
+      if (!activeFile.trim())
+        invalid[hubSource ? "hubFile" : "accessFile"] = "\u8BF7\u586B\u5199 DSH \u8FD0\u884C\u673A\u5668\u4E0A\u7684\u79C1\u6709 YAML \u6216 JSON \u6587\u4EF6\u8DEF\u5F84\u3002";
+      if (hubSource && !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(browser.nodeId?.trim() ?? ""))
+        invalid.nodeId = "\u8BF7\u586B\u5199\u6709\u6548\u7684\u76EE\u6807 Node ID\u3002";
+      if (hubSource && browser.nodeLeaseSeconds !== void 0 && (!Number.isInteger(browser.nodeLeaseSeconds) || browser.nodeLeaseSeconds < 1))
+        invalid.nodeLeaseSeconds = "Node \u79DF\u671F\u987B\u4E3A\u6B63\u6574\u6570\u79D2\uFF0C\u6216\u7559\u7A7A\u4F7F\u7528 Hub \u9ED8\u8BA4\u503C\u3002";
       if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(browser.resourceId.trim()))
         invalid.resourceId = "\u8BF7\u586B\u5199\u6709\u6548\u7684\u53D7\u7BA1\u7406\u6D4F\u89C8\u5668\u8D44\u6E90 ID\u3002";
       if (!Number.isInteger(browser.leaseSeconds) || browser.leaseSeconds < 1 || browser.leaseSeconds > 3600)
@@ -967,9 +1076,9 @@ function BrowserSettings({
         const file = await inspect(false);
         if (!file?.ok) {
           setErrors({
-            accessFile: file?.message ?? "\u8BFB\u53D6\u914D\u7F6E\u672A\u5B8C\u6210\uFF0C\u8BF7\u91CD\u65B0\u68C0\u67E5\u6587\u4EF6\u3002"
+            [hubSource ? "hubFile" : "accessFile"]: file?.message ?? "\u8BFB\u53D6\u914D\u7F6E\u672A\u5B8C\u6210\uFF0C\u8BF7\u91CD\u65B0\u68C0\u67E5\u6587\u4EF6\u3002"
           });
-          focusError("accessFile");
+          focusError(hubSource ? "hubFile" : "accessFile");
           return;
         }
       }
@@ -977,6 +1086,9 @@ function BrowserSettings({
         browser: {
           ...browser,
           accessFile: browser.accessFile.trim(),
+          hubFile: browser.hubFile?.trim(),
+          nodeId: browser.nodeId?.trim(),
+          nodeLeaseSeconds: (browser.backend === "playwright" || !hubSource) && browser.nodeLeaseSeconds !== void 0 && (!Number.isInteger(browser.nodeLeaseSeconds) || browser.nodeLeaseSeconds < 1) ? base.browser.nodeLeaseSeconds : browser.nodeLeaseSeconds,
           resourceId: browser.resourceId.trim(),
           leaseSeconds: browser.backend === "playwright" && (!Number.isInteger(browser.leaseSeconds) || browser.leaseSeconds < 1 || browser.leaseSeconds > 3600) ? base.browser.leaseSeconds : browser.leaseSeconds
         },
@@ -1475,6 +1587,28 @@ function ProgressCard({
           failed && /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { children: "\u8FDE\u63A5\u6062\u590D\u540E\u66F4\u65B0\u8FDB\u5EA6\u4E0E\u8017\u65F6" })
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { id: bodyId, className: "dsh-test-card-body", hidden: collapsed, children: [
+          snapshot.node_lease && /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("p", { className: "dsh-test-setting-hint", role: "status", children: [
+            "Node \u4F7F\u7528\u6743\uFF1A",
+            snapshot.node_lease.state,
+            " \xB7 \u6E05\u7406\uFF1A",
+            snapshot.node_lease.cleanup ?? "\u5C1A\u672A\u786E\u8BA4",
+            snapshot.node_lease.expires_at && /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(import_jsx_runtime7.Fragment, { children: [
+              " ",
+              "\xB7 \u5230\u671F\uFF1A",
+              new Date(snapshot.node_lease.expires_at).toLocaleString()
+            ] }),
+            snapshot.node_lease.idle_deadline_at ? /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(import_jsx_runtime7.Fragment, { children: [
+              " ",
+              "\xB7 \u7A7A\u95F2\u622A\u6B62\uFF1A",
+              new Date(
+                snapshot.node_lease.idle_deadline_at
+              ).toLocaleString()
+            ] }) : snapshot.node_lease.inflight ? " \xB7 \u771F\u5B9E\u6267\u884C\u4E2D\uFF0C\u7A7A\u95F2\u5012\u8BA1\u65F6\u6682\u505C" : "",
+            snapshot.node_lease.error && /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(import_jsx_runtime7.Fragment, { children: [
+              " \xB7 ",
+              snapshot.node_lease.error
+            ] })
+          ] }),
           /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "dsh-test-focus", children: [
             /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "dsh-test-focus-marker", children: [
               /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "dsh-test-focus-number", "aria-hidden": "true", children: focus.row ? String(focus.row.number).padStart(2, "0") : /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(StateIcon, { size: 23 }) }),

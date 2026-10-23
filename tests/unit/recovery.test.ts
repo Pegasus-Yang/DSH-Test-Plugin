@@ -1,4 +1,4 @@
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
   existsSync,
   mkdirSync,
@@ -14,7 +14,28 @@ import { RecoveryManager } from "../../src/recovery.js";
 import type { SuiteRun } from "../../src/contracts.js";
 
 const roots: string[] = [];
+beforeEach(() => {
+  const original = globalThis.fetch;
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+    const url = new URL(String(input));
+    if (url.host !== "hub.test" || url.pathname !== "/v1/grants/grant_own")
+      return original(input, init);
+    return new Response(
+      JSON.stringify({
+        node_id: "node_own",
+        grant_id: "grant_own",
+        state: init?.method === "DELETE" ? "RELEASED" : "HELD",
+        cleanup: "COMPLETE",
+        expires_at: new Date(Date.now() + 3600000).toISOString(),
+        idle_deadline_at: new Date(Date.now() + 600000).toISOString(),
+        inflight: false,
+        close_reason: init?.method === "DELETE" ? "RELEASED_BY_HOLDER" : null,
+      }),
+    );
+  });
+});
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.useRealTimers();
   roots
     .splice(0)
@@ -475,4 +496,110 @@ it("私有文件换成另一许可时远程恢复拒绝接管，隔离保留", a
   await expect(t.recover()).rejects.toThrow("原许可");
   expect(t.close).not.toHaveBeenCalled();
   expect(t.manager.status().quarantine).not.toBeNull();
+});
+
+function leaseRecovery() {
+  const t = setup();
+  const file = join(t.root, "original-lease.json");
+  writeFileSync(
+    file,
+    JSON.stringify({
+      hub_url: "http://hub.test",
+      node_id: "node_own",
+      grant_id: "grant_own",
+      access_token: "x".repeat(48),
+    }),
+  );
+  t.run.instances[0].resources = {};
+  t.run.node_lease = {
+    source: "hub",
+    hub_url: "http://hub.test",
+    node_id: "node_own",
+    grant_id: "grant_own",
+    access_file: file,
+    state: "QUARANTINED",
+    cleanup: "UNKNOWN",
+  };
+  const original = JSON.stringify(t.run);
+  writeFileSync(join(t.root, "run-old/results.json"), original);
+  return { ...t, file, original };
+}
+it("浏览器已不存在仍可用原 Node 租约归还，保留旧 UNKNOWN 和业务结果", async () => {
+  const t = leaseRecovery();
+  expect(t.manager.status().quarantine).toMatchObject({
+    can_recover: true,
+    browser_backend: "runbridge",
+  });
+  expect(await t.recover()).toContain("原 Node 使用权已确认归还");
+  expect(t.manager.status().quarantine).toBeNull();
+  expect(t.close).not.toHaveBeenCalled();
+  expect(readFileSync(join(t.root, "run-old/results.json"), "utf8")).toBe(
+    t.original,
+  );
+  const audit = readdirSync(t.root).find((name) =>
+    name.startsWith("release-"),
+  )!;
+  const proof = JSON.parse(readFileSync(join(t.root, audit), "utf8")).proof;
+  expect(proof.evidence).toMatchObject({
+    method: "confirmed-node-lease-recovery",
+    node_lease: {
+      grant_id: "grant_own",
+      state: "RELEASED",
+      cleanup: "COMPLETE",
+    },
+  });
+  expect(JSON.stringify(proof)).not.toContain("x".repeat(48));
+  expect(JSON.stringify(proof)).not.toContain(t.file);
+});
+it("Node 仍 QUARANTINED 或仅人工核查 UNKNOWN 时不自动解除旧隔离", async () => {
+  const t = leaseRecovery();
+  vi.mocked(fetch).mockImplementation(
+    async () =>
+      new Response(
+        JSON.stringify({
+          node_id: "node_own",
+          grant_id: "grant_own",
+          state: "QUARANTINED",
+          cleanup: "UNKNOWN",
+          expires_at: new Date(Date.now() + 3600000).toISOString(),
+          idle_deadline_at: new Date(Date.now() + 600000).toISOString(),
+          inflight: false,
+          close_reason: "IDLE_TIMEOUT",
+          resolution: null,
+        }),
+      ),
+  );
+  await expect(t.recover()).rejects.toThrow("归还未获确认");
+  expect(t.manager.status().quarantine).not.toBeNull();
+  expect(existsSync(t.file)).toBe(true);
+  expect(t.close).not.toHaveBeenCalled();
+});
+it("更换访问文件为新 grant 时在发请求前拒绝，不接管另一持有者", async () => {
+  const t = leaseRecovery();
+  writeFileSync(
+    t.file,
+    JSON.stringify({
+      hub_url: "http://hub.test",
+      node_id: "node_own",
+      grant_id: "grant_new",
+      access_token: "x".repeat(48),
+    }),
+  );
+  await expect(t.recover()).rejects.toThrow("不能使用新许可");
+  expect(fetch).not.toHaveBeenCalled();
+  expect(t.manager.status().quarantine).not.toBeNull();
+});
+it("未知领取没有原令牌时只保留人工处置，不用 Hub 凭据抢占", async () => {
+  const t = leaseRecovery();
+  t.run.node_lease = {
+    source: "hub",
+    hub_url: "http://hub.test",
+    node_id: "node_own",
+    request_id: "claim_lost",
+    state: "UNKNOWN",
+  };
+  writeFileSync(join(t.root, "run-old/results.json"), JSON.stringify(t.run));
+  expect(t.manager.status().quarantine?.can_recover).toBe(false);
+  await expect(t.recover()).rejects.toThrow("没有取得可恢复的节点令牌");
+  expect(fetch).not.toHaveBeenCalled();
 });

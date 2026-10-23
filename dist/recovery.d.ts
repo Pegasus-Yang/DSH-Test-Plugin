@@ -37,4 +37,6 @@ export declare class RecoveryManager {
     private commit;
     release(evidenceFile: string, token?: string): void;
     recover(agent: Agent, token: string, signal: AbortSignal): Promise<string>;
+    /** 节点租约统一回收负责原租约下遗留会话，不用新许可接管旧资源。 */
+    private recoverNodeLease;
 }

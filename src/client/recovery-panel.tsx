@@ -74,7 +74,11 @@ export function RecoveryPanel({
     )
       return;
     setPending(true);
-    setMessage("正在关闭测试专用浏览器并停止预览，请留意宿主的工具审批。");
+    setMessage(
+      quarantine.browser_backend === "runbridge"
+        ? "正在用原节点令牌归还 Node 并等待清理确认，期间保留隔离。"
+        : "正在关闭测试专用浏览器并停止预览，请留意宿主的工具审批。",
+    );
     setError(false);
     try {
       setMessage(await recover(quarantine.token));
@@ -154,10 +158,14 @@ export function RecoveryPanel({
               role="group"
               aria-label="释放隔离确认"
             >
-              <strong>是否关闭测试专用浏览器并释放隔离？</strong>
+              <strong>
+                {quarantine.browser_backend === "runbridge"
+                  ? "是否归还原 Node 使用权并释放隔离？"
+                  : "是否关闭测试专用浏览器并释放隔离？"}
+              </strong>
               <p>
                 {quarantine.browser_backend === "runbridge"
-                  ? "这会核对并关闭原许可下的远程浏览器会话及预览。"
+                  ? "这会使用原节点令牌回收该租约下的远程会话与预览，并等待确认 Node 归还；共享同一令牌的其他客户端也会失去这份使用权。"
                   : "这会关闭测试专用的本机浏览器和预览。"}
                 旧测试的错误与报告会保留；成功后需要重新发送用例。
               </p>
@@ -168,7 +176,9 @@ export function RecoveryPanel({
                   disabled={pending}
                   onChange={(event) => setChecked(event.target.checked)}
                 />
-                我已确认旧测试及其他外部操作已停止，允许关闭测试专用浏览器。
+                {quarantine.browser_backend === "runbridge"
+                  ? "我已确认旧测试及共享这份租约的其他操作已停止，允许归还原 Node 使用权。"
+                  : "我已确认旧测试及其他外部操作已停止，允许关闭测试专用浏览器。"}
               </label>
               <div className="dsh-test-actions">
                 <button

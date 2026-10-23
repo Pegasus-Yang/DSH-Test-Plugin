@@ -173,6 +173,33 @@ export function ProgressCard({
         {failed && <span>连接恢复后更新进度与耗时</span>}
       </div>
       <div id={bodyId} className="dsh-test-card-body" hidden={collapsed}>
+        {snapshot.node_lease && (
+          <p className="dsh-test-setting-hint" role="status">
+            Node 使用权：{snapshot.node_lease.state} · 清理：
+            {snapshot.node_lease.cleanup ?? "尚未确认"}
+            {snapshot.node_lease.expires_at && (
+              <>
+                {" "}
+                · 到期：
+                {new Date(snapshot.node_lease.expires_at).toLocaleString()}
+              </>
+            )}
+            {snapshot.node_lease.idle_deadline_at ? (
+              <>
+                {" "}
+                · 空闲截止：
+                {new Date(
+                  snapshot.node_lease.idle_deadline_at,
+                ).toLocaleString()}
+              </>
+            ) : snapshot.node_lease.inflight ? (
+              " · 真实执行中，空闲倒计时暂停"
+            ) : (
+              ""
+            )}
+            {snapshot.node_lease.error && <> · {snapshot.node_lease.error}</>}
+          </p>
+        )}
         <div className="dsh-test-focus">
           <div className="dsh-test-focus-marker">
             <span className="dsh-test-focus-number" aria-hidden="true">

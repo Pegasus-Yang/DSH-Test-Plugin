@@ -1,5 +1,5 @@
 /** 从已校验计划和运行事实生成只读展示数据；不参与执行和断言。 */
-import type { SuiteRun, TestSuite } from "./contracts.js";
+import type { SuiteRun, TestSuite, NodeLeaseRecord } from "./contracts.js";
 export type ProgressPhase = "planning" | "reviewing" | "executing" | "stopping" | "cleanup" | "finished" | "interrupted";
 export interface ProgressCheck {
     text: string;
@@ -50,6 +50,7 @@ export interface ProgressSnapshot {
     settled_steps: number;
     report_url?: string;
     preview: PreviewState;
+    node_lease?: Omit<NodeLeaseRecord, "access_file">;
 }
 export declare function projectProgress(input: {
     run: SuiteRun;

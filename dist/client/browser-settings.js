@@ -30,9 +30,15 @@ export function BrowserSettings({ form, info, refresh, }) {
     const formRef = useRef(null);
     const dirty = !same(base, draft);
     const browser = draft.browser;
+    const hubSource = browser.connectionSource === "hub";
+    const activeFile = hubSource ? (browser.hubFile ?? "") : browser.accessFile;
     const requestKey = JSON.stringify([
         browser.backend,
         browser.accessFile.trim(),
+        browser.connectionSource,
+        browser.hubFile?.trim(),
+        browser.nodeId?.trim(),
+        browser.nodeLeaseSeconds,
         browser.resourceId,
         browser.leaseSeconds,
     ]);
@@ -84,6 +90,9 @@ export function BrowserSettings({ form, info, refresh, }) {
                 body: JSON.stringify({
                     action: connect ? "connect" : "read",
                     accessFile: browser.accessFile.trim(),
+                    connectionSource: browser.connectionSource ?? "access-file",
+                    hubFile: browser.hubFile?.trim(),
+                    nodeId: browser.nodeId?.trim(),
                     resourceId: browser.resourceId.trim(),
                 }),
                 signal: current.controller.signal,
@@ -125,7 +134,9 @@ export function BrowserSettings({ form, info, refresh, }) {
         cancel();
         setResult(undefined);
         if (browser.backend !== "runbridge" ||
-            !browser.accessFile.trim() ||
+            !activeFile.trim() ||
+            (hubSource &&
+                !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(browser.nodeId ?? "")) ||
             !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(browser.resourceId))
             return;
         const timer = setTimeout(() => void inspect(false), 450);
@@ -158,6 +169,9 @@ export function BrowserSettings({ form, info, refresh, }) {
     const focusError = (key) => {
         const ids = {
             accessFile: "dsh-test-runbridge-access",
+            hubFile: "dsh-test-runbridge-hub",
+            nodeId: "dsh-test-runbridge-node",
+            nodeLeaseSeconds: "dsh-test-runbridge-node-lease",
             resourceId: "dsh-test-runbridge-resource",
             leaseSeconds: "dsh-test-runbridge-lease",
             mcpId: "dsh-test-preview-mcp",
@@ -173,9 +187,18 @@ export function BrowserSettings({ form, info, refresh, }) {
     const save = async () => {
         const invalid = {};
         if (browser.backend === "runbridge") {
-            if (!browser.accessFile.trim())
-                invalid.accessFile =
-                    "请填写 DSH 运行机器上的访问 YAML 或 JSON 文件路径。";
+            if (!activeFile.trim())
+                invalid[hubSource ? "hubFile" : "accessFile"] =
+                    "请填写 DSH 运行机器上的私有 YAML 或 JSON 文件路径。";
+            if (hubSource &&
+                !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(browser.nodeId?.trim() ?? ""))
+                invalid.nodeId = "请填写有效的目标 Node ID。";
+            if (hubSource &&
+                browser.nodeLeaseSeconds !== undefined &&
+                (!Number.isInteger(browser.nodeLeaseSeconds) ||
+                    browser.nodeLeaseSeconds < 1))
+                invalid.nodeLeaseSeconds =
+                    "Node 租期须为正整数秒，或留空使用 Hub 默认值。";
             if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(browser.resourceId.trim()))
                 invalid.resourceId = "请填写有效的受管理浏览器资源 ID。";
             if (!Number.isInteger(browser.leaseSeconds) ||
@@ -210,9 +233,9 @@ export function BrowserSettings({ form, info, refresh, }) {
                 const file = await inspect(false);
                 if (!file?.ok) {
                     setErrors({
-                        accessFile: file?.message ?? "读取配置未完成，请重新检查文件。",
+                        [hubSource ? "hubFile" : "accessFile"]: file?.message ?? "读取配置未完成，请重新检查文件。",
                     });
-                    focusError("accessFile");
+                    focusError(hubSource ? "hubFile" : "accessFile");
                     return;
                 }
             }
@@ -220,6 +243,14 @@ export function BrowserSettings({ form, info, refresh, }) {
                 browser: {
                     ...browser,
                     accessFile: browser.accessFile.trim(),
+                    hubFile: browser.hubFile?.trim(),
+                    nodeId: browser.nodeId?.trim(),
+                    nodeLeaseSeconds: (browser.backend === "playwright" || !hubSource) &&
+                        browser.nodeLeaseSeconds !== undefined &&
+                        (!Number.isInteger(browser.nodeLeaseSeconds) ||
+                            browser.nodeLeaseSeconds < 1)
+                        ? base.browser.nodeLeaseSeconds
+                        : browser.nodeLeaseSeconds,
                     resourceId: browser.resourceId.trim(),
                     leaseSeconds: browser.backend === "playwright" &&
                         (!Number.isInteger(browser.leaseSeconds) ||

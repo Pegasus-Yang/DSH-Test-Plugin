@@ -130,6 +130,7 @@ it("远程检查只接收路径，读取与连接动作分开，不保存配置"
   expect(checkRunBridgeSettings).toHaveBeenLastCalledWith(
     process.cwd(),
     {
+      connectionSource: "access-file",
       accessFile: "/private/access.json",
       resourceId: "chromium",
       connect: false,
@@ -167,3 +168,53 @@ it.each([
       .status,
   ).toBe(400);
 });
+
+it("Hub 设置路由只接收独立文件路径和目标 Node，不要求现成访问文件", async () => {
+  const result = await request(
+    setup(),
+    "/test-preview-settings/runbridge",
+    "POST",
+    JSON.stringify({
+      connectionSource: "hub",
+      hubFile: "/private/hub.yaml",
+      nodeId: "node_one",
+      resourceId: "chromium",
+      action: "read",
+    }),
+  );
+  expect(result.status).toBe(200);
+  expect(checkRunBridgeSettings).toHaveBeenLastCalledWith(
+    process.cwd(),
+    {
+      connectionSource: "hub",
+      accessFile: "",
+      hubFile: "/private/hub.yaml",
+      nodeId: "node_one",
+      resourceId: "chromium",
+      connect: false,
+    },
+    expect.any(AbortSignal),
+  );
+});
+it.each([
+  { connectionSource: "guess", accessFile: "/private/access.yaml" },
+  { connectionSource: "hub", hubFile: "/private/hub.yaml", nodeId: "../other" },
+  {
+    connectionSource: "hub",
+    accessFile: "/private/access.yaml",
+    nodeId: "node_one",
+  },
+])(
+  "来源不明或混用文件字段时拒绝，不根据字段缺失自动猜认证方式",
+  async (input) => {
+    vi.mocked(checkRunBridgeSettings).mockClear();
+    const result = await request(
+      setup(),
+      "/test-preview-settings/runbridge",
+      "POST",
+      JSON.stringify({ ...input, resourceId: "chromium", action: "read" }),
+    );
+    expect(result.status).toBe(400);
+    expect(checkRunBridgeSettings).not.toHaveBeenCalled();
+  },
+);

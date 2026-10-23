@@ -73,8 +73,26 @@ beforeEach(() => {
   sdk.call.mockReset().mockResolvedValue(reply(node()));
   sdk.close.mockReset().mockResolvedValue(undefined);
   sdk.transport.mockReset();
+  vi.spyOn(globalThis, "fetch").mockImplementation(
+    async () =>
+      new Response(
+        JSON.stringify({
+          node_id: access.node_id,
+          grant_id: access.grant_id,
+          state: "HELD",
+          cleanup: "COMPLETE",
+          expires_at: access.expires_at,
+          idle_deadline_at: "2030-01-01T00:00:00Z",
+          inflight: false,
+          close_reason: null,
+        }),
+      ),
+  );
 });
-afterEach(() => rmSync(root, { recursive: true, force: true }));
+afterEach(() => {
+  vi.restoreAllMocks();
+  rmSync(root, { recursive: true, force: true });
+});
 const check = (connect = true, signal = new AbortController().signal) =>
   checkRunBridgeSettings(
     root,
@@ -139,10 +157,9 @@ it("插件 YAML 模板可直接替换签发值读取，保留说明注释", () =
       .replace("http://hub.example:8787", access.hub_url)
       .replace("node_example", access.node_id)
       .replace("grant_example", access.grant_id)
-      .replace("<Node所有者签发的访问令牌>", secret),
+      .replace("<Hub本次签发的节点令牌>", secret),
   );
-  const { expires_at: _expires, ...required } = access;
-  expect(readRunBridgeAccess(join(root, "template.yaml"))).toEqual(required);
+  expect(readRunBridgeAccess(join(root, "template.yaml"))).toEqual(access);
 });
 it.each([
   ["语法错误", `${yamlAccess}invalid: [`, "格式无效"],
@@ -335,4 +352,146 @@ it("取消尚未完成的握手后关闭连接，迟到结果不再查询节点"
   await Promise.resolve();
   expect(sdk.call).not.toHaveBeenCalled();
   expect(sdk.close).toHaveBeenCalledOnce();
+});
+
+const hubSecret = "PRIVATE_HUB_TOKEN_" + "h".repeat(48);
+function hubInput() {
+  writeFileSync(
+    join(root, "hub.yaml"),
+    `# 共享申请凭据\nhub_url: http://hub.test/prefix\nhub_token: "${hubSecret}"\n`,
+  );
+  return {
+    connectionSource: "hub" as const,
+    hubFile: "hub.yaml",
+    accessFile: "",
+    nodeId: "node_one",
+    resourceId: "chromium",
+    connect: true,
+  };
+}
+function catalogResponse(leaseState = "UNCLAIMED", claimable = true) {
+  return new Response(
+    JSON.stringify({
+      node: { ...node(), lease: { state: leaseState, claimable } },
+      tools: [{ name: "browser_start", inputSchema: { type: "object" } }],
+    }),
+  );
+}
+it("Hub 来源只读工具目录，不领取、不建立执行 MCP，也不回传共享凭据", async () => {
+  const input = hubInput();
+  const http = vi
+    .mocked(fetch)
+    .mockImplementation(async () => catalogResponse());
+  const result = await checkRunBridgeSettings(
+    root,
+    input,
+    new AbortController().signal,
+  );
+  expect(result).toMatchObject({
+    ok: true,
+    code: "HUB_CATALOG_READY",
+    pool_lease: { state: "UNCLAIMED", claimable: true },
+  });
+  expect(JSON.stringify(result)).not.toContain(hubSecret);
+  expect(result.file?.grant_id).toBeUndefined();
+  expect(sdk.connect).not.toHaveBeenCalled();
+  expect(sdk.call).not.toHaveBeenCalled();
+  expect(http).toHaveBeenCalledOnce();
+  expect(http.mock.calls[0][1]?.method).toBe("GET");
+});
+it("Hub 来源离线读取不联网，两个来源不根据缺少字段互相回退", async () => {
+  const input = hubInput();
+  const result = await checkRunBridgeSettings(
+    root,
+    { ...input, connect: false },
+    new AbortController().signal,
+  );
+  expect(result.code).toBe("FILE_VALID");
+  expect(fetch).not.toHaveBeenCalled();
+  const wrongHub = await checkRunBridgeSettings(
+    root,
+    { ...input, hubFile: "access.json" },
+    new AbortController().signal,
+  );
+  expect(wrongHub.code).toBe("ACCESS_FILE_INVALID");
+  expect(wrongHub.message).toContain("hub_token");
+  const wrongNode = await checkRunBridgeSettings(
+    root,
+    { ...input, connectionSource: "access-file", accessFile: "hub.yaml" },
+    new AbortController().signal,
+  );
+  expect(wrongNode.code).toBe("ACCESS_FILE_INVALID");
+  expect(wrongNode.message).toContain("grant_id");
+  expect(fetch).not.toHaveBeenCalled();
+});
+it.each(["HELD", "RELEASING", "QUARANTINED"])(
+  "Hub 目录中资源 FREE 但 Node 为 %s，不能宣称可领取",
+  async (state) => {
+    const input = hubInput();
+    vi.mocked(fetch).mockImplementation(async () =>
+      catalogResponse(state, false),
+    );
+    const result = await checkRunBridgeSettings(
+      root,
+      input,
+      new AbortController().signal,
+    );
+    expect(result).toMatchObject({
+      ok: false,
+      code: "NODE_NOT_CLAIMABLE",
+      hub_connected: true,
+      pool_lease: { state, claimable: false },
+    });
+    expect(result.resources?.[0].occupancy).toBe("FREE");
+    expect(sdk.connect).not.toHaveBeenCalled();
+  },
+);
+it("现成文件标注远期到期，但 Hub 已空闲回收时不建立执行连接", async () => {
+  vi.mocked(fetch).mockResolvedValue(
+    new Response(
+      JSON.stringify({
+        node_id: access.node_id,
+        grant_id: access.grant_id,
+        state: "RELEASED",
+        cleanup: "COMPLETE",
+        expires_at: access.expires_at,
+        idle_deadline_at: access.expires_at,
+        inflight: false,
+        close_reason: "IDLE_TIMEOUT",
+      }),
+    ),
+  );
+  const result = await check();
+  expect(result).toMatchObject({
+    ok: false,
+    code: "NODE_LEASE_INACTIVE",
+    node_lease: { state: "RELEASED", close_reason: "IDLE_TIMEOUT" },
+  });
+  expect(sdk.connect).not.toHaveBeenCalled();
+  expect(sdk.call).not.toHaveBeenCalled();
+});
+it("取消 Hub 目录检测不发请求，不接受远端原始错误中的凭据", async () => {
+  const input = hubInput(),
+    controller = new AbortController();
+  controller.abort();
+  const cancelled = await checkRunBridgeSettings(
+    root,
+    input,
+    controller.signal,
+  );
+  expect(cancelled.code).toBe("CHECK_CANCELLED");
+  expect(fetch).not.toHaveBeenCalled();
+  vi.mocked(fetch).mockResolvedValue(
+    new Response(
+      JSON.stringify({ code: "INVALID_HUB_TOKEN", message: hubSecret }),
+      { status: 401 },
+    ),
+  );
+  const denied = await checkRunBridgeSettings(
+    root,
+    input,
+    new AbortController().signal,
+  );
+  expect(denied.code).toBe("INVALID_HUB_TOKEN");
+  expect(JSON.stringify(denied)).not.toContain(hubSecret);
 });
