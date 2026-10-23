@@ -214,7 +214,8 @@ export function BrowserSettings({
     const invalid: Record<string, string> = {};
     if (browser.backend === "runbridge") {
       if (!browser.accessFile.trim())
-        invalid.accessFile = "请填写 DSH 运行机器上的访问 JSON 文件路径。";
+        invalid.accessFile =
+          "请填写 DSH 运行机器上的访问 YAML 或 JSON 文件路径。";
       if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(browser.resourceId.trim()))
         invalid.resourceId = "请填写有效的受管理浏览器资源 ID。";
       if (

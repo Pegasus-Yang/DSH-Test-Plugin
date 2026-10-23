@@ -3,6 +3,11 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { checkRunBridgeSettings } from "../../src/runbridge-settings.js";
+import { readRunBridgeAccess, RunBridge } from "../../src/runbridge.js";
+import {
+  browserPreferenceDefaults,
+  runbridgeAccessTemplate,
+} from "../../src/browser-preferences.js";
 const sdk = vi.hoisted(() => ({
   connect: vi.fn(),
   list: vi.fn(),
@@ -56,17 +61,15 @@ beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), "runbridge-settings-"));
   writeFileSync(join(root, "access.json"), JSON.stringify(access));
   sdk.connect.mockReset().mockResolvedValue(undefined);
-  sdk.list
-    .mockReset()
-    .mockResolvedValue({
-      tools: [
-        "node_inspect",
-        "browser_start",
-        "browser_stop",
-        "browser_status",
-        "browser_capture",
-      ].map((name) => ({ name })),
-    });
+  sdk.list.mockReset().mockResolvedValue({
+    tools: [
+      "node_inspect",
+      "browser_start",
+      "browser_stop",
+      "browser_status",
+      "browser_capture",
+    ].map((name) => ({ name })),
+  });
   sdk.call.mockReset().mockResolvedValue(reply(node()));
   sdk.close.mockReset().mockResolvedValue(undefined);
   sdk.transport.mockReset();
@@ -78,6 +81,99 @@ const check = (connect = true, signal = new AbortController().signal) =>
     { accessFile: "access.json", resourceId: "chromium", connect },
     signal,
   );
+const yamlAccess = `# Node 所有者签发的私有配置
+hub_url: "http://hub.test/prefix" # 保留代理前缀
+node_id: node_one
+grant_id: grant_one
+access_token: "${secret}"
+expires_at: 2030-01-01T00:00:00Z
+`;
+it.each(["access.yaml", "access.yml", "access.json", "access"])(
+  "带注释 YAML 按内容读取，不依赖后缀 %s，摘要不回传令牌",
+  async (accessFile) => {
+    writeFileSync(join(root, accessFile), yamlAccess);
+    expect(readRunBridgeAccess(join(root, accessFile))).toEqual(access);
+    const result = await checkRunBridgeSettings(
+      root,
+      { accessFile, resourceId: "chromium", connect: false },
+      new AbortController().signal,
+    );
+    expect(result).toMatchObject({ ok: true, code: "FILE_VALID" });
+    expect(JSON.stringify(result)).not.toContain(secret);
+    expect(sdk.connect).not.toHaveBeenCalled();
+  },
+);
+it("JSON 和同内容 YAML 使用相同摘要，注释不会改变连接身份", async () => {
+  const original = await check(false);
+  writeFileSync(join(root, "access.json"), yamlAccess + "# 补充维护说明\n");
+  const yaml = await check(false);
+  expect(yaml.file).toEqual(original.file);
+});
+it("实际运行与设置检测共用 YAML 解析，保留引号内的特殊字符", async () => {
+  const token = secret + "_#literal:value";
+  writeFileSync(join(root, "access.yml"), yamlAccess.replace(secret, token));
+  const bridge = new RunBridge(
+    {
+      ...browserPreferenceDefaults,
+      backend: "runbridge",
+      accessFile: "access.yml",
+    },
+    root,
+  );
+  expect(bridge.access).toEqual({ ...access, access_token: token });
+  expect(sdk.connect).not.toHaveBeenCalled();
+  const result = await checkRunBridgeSettings(
+    root,
+    { accessFile: "access.yml", resourceId: "chromium", connect: true },
+    new AbortController().signal,
+  );
+  expect(result.code).toBe("CONNECTION_READY");
+  expect(sdk.call).toHaveBeenCalledOnce();
+  expect(JSON.stringify(result)).not.toContain(token);
+});
+it("插件 YAML 模板可直接替换签发值读取，保留说明注释", () => {
+  expect(runbridgeAccessTemplate).toContain("# Hub 基址");
+  writeFileSync(
+    join(root, "template.yaml"),
+    runbridgeAccessTemplate
+      .replace("http://hub.example:8787", access.hub_url)
+      .replace("node_example", access.node_id)
+      .replace("grant_example", access.grant_id)
+      .replace("<Node所有者签发的访问令牌>", secret),
+  );
+  const { expires_at: _expires, ...required } = access;
+  expect(readRunBridgeAccess(join(root, "template.yaml"))).toEqual(required);
+});
+it.each([
+  ["语法错误", `${yamlAccess}invalid: [`, "格式无效"],
+  ["重复字段", `${yamlAccess}grant_id: other`, "格式无效"],
+  ["多文档", `${yamlAccess}\n---\n${yamlAccess}`, "格式无效"],
+  ["自定义标签", `${yamlAccess}custom: !private ${secret}`, "格式无效"],
+  ["循环别名", `${yamlAccess}cycle: &cycle {self: *cycle}`, "格式无效"],
+  ["顶层列表", `- ${secret}`, "JSON 或 YAML 对象"],
+  ["空文件", "# 尚未填写\n", "JSON 或 YAML 对象"],
+  [
+    "字段类型错误",
+    yamlAccess.replace("node_id: node_one", "node_id: 123"),
+    "node_id",
+  ],
+])(
+  "无效 YAML %s 安全拒绝，不记录原文或发起连接",
+  async (_name, content, message) => {
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      writeFileSync(join(root, "access.json"), content);
+      const result = await check();
+      expect(result).toMatchObject({ ok: false, code: "ACCESS_FILE_INVALID" });
+      expect(result.message).toContain(message);
+      expect(JSON.stringify(result)).not.toContain(secret);
+      expect(warning).not.toHaveBeenCalled();
+      expect(sdk.connect).not.toHaveBeenCalled();
+    } finally {
+      warning.mockRestore();
+    }
+  },
+);
 it("读取文件只返回无秘密摘要，保留反向代理前缀；内容变化使版本失效", async () => {
   const first = await check(false);
   expect(first).toMatchObject({
@@ -100,7 +196,7 @@ it("读取文件只返回无秘密摘要，保留反向代理前缀；内容变�
   expect((await check(false)).file?.revision).not.toBe(first.file?.revision);
 });
 it.each([
-  ["登记令牌纯文本", secret, "不是连接 JSON"],
+  ["登记令牌纯文本", secret, "enrollment.token"],
   ["字段遗漏", JSON.stringify({ node_id: "one" }), "hub_url"],
   ["空白字段", JSON.stringify({ ...access, grant_id: " " }), "grant_id"],
   [

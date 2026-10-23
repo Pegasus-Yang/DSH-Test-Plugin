@@ -6,6 +6,11 @@
 
 暂无。
 
+## [0.14.1](https://github.com/Pegasus-Yang/DSH-Test-Plugin/tree/v0.14.1) — 2026-10-23
+
+- RunBridge 私有访问文件同时支持 JSON 与 YAML，读取、只读检测和实际运行复用字段校验，已有 JSON 无需转换；解析错误不回显配置原文。
+- 默认展示、复制和下载带注释的 YAML 模板，当前指南同步说明字段字符串、引号和注释；`yaml` 从开发依赖移为运行依赖，保证干净安装可读取 YAML。
+
 ## [0.14.0](https://github.com/Pegasus-Yang/DSH-Test-Plugin/tree/v0.14.0) — 2026-10-23
 
 - 配置页面优化：保留 RunBridge 私有访问文件，增加格式说明、空白模板、无秘密解析摘要与只读连接检测；检测不分配浏览器。

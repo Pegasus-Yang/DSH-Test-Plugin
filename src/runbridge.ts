@@ -2,6 +2,7 @@
 import { readFileSync, statSync } from "node:fs";
 import { basename, extname, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
+import { parseDocument } from "yaml";
 import type { Context } from "@deepseek-ai/cordis";
 import { createMcpToolDefinition } from "@deepseek-ai/dsh-mcp-client";
 import {
@@ -110,12 +111,28 @@ export function readRunBridgeAccess(path: string): RunBridgeAccess {
     );
   }
   try {
-    data = JSON.parse(readFileSync(path, "utf8"));
+    const content = readFileSync(path, "utf8");
+    try {
+      data = JSON.parse(content);
+    } catch {
+      const document = parseDocument(content, {
+        schema: "core",
+        prettyErrors: false,
+      });
+      if (document.errors.length || document.warnings.length) throw new Error();
+      data = document.toJS();
+      // 后续摘要和运行记录使用 JSON，拒绝 YAML 别名产生的循环对象。
+      JSON.stringify(data);
+    }
   } catch {
     throw new Error(
-      "文件内容不是连接 JSON。请使用 Node 所有者签发的访问文件；enrollment.token 用于节点登记。",
+      "访问文件格式无效，请使用一个 JSON 或 YAML 配置对象；enrollment.token 仅用于节点登记。",
     );
   }
+  if (!data || typeof data !== "object" || Array.isArray(data))
+    throw new Error(
+      "访问文件必须是包含 hub_url、node_id、grant_id、access_token 的 JSON 或 YAML 对象；enrollment.token 仅用于节点登记。",
+    );
   const result = data as RunBridgeAccess;
   if (
     !result ||

@@ -6,29 +6,33 @@
 
 ## 准备服务
 
-需要插件 **0.14.0**、公开 DSH **0.2.1-alpha.1、alpha.2 或 alpha.3**、Node.js **22.19+**，以及 RunBridge Hub/Node **0.7.0**。Hub 安装 `mcp` extra，开启 `/mcp` 并配置允许的 Host；Node 配置受管理 Chromium 和 Python Playwright **1.63.0** 运行时。浏览器操作和采集均在 Node 的 Python worker 执行，Hub 无需安装 Playwright。
+需要插件 **0.14.1**、公开 DSH **0.2.1-alpha.1、alpha.2 或 alpha.3**、Node.js **22.19+**，以及 RunBridge Hub/Node **0.7.0**。Hub 安装 `mcp` extra，开启 `/mcp` 并配置允许的 Host；Node 配置受管理 Chromium 和 Python Playwright **1.63.0** 运行时。浏览器操作和采集均在 Node 的 Python worker 执行，Hub 无需安装 Playwright。
 
 先按两端当前快速开始和 MCP 接入文档完成登记、运行和许可签发。确认节点 ONLINE、目标受管理资源 READY/FREE。启动本次会话后检查 `browser_status` 返回的 `visual.supported` 与 `stream_path`；声明支持不等于已收到首帧，实际画面需等待 LIVE 和新 PNG。不再要求旧版 `host.managed_visual` 字段。
 
-Node 所有者签发仅允许目标受管理资源的访问许可，将生成的访问文件安全交付到 **DSH 宿主**。文件内容是连接配置，例如：
+Node 所有者签发仅允许目标受管理资源的访问许可，将生成的访问文件安全交付到 **DSH 宿主**。插件同时支持 JSON 和 YAML 访问文件，字段完全一致；默认示例使用可添加注释的 YAML，例如 `runbridge-access.yaml`：
 
-```json
-{
-  "hub_url": "http://hub.example:8787",
-  "node_id": "node_example",
-  "grant_id": "grant_example",
-  "access_token": "<所有者签发的访问令牌>"
-}
+```yaml
+# RunBridge 私有访问配置；原有 JSON 文件也可直接使用。
+# Hub 基址，不含末尾 /mcp；反向代理前缀可以保留。
+hub_url: "http://hub.example:8787"
+# 节点、许可和令牌由 Node 所有者配套签发。
+node_id: "node_example"
+grant_id: "grant_example"
+# 引号保留令牌原文，避免 #、冒号等字符被当作 YAML 语法。
+access_token: "<所有者签发的访问令牌>"
+# 可选：签发文件标注的到期时间，授权仍以 Hub 为准。
+# expires_at: "2030-01-01T00:00:00Z"
 ```
 
 本机文件建议权限为 `600`，放在不提交的私有目录。不要把访问令牌填写到用例、模型对话或截图里。DSH 无需另行注册一个通用 RunBridge MCP；测试插件会在当前 Agent 上建立连接并注册工具。
 
-访问文件应优先由 Node 所有者通过其 `grant --output` 命令签发。设置页提供可复制、可下载的空白模板和每个字段的解释；模板不生成访问许可。`enrollment.token` 是节点登记令牌，不能作为此 JSON 或其中的 access_token。文件最多 32 KiB；必需字段为 hub_url、node_id、grant_id、access_token，Node 导出的可选 expires_at 会保留并用于辅助到期提示。hub_url 填基址，不含末尾 `/mcp`，反向代理前缀可以保留。
+访问许可应优先由 Node 所有者通过其 `grant --output` 命令签发。Node 导出的 JSON 可原样使用；需要 YAML 时，仅调整表示格式并保留签发的原始字段值，不重新生成令牌。设置页提供可复制、可下载的带注释 YAML 空白模板和每个字段的解释；模板不生成访问许可。`enrollment.token` 是节点登记令牌，不能作为访问配置或其中的 access_token。支持 `.yaml`、`.yml` 与 `.json`；解析按文件内容识别，不依赖后缀。一个文件只放一个配置对象，不使用重复字段或多文档。四个必需值均填写字符串，建议保留示例的双引号，不能把节点 ID、许可 ID 或令牌写成数值。YAML 注释不会改变连接身份；修改实际连接字段后仍会撤销旧检测结果。文件最多 32 KiB；必需字段为 hub_url、node_id、grant_id、access_token，Node 导出的可选 expires_at 会保留并用于辅助到期提示。hub_url 填基址，不含末尾 `/mcp`，反向代理前缀可以保留。
 
 ## 保存连接并运行
 
 1. 打开 **设置 → 测试插件 → 浏览器设置**，浏览器位置选 **远程 RunBridge MCP**。下方画面选项立即随草稿切换。
-2. 填写 **访问文件（DSH 运行机器上的 JSON）** 的完整路径。网页和 DSH 在不同电脑时，填 DSH 机器上的路径。展开 **查看文件格式与空白模板** 可核对格式或取得准备说明。
+2. 填写 **访问文件（DSH 运行机器上的 YAML / JSON）** 的完整路径。网页和 DSH 在不同电脑时，填 DSH 机器上的路径。展开 **查看文件格式与空白模板** 可核对格式或取得准备说明。
 3. 点击 **读取配置**，核对只读摘要中的 Hub 基址、实际 MCP 端点、节点 ID 和许可 ID。令牌不回传网页。文件格式错误会在字段附近提示，保存时会重新读取并拒绝无效文件。
 4. 填写受管理资源 ID（通常 `chromium`），可点击 **检测连接** 查看 Hub、节点与资源状态，并从返回的授权资源中选择。检测只做握手、工具清单和只读 node_inspect，不启动浏览器或解除隔离；它不能提前保证实际会话的启动、grant_id 绑定或业务执行成功。
 5. 设置会话租期（1～3600 秒，默认 1800 秒即 30 分钟，须覆盖执行及收尾），按需勾选 **显示实时画面**，点击 **保存浏览器设置**。连接和画面选项一起保存，下次测试生效，执行中的测试保持原连接。
@@ -66,4 +70,4 @@ Node 所有者签发仅允许目标受管理资源的访问许可，将生成的
 
 隔离后在 **测试环境 → 处理并释放** 使用原访问文件核对遗留资源，旧结果和证据保持原样。若原许可已失效、文件换成另一 grant，或无法唯一找回未知启动，请由资源所有者核查，按[环境处置指南](测试环境卡住怎么办.md)提交实际处置证据。不能用新许可接管旧会话。新 Hub 的持久记录支持重启后按原请求查询，但没有记录仍属于未知结果。
 
-配置交互的本轮结果见[0.14.0 验收](../project/0.14.0版本发布验收.md)，0.7.0 适配的历史实机范围见[0.13.2 验收](../project/0.13.2版本发布验收.md)。旧 Hub 0.5.1 / Node 0.5.0 的 MCP 兼容路径保留，历史结果见[首次接入](../project/RunBridge远程浏览器接入验收.md)和[请求恢复兼容验收](../project/RunBridge请求恢复兼容验收.md)。旧版、Ubuntu 虚拟机、Windows、公网 TLS/NAT 和容量均不冒充本轮验证。
+本轮 YAML／JSON 兼容结果见[0.14.1 验收](../project/0.14.1版本发布验收.md)，配置交互的历史范围见[0.14.0 验收](../project/0.14.0版本发布验收.md)，0.7.0 适配的历史实机范围见[0.13.2 验收](../project/0.13.2版本发布验收.md)。旧 Hub 0.5.1 / Node 0.5.0 的 MCP 兼容路径保留，历史结果见[首次接入](../project/RunBridge远程浏览器接入验收.md)和[请求恢复兼容验收](../project/RunBridge请求恢复兼容验收.md)。旧版、Ubuntu 虚拟机、Windows、公网 TLS/NAT 和容量均不冒充本轮验证。

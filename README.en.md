@@ -55,20 +55,20 @@ For remote or VM browsers, use **RunBridge Hub/Node 0.7.0**. See the [remote bro
 For local review, install the same tgz supplied by the maintainer:
 
 ```sh
-dsh plugin --profile web add /absolute/path/dsh-test-plugin-0.14.0.tgz
+dsh plugin --profile web add /absolute/path/dsh-test-plugin-0.14.1.tgz
 dsh web
 ```
 
 After completed acceptance, review, and a manual push, enter this repository address in DSH's plugin manager, then enable the plugin:
 
 ```text
-https://github.com/Pegasus-Yang/DSH-Test-Plugin.git#v0.14.0
+https://github.com/Pegasus-Yang/DSH-Test-Plugin.git#v0.14.1
 ```
 
 Alternatively, install with the standalone DSH CLI:
 
 ```sh
-dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.14.0
+dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.14.1
 dsh web
 ```
 
@@ -76,7 +76,7 @@ Stop a running DSH normally before CLI installation. Use the same profile and `D
 
 See [installation and deployment](doc/deployment/安装与运维.en.md) for upgrades, uninstalling, and local packages.
 
-All three hosts use the same package without version exemptions. The build SDK remains alpha.3; ordinary plugin upgrades retain the supported hosts. See the [validation status (Chinese)](doc/project/0.14.0版本发布验收.md) and [dsh-compatibility.json](dsh-compatibility.json) for the exact support set.
+All three hosts use the same package without version exemptions. The build SDK remains alpha.3; ordinary plugin upgrades retain the supported hosts. See the [validation status (Chinese)](doc/project/0.14.1版本发布验收.md) and [dsh-compatibility.json](dsh-compatibility.json) for the exact support set.
 
 ### 3. Run your first test in a conversation
 

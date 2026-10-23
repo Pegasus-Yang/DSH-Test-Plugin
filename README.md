@@ -55,26 +55,26 @@ DSH Test Plugin 是 DeepSeek Harness（DSH）的原生测试插件。描述想�
 本地审核时，使用维护者提供的同一个 tgz：
 
 ```sh
-dsh plugin --profile web add /绝对路径/dsh-test-plugin-0.14.0.tgz
+dsh plugin --profile web add /绝对路径/dsh-test-plugin-0.14.1.tgz
 dsh web
 ```
 
 维护者完成验收并推送标签后，可在 DSH 插件管理页填写下面的仓库地址，安装后启用：
 
 ```text
-https://github.com/Pegasus-Yang/DSH-Test-Plugin.git#v0.14.0
+https://github.com/Pegasus-Yang/DSH-Test-Plugin.git#v0.14.1
 ```
 
 也可以使用独立 DSH CLI 安装：
 
 ```sh
-dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.14.0
+dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.14.1
 dsh web
 ```
 
 命令行安装前先正常停止正在运行的 DSH，安装与后续启动使用同一 profile 和 `DSH_HOME`，启动后刷新页面。从 DSH 源码目录运行时，将 `dsh` 替换为 `pnpm dsh`。仓库发行版本包含构建产物，可以直接安装。
 
-这三个宿主使用同一个插件包，无需版本豁免。当前开发 SDK 固定 alpha.3；后续插件升级继续保留已支持宿主。[状态与已验证范围](doc/project/0.14.0版本发布验收.md)详见记录，支持集合以 [dsh-compatibility.json](dsh-compatibility.json) 为准。
+这三个宿主使用同一个插件包，无需版本豁免。当前开发 SDK 固定 alpha.3；后续插件升级继续保留已支持宿主。[状态与已验证范围](doc/project/0.14.1版本发布验收.md)详见记录，支持集合以 [dsh-compatibility.json](dsh-compatibility.json) 为准。
 
 升级、卸载和本地安装包的操作见[安装与运维](doc/deployment/安装与运维.md)。
 

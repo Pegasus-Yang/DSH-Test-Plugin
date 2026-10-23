@@ -39,12 +39,12 @@ export function RunBridgeConnection({
   return (
     <>
       <label htmlFor="dsh-test-runbridge-access">
-        访问文件（DSH 运行机器上的 JSON）
+        访问文件（DSH 运行机器上的 YAML / JSON）
       </label>
       <input
         id="dsh-test-runbridge-access"
         value={value.accessFile}
-        placeholder="/path/to/runbridge-access.json"
+        placeholder="/path/to/runbridge-access.yaml"
         aria-describedby="dsh-test-access-help dsh-test-access-error"
         aria-invalid={
           !!errors.accessFile || result?.code === "ACCESS_FILE_INVALID"
@@ -53,7 +53,8 @@ export function RunBridgeConnection({
       />
       <p id="dsh-test-access-help" className="dsh-test-setting-hint">
         向 Node 所有者取得已签发的访问文件，放到运行 DSH 的机器上。文件包含 Hub
-        地址与访问许可；不是 enrollment.token 登记令牌。
+        地址与访问许可；支持带注释的 YAML 及原有 JSON，不使用 enrollment.token
+        登记令牌。
       </p>
       {(errors.accessFile || result?.code === "ACCESS_FILE_INVALID") && (
         <p id="dsh-test-access-error" role="alert">
@@ -63,9 +64,10 @@ export function RunBridgeConnection({
       <details className="dsh-test-command-advanced">
         <summary>查看文件格式与空白模板</summary>
         <p>
-          模板只解释格式。示例 ID 和占位令牌不可直接连接，也不会生成访问许可。
+          默认提供带注释的 YAML 模板；原有 JSON 文件仍可直接使用。示例 ID
+          和占位令牌不可直接连接，也不会生成访问许可。
         </p>
-        <pre tabIndex={0} aria-label="RunBridge 访问文件 JSON 模板">
+        <pre tabIndex={0} aria-label="RunBridge 访问文件 YAML 模板">
           {runbridgeAccessTemplate}
         </pre>
         <dl className="dsh-test-field-guide">
@@ -84,10 +86,10 @@ export function RunBridgeConnection({
           </button>
           <a
             href={
-              "data:application/json;charset=utf-8," +
+              "data:application/yaml;charset=utf-8," +
               encodeURIComponent(runbridgeAccessTemplate)
             }
-            download="runbridge-access.example.json"
+            download="runbridge-access.example.yaml"
           >
             下载空白模板
           </a>

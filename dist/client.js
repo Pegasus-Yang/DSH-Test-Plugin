@@ -383,16 +383,17 @@ var browserPreferenceDefaults = {
   leaseSeconds: 1800,
   previewEnabled: true
 };
-var runbridgeAccessTemplate = JSON.stringify(
-  {
-    hub_url: "http://hub.example:8787",
-    node_id: "node_example",
-    grant_id: "grant_example",
-    access_token: "<Node\u6240\u6709\u8005\u7B7E\u53D1\u7684\u8BBF\u95EE\u4EE4\u724C>"
-  },
-  null,
-  2
-) + "\n";
+var runbridgeAccessTemplate = `# RunBridge \u79C1\u6709\u8BBF\u95EE\u914D\u7F6E\uFF1B\u4E5F\u652F\u6301\u539F\u6709 JSON \u6587\u4EF6\u3002
+# Hub \u57FA\u5740\uFF0C\u4E0D\u542B\u672B\u5C3E /mcp\uFF1B\u53CD\u5411\u4EE3\u7406\u524D\u7F00\u53EF\u4EE5\u4FDD\u7559\u3002
+hub_url: "http://hub.example:8787"
+# \u4EE5\u4E0B\u4E09\u9879\u7531 Node \u6240\u6709\u8005\u914D\u5957\u7B7E\u53D1\uFF0C\u4E0D\u4F7F\u7528 enrollment.token \u767B\u8BB0\u4EE4\u724C\u3002
+node_id: "node_example"
+grant_id: "grant_example"
+# \u4EE4\u724C\u4F7F\u7528\u5F15\u53F7\u5305\u88F9\uFF0C\u4FDD\u7559\u539F\u59CB\u5185\u5BB9\uFF1B\u8BF7\u52FF\u63D0\u4EA4\u5230 Git \u6216\u53D1\u9001\u5230\u5BF9\u8BDD\u3002
+access_token: "<Node\u6240\u6709\u8005\u7B7E\u53D1\u7684\u8BBF\u95EE\u4EE4\u724C>"
+# \u53EF\u9009\uFF1A\u7B7E\u53D1\u6587\u4EF6\u6807\u6CE8\u7684\u5230\u671F\u65F6\u95F4\uFF0C\u6388\u6743\u4ECD\u4EE5 Hub \u4E3A\u51C6\u3002
+# expires_at: "2030-01-01T00:00:00Z"
+`;
 
 // src/preview-preferences.ts
 var previewPreferenceDefaults = {
@@ -431,24 +432,24 @@ function RunBridgeConnection({
   const file = result?.file;
   const expires = file?.expires_at ? Date.parse(file.expires_at) : void 0;
   return /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)(import_jsx_runtime3.Fragment, { children: [
-    /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("label", { htmlFor: "dsh-test-runbridge-access", children: "\u8BBF\u95EE\u6587\u4EF6\uFF08DSH \u8FD0\u884C\u673A\u5668\u4E0A\u7684 JSON\uFF09" }),
+    /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("label", { htmlFor: "dsh-test-runbridge-access", children: "\u8BBF\u95EE\u6587\u4EF6\uFF08DSH \u8FD0\u884C\u673A\u5668\u4E0A\u7684 YAML / JSON\uFF09" }),
     /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(
       "input",
       {
         id: "dsh-test-runbridge-access",
         value: value.accessFile,
-        placeholder: "/path/to/runbridge-access.json",
+        placeholder: "/path/to/runbridge-access.yaml",
         "aria-describedby": "dsh-test-access-help dsh-test-access-error",
         "aria-invalid": !!errors.accessFile || result?.code === "ACCESS_FILE_INVALID",
         onChange: (e) => edit({ accessFile: e.target.value })
       }
     ),
-    /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { id: "dsh-test-access-help", className: "dsh-test-setting-hint", children: "\u5411 Node \u6240\u6709\u8005\u53D6\u5F97\u5DF2\u7B7E\u53D1\u7684\u8BBF\u95EE\u6587\u4EF6\uFF0C\u653E\u5230\u8FD0\u884C DSH \u7684\u673A\u5668\u4E0A\u3002\u6587\u4EF6\u5305\u542B Hub \u5730\u5740\u4E0E\u8BBF\u95EE\u8BB8\u53EF\uFF1B\u4E0D\u662F enrollment.token \u767B\u8BB0\u4EE4\u724C\u3002" }),
+    /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { id: "dsh-test-access-help", className: "dsh-test-setting-hint", children: "\u5411 Node \u6240\u6709\u8005\u53D6\u5F97\u5DF2\u7B7E\u53D1\u7684\u8BBF\u95EE\u6587\u4EF6\uFF0C\u653E\u5230\u8FD0\u884C DSH \u7684\u673A\u5668\u4E0A\u3002\u6587\u4EF6\u5305\u542B Hub \u5730\u5740\u4E0E\u8BBF\u95EE\u8BB8\u53EF\uFF1B\u652F\u6301\u5E26\u6CE8\u91CA\u7684 YAML \u53CA\u539F\u6709 JSON\uFF0C\u4E0D\u4F7F\u7528 enrollment.token \u767B\u8BB0\u4EE4\u724C\u3002" }),
     (errors.accessFile || result?.code === "ACCESS_FILE_INVALID") && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { id: "dsh-test-access-error", role: "alert", children: errors.accessFile || result?.message }),
     /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("details", { className: "dsh-test-command-advanced", children: [
       /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("summary", { children: "\u67E5\u770B\u6587\u4EF6\u683C\u5F0F\u4E0E\u7A7A\u767D\u6A21\u677F" }),
-      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { children: "\u6A21\u677F\u53EA\u89E3\u91CA\u683C\u5F0F\u3002\u793A\u4F8B ID \u548C\u5360\u4F4D\u4EE4\u724C\u4E0D\u53EF\u76F4\u63A5\u8FDE\u63A5\uFF0C\u4E5F\u4E0D\u4F1A\u751F\u6210\u8BBF\u95EE\u8BB8\u53EF\u3002" }),
-      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("pre", { tabIndex: 0, "aria-label": "RunBridge \u8BBF\u95EE\u6587\u4EF6 JSON \u6A21\u677F", children: runbridgeAccessTemplate }),
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { children: "\u9ED8\u8BA4\u63D0\u4F9B\u5E26\u6CE8\u91CA\u7684 YAML \u6A21\u677F\uFF1B\u539F\u6709 JSON \u6587\u4EF6\u4ECD\u53EF\u76F4\u63A5\u4F7F\u7528\u3002\u793A\u4F8B ID \u548C\u5360\u4F4D\u4EE4\u724C\u4E0D\u53EF\u76F4\u63A5\u8FDE\u63A5\uFF0C\u4E5F\u4E0D\u4F1A\u751F\u6210\u8BBF\u95EE\u8BB8\u53EF\u3002" }),
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("pre", { tabIndex: 0, "aria-label": "RunBridge \u8BBF\u95EE\u6587\u4EF6 YAML \u6A21\u677F", children: runbridgeAccessTemplate }),
       /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("dl", { className: "dsh-test-field-guide", children: [
         /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("dt", { children: "hub_url" }),
         /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("dd", { children: "Hub \u57FA\u5740\uFF1B\u63D2\u4EF6\u81EA\u52A8\u62FC\u63A5 /mcp\u3002\u4FDD\u7559\u53CD\u5411\u4EE3\u7406\u524D\u7F00\uFF0C\u4E0D\u586B\u5199\u5B8C\u6574 MCP \u7AEF\u70B9\u3002" }),
@@ -462,8 +463,8 @@ function RunBridgeConnection({
         /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(
           "a",
           {
-            href: "data:application/json;charset=utf-8," + encodeURIComponent(runbridgeAccessTemplate),
-            download: "runbridge-access.example.json",
+            href: "data:application/yaml;charset=utf-8," + encodeURIComponent(runbridgeAccessTemplate),
+            download: "runbridge-access.example.yaml",
             children: "\u4E0B\u8F7D\u7A7A\u767D\u6A21\u677F"
           }
         ),
@@ -938,7 +939,7 @@ function BrowserSettings({
     const invalid = {};
     if (browser.backend === "runbridge") {
       if (!browser.accessFile.trim())
-        invalid.accessFile = "\u8BF7\u586B\u5199 DSH \u8FD0\u884C\u673A\u5668\u4E0A\u7684\u8BBF\u95EE JSON \u6587\u4EF6\u8DEF\u5F84\u3002";
+        invalid.accessFile = "\u8BF7\u586B\u5199 DSH \u8FD0\u884C\u673A\u5668\u4E0A\u7684\u8BBF\u95EE YAML \u6216 JSON \u6587\u4EF6\u8DEF\u5F84\u3002";
       if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(browser.resourceId.trim()))
         invalid.resourceId = "\u8BF7\u586B\u5199\u6709\u6548\u7684\u53D7\u7BA1\u7406\u6D4F\u89C8\u5668\u8D44\u6E90 ID\u3002";
       if (!Number.isInteger(browser.leaseSeconds) || browser.leaseSeconds < 1 || browser.leaseSeconds > 3600)

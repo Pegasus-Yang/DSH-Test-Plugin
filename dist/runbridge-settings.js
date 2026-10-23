@@ -8,7 +8,7 @@ export async function checkRunBridgeSettings(workspace, input, signal) {
     let access;
     try {
         if (!input.accessFile.trim())
-            throw new Error("请填写 DSH 运行机器上的访问 JSON 文件路径。");
+            throw new Error("请填写 DSH 运行机器上的访问 YAML 或 JSON 文件路径。");
         access = readRunBridgeAccess(resolve(workspace, input.accessFile));
     }
     catch (error) {
