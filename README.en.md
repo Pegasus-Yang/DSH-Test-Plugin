@@ -32,9 +32,9 @@ These screenshots show actual runs with GitLab as the system under test, using t
 
 ![Full DSH page with a live GitLab login-page window, conversation records, and step progress](doc/user-guide/images/GitLab浏览器实时画面.png)
 
-**Review results against evidence.** Reports organize actual steps, assertions, and attachments by case, showing actual values and expectations. Browser cases can include recordings; API cases show their requests and checks.
+**Review results against evidence.** Reports group planning, actual operations, and checks into one execution process, comparing complete expectations with captured values. The case header downloads a manual Markdown case for another person to execute. Browser cases can include recordings; API cases show their requests and checks.
 
-![GitLab Markdown API report with actual steps, status-code checks, and evidence links](doc/user-guide/images/GitLab接口测试报告.png)
+![GitLab API report with a unified execution process, complete expectations, captured values, and manual Markdown download](doc/user-guide/images/GitLab接口测试报告.jpg)
 
 See the [visual tour](doc/user-guide/使用说明.en.md#visual-tour) for more plan-review, expanded-step, and report screenshots.
 

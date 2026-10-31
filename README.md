@@ -32,9 +32,9 @@ DSH Test Plugin 是 DeepSeek Harness（DSH）的原生测试插件。描述想�
 
 ![完整 DSH 页面：实时浮窗展示 GitLab 登录页，同时可见对话执行记录与步骤进度](doc/user-guide/images/GitLab浏览器实时画面.png)
 
-**用证据核对测试结果。** 报告按用例组织实际步骤、断言和附件，展示实际值与预期；浏览器用例可附带录像，接口用例只展示相应的请求与检查。
+**用证据核对测试结果。** 报告将规划、实际操作与检查组织为统一执行过程，完整预期与本次实际值对照展示；用例头部可直接下载供他人再次执行的手工 MD。浏览器用例可附带录像，接口用例展示相应的请求与检查。
 
-![GitLab Markdown 接口报告：实际步骤、状态码检查和证据入口](doc/user-guide/images/GitLab接口测试报告.png)
+![GitLab 接口报告：统一执行过程、完整预期、本次实际值与手工 MD 下载](doc/user-guide/images/GitLab接口测试报告.jpg)
 
 更多计划审核、步骤展开和报告截图见[使用说明](doc/user-guide/使用说明.md#用截图认识功能)。
 

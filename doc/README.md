@@ -11,6 +11,7 @@ The English guides describe the current implementation. Historical design and ac
 ## 当前版本
 
 - [0.16.0 版本发布验收](project/0.16.0版本发布验收.md)：报告执行过程归组、主要手工用例下载及完整预期句，验证范围见记录。
+- [报告截图与 CI 自动发布验收](project/报告截图与CI自动发布验收.md)：当前报告截图、版本标签发布门禁、同一候选包与 Release 资产。
 
 - [0.15.0 历史版本发布验收](project/0.15.0版本发布验收.md)：Hub 自动领取／现成访问文件双来源、规划不占设备、整批租约与异步归还、同包多宿主验证。
 

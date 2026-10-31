@@ -117,3 +117,42 @@ jobs:
           BUILD_RESULT: ${{ needs.plugin.result }}
           HOST_RESULT: ${{ needs.host.result }}
         run: test "$BUILD_RESULT" = success && test "$HOST_RESULT" = success
+
+  release:
+    name: 发布版本安装包
+    needs: compatibility
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: 22.22.3
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          name: candidate
+          path: ${{ runner.temp }}/candidate
+      - name: 核对标签并发布已验证的候选包
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          cd "${RUNNER_TEMP}/candidate"
+          sha256sum --check dsh-test-plugin.sha256
+          package_version=$(tar -xOzf dsh-test-plugin.tgz package/package.json | node -p 'JSON.parse(require("node:fs").readFileSync(0, "utf8")).version')
+          repository_version=$(node -p 'JSON.parse(require("node:fs").readFileSync(process.env.GITHUB_WORKSPACE + "/package.json", "utf8")).version')
+          test "$RELEASE_TAG" = "v${repository_version}"
+          test "$package_version" = "$repository_version"
+          release_archive="dsh-test-plugin-${package_version}.tgz"
+          cp dsh-test-plugin.tgz "$release_archive"
+          sha256sum "$release_archive" > "${release_archive}.sha256"
+          release_flags=()
+          if [[ "$package_version" == *-* ]]; then
+            release_flags+=(--prerelease)
+          fi
+          gh release create "$RELEASE_TAG" "$release_archive" "${release_archive}.sha256" \
+            --verify-tag --generate-notes --title "$RELEASE_TAG" "${release_flags[@]}"

@@ -39,7 +39,7 @@
 3. 按改动完成类型检查、构建、相关测试及必要的真实安装验收；构建、测试和打包方法见[安装与运维](安装与运维.md#构建与打包)。0.9.1 起，提交重建的 `dist`，用 `pnpm verify:package` 核对清单入口，并在没有宿主源码链接的环境核对重建产物一致；验收 Git 来源安装、停用和卸载后 MCP 正常工作。
 4. 提交该版本全部实现和验收文档。确认工作区没有遗漏的待发布文件，再在最后交付提交上打附注标签。只有全部内容确认后才打标签。
 5. 默认由用户审核后手动把交付提交及本次版本标签推到已有发布远端；用户明确授权本次推送时按授权执行。不要使用强制推送，也不要顺带推送其他标签。
-6. 核对标签的目标提交、包版本和远端结果。0.9.1 起可直接使用含 `dist` 的 Git 标签安装；Git标签不自动生成 tgz 或 GitHub Release，本地 tgz 仍按构建流程生成。
+6. 核对标签的目标提交、包版本和远端结果。可直接使用含 `dist` 的 Git 标签安装；包含自动发布流程的版本标签会触发 CI，在构建和三版宿主全部通过后生成 GitHub Release 及安装包资产，详见下节。本地审核仍按构建流程生成 tgz。
 
 例如，已完成并提交一个新版本后，在项目根目录执行：
 
@@ -55,6 +55,20 @@ git ls-remote --tags origin "refs/tags/v${release_version}" "refs/tags/v${releas
 ```
 
 示例沿用当前 `origin/main`；采用其他发布分支时使用对应分支。附注标签有“标签对象”和“提交对象”，远端输出中带 `^{}` 的一行才是目标提交，须与本地 `git rev-parse` 输出一致。已经存在相同标签时先核对，不用 `-f` 覆盖。
+
+## 版本标签自动发布
+
+工作流为 `.github/workflows/ci.yml`。普通分支推送与 PR 继续执行回归；只有 `refs/tags/v…` 的 `push` 可以在兼容汇总门禁通过后进入发布作业。
+
+1. `plugin` 作业只打包一次，上传 `candidate` 制品，包含 `dsh-test-plugin.tgz` 及 SHA-256 校验文件。
+2. 三版 `host` 作业各自核验摘要并验证该候选包。构建或任一宿主失败时，汇总门禁失败，不能发布。
+3. `release` 作业下载同一制品，再核验摘要，并要求标签名、标签提交中的 `package.json` 版本和包内版本完全一致。
+4. 发布时只复制原包并使用版本化文件名，上传 `dsh-test-plugin-<版本号>.tgz` 及 `dsh-test-plugin-<版本号>.tgz.sha256`，不重新打包。下载两份文件后可在同一目录执行 `sha256sum --check 文件名.tgz.sha256`；macOS 可用 `shasum -a 256 -c 文件名.tgz.sha256`。
+5. 使用工作流自带的 `GITHUB_TOKEN`，只给发布作业 `contents: write` 权限，无需另配发布密钥。通过[官方 GitHub CLI](https://cli.github.com/manual/gh_release_create)的 `--verify-tag` 要求远端标签已存在，并自动生成 Release 说明；版本含预发布后缀时使用 `--prerelease`。
+
+发布门禁依赖 GitHub Actions 的[作业成功依赖规则](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idneeds)。已有同名 Release 时发布命令失败，不覆盖已有资产；核对现有发布和失败日志后再处理，不移动已发布标签。若任务中断，先检查 Release 是否仍为草稿及资产上传情况，不以 CI 开始运行作为发布完成证明。
+
+自动发布入口必须存在于标签指向的提交。本流程新增前已经推送的 `v0.16.0` 保留原指向，不会因后续修改工作流而追溯触发发布；自动发布从包含本流程的后续版本标签生效。
 
 ## 怎样找某个版本
 

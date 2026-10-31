@@ -432,6 +432,7 @@ try {
   const probe = join(cohort.root, "source");
   await mkdir(probe);
   for (const file of [
+    ".github",
     "src",
     "tests",
     "scripts",

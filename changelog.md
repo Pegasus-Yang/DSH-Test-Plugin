@@ -4,7 +4,8 @@
 
 ## 未发布
 
-暂无。
+- 更新中英文 README 和当前使用指南的报告截图，展示统一执行过程、完整预期与实际值、手工 MD 下载主按钮；保留真实运行的记录复核提示。
+- CI 在版本标签推送且三版宿主全部通过后，自动发布 GitHub Release；上传同一候选包的版本化 tgz 和 SHA-256 校验文件，核对标签、源码与包内版本，预发布标签标记为 prerelease。
 
 ## [0.16.0](https://github.com/Pegasus-Yang/DSH-Test-Plugin/tree/v0.16.0) — 2026-10-31
 
