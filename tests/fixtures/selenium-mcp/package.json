@@ -1,0 +1,19 @@
+{
+  "name": "dsh-selenium-mcp-fixture",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Selenium 浏览器协议兼容性验证夹具，不进入插件发行包",
+  "packageManager": "pnpm@11.7.0",
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.4.0",
+    "selenium-webdriver": "4.51.0",
+    "zod": "4.2.0"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "2.0.0"
+  }
+}

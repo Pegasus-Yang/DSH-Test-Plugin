@@ -11,6 +11,7 @@ The English guides describe the current implementation. Historical design and ac
 ## 当前版本
 
 - [0.17.0 版本发布验收](project/0.17.0版本发布验收.md)：DSH alpha.1～5、rc.1～5 同包支持，以及逐版安装、SDK、Web 和真实模型验证。
+- [自定义 Selenium MCP 兼容性核验](project/自定义SeleniumMCP兼容性核验.md)：真实 WebDriver 自检、原生接口阻断、现有协议兼容模式及 Markdown 用例报告验证。
 - [0.16.0 历史版本发布验收](project/0.16.0版本发布验收.md)：报告执行过程归组、主要手工用例下载及完整预期句，验证范围见记录。
 - [报告截图与 CI 自动发布验收](project/报告截图与CI自动发布验收.md)：当前报告截图、版本标签发布门禁、同一候选包与 Release 资产。
 

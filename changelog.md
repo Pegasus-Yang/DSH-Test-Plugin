@@ -4,6 +4,8 @@
 
 ## 未发布
 
+- 新增自定义 Selenium MCP 测试服务及独立宿主复现脚本，记录原生工具接入限制和现有工具约定兼容模式的真实浏览器验证；未新增正式 Selenium 后端，插件运行代码与 0.17.0 发行包不变。见[核验记录](doc/project/自定义SeleniumMCP兼容性核验.md)。
+
 ## [0.17.0](https://github.com/Pegasus-Yang/DSH-Test-Plugin/tree/v0.17.0) — 2026-10-31
 
 - 新增 DSH `0.2.1-alpha.4`、`alpha.5` 和 `rc.1`～`rc.5` 支持，与已有 alpha.1～3 共用同一个插件包；全部 22 个 DSH peer 精确覆盖这 10 版，保留 alpha.3 构建 SDK，不依赖版本豁免。
