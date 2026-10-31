@@ -156,7 +156,7 @@ export class PreviewSetup {
             message: this.message,
         };
     }
-    async prepare() {
+    async prepare(browser) {
         const preferences = this.preferences();
         if (!preferences) {
             await this.restore();
@@ -176,6 +176,16 @@ export class PreviewSetup {
         const entry = editor
             .entries()
             .find((entry) => entry.options.id === preferences.mcpId);
+        if (browser &&
+            ["auto", "mcp"].includes(browser.backend) &&
+            (!entry ||
+                !compatible(entry.options.config) ||
+                (browser.backend === "mcp" && browser.mcpId !== entry.options.id))) {
+            await this.restore();
+            this.message =
+                "当前工具连接没有可用的实时画面或录像接入，测试仍可执行并输出报告。";
+            return;
+        }
         if (!entry ||
             entry.options.name !== "@deepseek-ai/dsh-mcp-client" ||
             !compatible(entry.options.config))

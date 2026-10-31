@@ -39,7 +39,7 @@ export function apply(ctx: Context, config: PluginConfig = {}): void {
       return;
     }
     try {
-      await tests.preview.configure(await setup.prepare());
+      await tests.preview.configure(await setup.prepare(tests.config.browser));
     } catch (error) {
       await tests.preview.configure(undefined);
       tests.preview.unavailable(setup.failed(error));
@@ -64,7 +64,9 @@ export function apply(ctx: Context, config: PluginConfig = {}): void {
         activeBrowser: active
           ? active.browser
             ? "runbridge"
-            : "playwright"
+            : active.managedBrowser
+              ? "playwright"
+              : (tests.config.browser?.backend ?? "auto")
           : undefined,
       };
     }, tests.config.workspace);

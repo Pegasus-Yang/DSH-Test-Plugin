@@ -1,5 +1,7 @@
 # Developer JSON suites and debugging
 
+Generic tool plans use `schema_version: "2"` and `capability: "tool"`. A `kind: "tool"` capture supplies `tool_name`, exactly one of `arguments` / `arguments_json`, and `extract` with `from`, optional JSON `pointer`, content `block`, explicit `type`, or fixed `between` delimiters. Valid sources are `structured`, `value`, `json`, `text`, and the legacy `playwright-result`. Expected values remain frozen. `test_execute_operation.observations` declares output extraction before dispatch and reuses that single result. Format 1 remains supported for existing browser/API captures. See [generic execution](../user-guide/通用工具运行.md) and [the implementation design](../design/通用工具运行方案.md).
+
 JSON execution files are retained for development, debugging, and generated regression suites. User-facing commands and guides recommend TXT, Markdown, and CSV parameters. JSON execution still uses the current conversation's model and native tools.
 
 [简体中文](开发者JSON用例与调试.md) · [User guide](../user-guide/使用说明.en.md)

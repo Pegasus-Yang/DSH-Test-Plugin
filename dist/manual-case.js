@@ -73,7 +73,30 @@ function operationDescription(description, name, inputs) {
         return `${description}，选择文件 ${inputs.paths.map(valueText).join("、")}`;
     if (tool === "browser_handle_dialog")
         return `${inputs.accept ? "确认" : "取消"}页面对话框${typeof inputs.promptText === "string" ? "，输入" + valueText(inputs.promptText) : ""}`;
-    return description;
+    const technical = new Set([
+        "selector",
+        "css",
+        "target",
+        "locator",
+        "element",
+        "ref",
+        "startRef",
+        "endRef",
+        "function",
+        "code",
+        "script",
+        "timeout",
+        "timeout_ms",
+        "session_id",
+        "page_id",
+        "node_id",
+    ]);
+    const values = Object.entries(inputs).filter(([key, value]) => !technical.has(key) &&
+        value !== "" &&
+        !description.includes(typeof value === "string" ? value : valueText(value)));
+    return values.length
+        ? `${description}；${values.map(([key, value]) => `${key}：${valueText(value)}`).join("；")}`
+        : description;
 }
 function manualRows(rows, source, data, calls = [], definitions = []) {
     return rows

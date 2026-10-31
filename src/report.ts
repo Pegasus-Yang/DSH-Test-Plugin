@@ -224,6 +224,31 @@ export function writeReport(
     : "";
   const technicalDownloads = `<details class="technical-downloads"><summary>运行资料下载</summary>${links}</details>`;
   const batchDownload = `<div class="batch-export">${manualDownload(undefined, true)}<p>导出全部实例的操作步骤与原有预期，供再次执行。</p></div>`;
+  const sourceLabels: Record<string, string> = {
+    auto: "自动使用可用工具",
+    mcp: "指定主要 MCP",
+    playwright: "受管理 Playwright",
+    runbridge: "RunBridge",
+  };
+  const toolInfo = run.manifest.tool_runtime_schema
+    ? "<dt>执行来源</dt><dd>" +
+      escape(
+        sourceLabels[String(run.manifest.execution_source)] ??
+          run.manifest.execution_source,
+      ) +
+      "</dd>" +
+      (run.manifest.resource_management
+        ? "<dt>上下文管理</dt><dd>" +
+          (run.manifest.resource_management === "external"
+            ? "由工具服务管理，插件未确认资源释放。"
+            : Object.values(
+                  run.instances.flatMap((i) => Object.values(i.resources)),
+                ).every((r) => r.state === "absent")
+              ? "本轮资源已确认释放。"
+              : "本轮资源释放未获确认。") +
+          "</dd>"
+        : "")
+    : "";
   const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escape(run.name)} · 测试报告</title><style>${reportStyle}</style></head><body><nav class="rail" aria-label="报告导航"><div class="brand">DSH / TEST REPORT</div>${[
     ["overview", "home", "概览"],
     ["cases", "list-details", "测试用例"],
@@ -245,6 +270,6 @@ export function writeReport(
     )
     .join(
       "",
-    )}</div><h2>测试套件与用例</h2><div class="table-wrap"><table><thead><tr><th>用例名称</th><th>数据集</th><th>状态</th><th>断言通过 / 已执行</th><th>步骤耗时</th></tr></thead><tbody>${run.instances.map((i, index) => `<tr><td><button class="case-link" data-open-case="case-${index}">${escape(i.name)}</button></td><td>${escape(i.data_id)}</td><td>${badge(i.status)}</td><td>${i.steps.filter((s) => s.assertion?.status === "PASS").length} / ${i.steps.filter((s) => s.assertion).length}</td><td>${duration(i.steps.reduce((n, s) => n + s.duration_ms, 0))}</td></tr>`).join("")}</tbody></table></div><p class="note">通过率以全部用例实例为分母。取消、阻塞和未确定不会计为通过。断言统计仅计入真实比较记录；未执行的断言可在用例详情中查看。</p>${technicalDownloads}</section><section class="run-info" data-view="info" hidden><h2>运行信息</h2>${leaseSummary}<dl><dt>运行 ID</dt><dd>${escape(run.suite_run_id)}</dd><dt>开始时间</dt><dd>${escape(time(run.created_at))}</dd><dt>结束时间</dt><dd>${escape(time(run.finished_at))}</dd><dt>执行模式</dt><dd>${escape(run.manifest.execution ?? run.manifest.tools_mode ?? "未记录")}</dd><dt>发起会话</dt><dd>${escape(run.manifest.origin_session_id ?? "未记录")}</dd><dt>插件版本</dt><dd>${escape(run.manifest.plugin_version ?? "未记录")}</dd></dl><details class="inspect"><summary>完整运行配置与预算</summary><pre>${json(run.manifest)}</pre></details><p>本报告依据冻结计划、绑定的实际观察和确定性比较结果生成。采集定位的运行时调整保存在对应步骤中，原始预期保持不变。</p>${technicalDownloads}</section></main>${run.evidence.some((e) => e.media_type.startsWith("image/")) ? '<dialog id="image-dialog" aria-label="页面截图预览"><button id="close-image" class="text-button">关闭预览</button><img id="full-image" alt="实际页面截图完整预览"></dialog>' : ""}<script type="application/json" id="report-data">${data.script()}</script><script>(${reportInteractions.toString()})();</script></body></html>`;
+    )}</div><h2>测试套件与用例</h2><div class="table-wrap"><table><thead><tr><th>用例名称</th><th>数据集</th><th>状态</th><th>断言通过 / 已执行</th><th>步骤耗时</th></tr></thead><tbody>${run.instances.map((i, index) => `<tr><td><button class="case-link" data-open-case="case-${index}">${escape(i.name)}</button></td><td>${escape(i.data_id)}</td><td>${badge(i.status)}</td><td>${i.steps.filter((s) => s.assertion?.status === "PASS").length} / ${i.steps.filter((s) => s.assertion).length}</td><td>${duration(i.steps.reduce((n, s) => n + s.duration_ms, 0))}</td></tr>`).join("")}</tbody></table></div><p class="note">通过率以全部用例实例为分母。取消、阻塞和未确定不会计为通过。断言统计仅计入真实比较记录；未执行的断言可在用例详情中查看。</p>${technicalDownloads}</section><section class="run-info" data-view="info" hidden><h2>运行信息</h2>${leaseSummary}<dl><dt>运行 ID</dt><dd>${escape(run.suite_run_id)}</dd><dt>开始时间</dt><dd>${escape(time(run.created_at))}</dd><dt>结束时间</dt><dd>${escape(time(run.finished_at))}</dd>${toolInfo}<dt>执行模式</dt><dd>${escape(run.manifest.execution ?? run.manifest.tools_mode ?? "未记录")}</dd><dt>发起会话</dt><dd>${escape(run.manifest.origin_session_id ?? "未记录")}</dd><dt>插件版本</dt><dd>${escape(run.manifest.plugin_version ?? "未记录")}</dd></dl><details class="inspect"><summary>完整运行配置与预算</summary><pre>${json(run.manifest)}</pre></details><p>本报告依据冻结计划、绑定的实际观察和确定性比较结果生成。采集定位的运行时调整保存在对应步骤中，原始预期保持不变。</p>${technicalDownloads}</section></main>${run.evidence.some((e) => e.media_type.startsWith("image/")) ? '<dialog id="image-dialog" aria-label="页面截图预览"><button id="close-image" class="text-button">关闭预览</button><img id="full-image" alt="实际页面截图完整预览"></dialog>' : ""}<script type="application/json" id="report-data">${data.script()}</script><script>(${reportInteractions.toString()})();</script></body></html>`;
   atomicWrite(safePath(directory, filename), html);
 }

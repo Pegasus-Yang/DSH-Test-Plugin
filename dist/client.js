@@ -94,7 +94,7 @@ function RecoveryPanel({
       return;
     setPending(true);
     setMessage(
-      quarantine.browser_backend === "runbridge" ? "\u6B63\u5728\u7528\u539F\u8282\u70B9\u4EE4\u724C\u5F52\u8FD8 Node \u5E76\u7B49\u5F85\u6E05\u7406\u786E\u8BA4\uFF0C\u671F\u95F4\u4FDD\u7559\u9694\u79BB\u3002" : "\u6B63\u5728\u5173\u95ED\u6D4B\u8BD5\u4E13\u7528\u6D4F\u89C8\u5668\u5E76\u505C\u6B62\u9884\u89C8\uFF0C\u8BF7\u7559\u610F\u5BBF\u4E3B\u7684\u5DE5\u5177\u5BA1\u6279\u3002"
+      quarantine.browser_backend === "runbridge" ? "\u6B63\u5728\u7528\u539F\u8282\u70B9\u4EE4\u724C\u5F52\u8FD8 Node \u5E76\u7B49\u5F85\u6E05\u7406\u786E\u8BA4\uFF0C\u671F\u95F4\u4FDD\u7559\u9694\u79BB\u3002" : quarantine.browser_backend === "tool" ? "\u6B63\u5728\u6309\u539F\u8FDE\u63A5\u548C\u8D44\u6E90\u8EAB\u4EFD\u5904\u7406\u91CA\u653E\uFF0C\u671F\u95F4\u4FDD\u7559\u9694\u79BB\u3002" : "\u6B63\u5728\u5173\u95ED\u6D4B\u8BD5\u4E13\u7528\u6D4F\u89C8\u5668\u5E76\u505C\u6B62\u9884\u89C8\uFF0C\u8BF7\u7559\u610F\u5BBF\u4E3B\u7684\u5DE5\u5177\u5BA1\u6279\u3002"
     );
     setError(false);
     try {
@@ -157,9 +157,9 @@ function RecoveryPanel({
               role: "group",
               "aria-label": "\u91CA\u653E\u9694\u79BB\u786E\u8BA4",
               children: [
-                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: quarantine.browser_backend === "runbridge" ? "\u662F\u5426\u5F52\u8FD8\u539F Node \u4F7F\u7528\u6743\u5E76\u91CA\u653E\u9694\u79BB\uFF1F" : "\u662F\u5426\u5173\u95ED\u6D4B\u8BD5\u4E13\u7528\u6D4F\u89C8\u5668\u5E76\u91CA\u653E\u9694\u79BB\uFF1F" }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: quarantine.browser_backend === "runbridge" ? "\u662F\u5426\u5F52\u8FD8\u539F Node \u4F7F\u7528\u6743\u5E76\u91CA\u653E\u9694\u79BB\uFF1F" : quarantine.browser_backend === "tool" ? "\u662F\u5426\u91CA\u653E\u539F\u5DE5\u5177\u8D44\u6E90\u5E76\u89E3\u9664\u9694\u79BB\uFF1F" : "\u662F\u5426\u5173\u95ED\u6D4B\u8BD5\u4E13\u7528\u6D4F\u89C8\u5668\u5E76\u91CA\u653E\u9694\u79BB\uFF1F" }),
                 /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", { children: [
-                  quarantine.browser_backend === "runbridge" ? "\u8FD9\u4F1A\u4F7F\u7528\u539F\u8282\u70B9\u4EE4\u724C\u56DE\u6536\u8BE5\u79DF\u7EA6\u4E0B\u7684\u8FDC\u7A0B\u4F1A\u8BDD\u4E0E\u9884\u89C8\uFF0C\u5E76\u7B49\u5F85\u786E\u8BA4 Node \u5F52\u8FD8\uFF1B\u5171\u4EAB\u540C\u4E00\u4EE4\u724C\u7684\u5176\u4ED6\u5BA2\u6237\u7AEF\u4E5F\u4F1A\u5931\u53BB\u8FD9\u4EFD\u4F7F\u7528\u6743\u3002" : "\u8FD9\u4F1A\u5173\u95ED\u6D4B\u8BD5\u4E13\u7528\u7684\u672C\u673A\u6D4F\u89C8\u5668\u548C\u9884\u89C8\u3002",
+                  quarantine.browser_backend === "runbridge" ? "\u8FD9\u4F1A\u4F7F\u7528\u539F\u8282\u70B9\u4EE4\u724C\u56DE\u6536\u8BE5\u79DF\u7EA6\u4E0B\u7684\u8FDC\u7A0B\u4F1A\u8BDD\u4E0E\u9884\u89C8\uFF0C\u5E76\u7B49\u5F85\u786E\u8BA4 Node \u5F52\u8FD8\uFF1B\u5171\u4EAB\u540C\u4E00\u4EE4\u724C\u7684\u5176\u4ED6\u5BA2\u6237\u7AEF\u4E5F\u4F1A\u5931\u53BB\u8FD9\u4EFD\u4F7F\u7528\u6743\u3002" : quarantine.browser_backend === "tool" ? "\u8FD9\u4F1A\u6309\u5DF2\u4FDD\u5B58\u7684\u539F\u8FDE\u63A5\u548C\u8D44\u6E90\u8EAB\u4EFD\u8C03\u7528\u5173\u95ED\u5DE5\u5177\uFF0C\u5E76\u6838\u5BF9\u91CA\u653E\u7ED3\u679C\u3002" : "\u8FD9\u4F1A\u5173\u95ED\u6D4B\u8BD5\u4E13\u7528\u7684\u672C\u673A\u6D4F\u89C8\u5668\u548C\u9884\u89C8\u3002",
                   "\u65E7\u6D4B\u8BD5\u7684\u9519\u8BEF\u4E0E\u62A5\u544A\u4F1A\u4FDD\u7559\uFF1B\u6210\u529F\u540E\u9700\u8981\u91CD\u65B0\u53D1\u9001\u7528\u4F8B\u3002"
                 ] }),
                 /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { children: [
@@ -172,7 +172,7 @@ function RecoveryPanel({
                       onChange: (event) => setChecked(event.target.checked)
                     }
                   ),
-                  quarantine.browser_backend === "runbridge" ? "\u6211\u5DF2\u786E\u8BA4\u65E7\u6D4B\u8BD5\u53CA\u5171\u4EAB\u8FD9\u4EFD\u79DF\u7EA6\u7684\u5176\u4ED6\u64CD\u4F5C\u5DF2\u505C\u6B62\uFF0C\u5141\u8BB8\u5F52\u8FD8\u539F Node \u4F7F\u7528\u6743\u3002" : "\u6211\u5DF2\u786E\u8BA4\u65E7\u6D4B\u8BD5\u53CA\u5176\u4ED6\u5916\u90E8\u64CD\u4F5C\u5DF2\u505C\u6B62\uFF0C\u5141\u8BB8\u5173\u95ED\u6D4B\u8BD5\u4E13\u7528\u6D4F\u89C8\u5668\u3002"
+                  quarantine.browser_backend === "runbridge" ? "\u6211\u5DF2\u786E\u8BA4\u65E7\u6D4B\u8BD5\u53CA\u5171\u4EAB\u8FD9\u4EFD\u79DF\u7EA6\u7684\u5176\u4ED6\u64CD\u4F5C\u5DF2\u505C\u6B62\uFF0C\u5141\u8BB8\u5F52\u8FD8\u539F Node \u4F7F\u7528\u6743\u3002" : quarantine.browser_backend === "tool" ? "\u6211\u5DF2\u786E\u8BA4\u65E7\u6D4B\u8BD5\u53CA\u5916\u90E8\u64CD\u4F5C\u5DF2\u505C\u6B62\uFF0C\u5141\u8BB8\u91CA\u653E\u539F\u5DE5\u5177\u8D44\u6E90\u3002" : "\u6211\u5DF2\u786E\u8BA4\u65E7\u6D4B\u8BD5\u53CA\u5176\u4ED6\u5916\u90E8\u64CD\u4F5C\u5DF2\u505C\u6B62\uFF0C\u5141\u8BB8\u5173\u95ED\u6D4B\u8BD5\u4E13\u7528\u6D4F\u89C8\u5668\u3002"
                 ] }),
                 /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "dsh-test-actions", children: [
                   /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
@@ -379,7 +379,7 @@ var import_react5 = require("react");
 
 // src/browser-preferences.ts
 var browserPreferenceDefaults = {
-  backend: "playwright",
+  backend: "auto",
   accessFile: "",
   connectionSource: "access-file",
   hubFile: "",
@@ -860,7 +860,7 @@ function LocalPreviewSettings({
         errors.port && /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { id: "dsh-test-port-error", role: "alert", children: errors.port })
       ] })
     ] }) : /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("p", { className: "dsh-test-setting-hint", children: [
-      "\u753B\u9762\u4E0E\u5F55\u50CF\u5747\u5DF2\u5173\u95ED\uFF0C\u4E0D\u9700\u8981\u914D\u7F6E Browscreen\u3002\u6D4F\u89C8\u5668\u7528\u4F8B\u4ECD\u9700\u5DF2\u6CE8\u518C\u7684\u672C\u673A Playwright MCP\u3002",
+      "\u753B\u9762\u4E0E\u5F55\u50CF\u5747\u5DF2\u5173\u95ED\uFF0C\u4E0D\u9700\u8981\u914D\u7F6E Browscreen\u3002\u7528\u4F8B\u4F7F\u7528\u5F53\u524D\u5DF2\u6CE8\u518C\u7684\u4E1A\u52A1\u5DE5\u5177\uFF0C\u4E0D\u9650\u5B9A\u6D4F\u89C8\u5668\u5F15\u64CE\u3002",
       /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("a", { href: localGuide, target: "_blank", rel: "noreferrer", children: "\u67E5\u770B\u914D\u7F6E\u6307\u5357" })
     ] })
   ] });
@@ -869,6 +869,12 @@ function LocalPreviewSettings({
 // src/client/browser-settings.tsx
 var import_jsx_runtime5 = require("react/jsx-runtime");
 var drafts = /* @__PURE__ */ new WeakMap();
+var sourceLabels = {
+  auto: "\u81EA\u52A8\u4F7F\u7528\u53EF\u7528\u5DE5\u5177",
+  mcp: "\u6307\u5B9A\u4E3B\u8981 MCP",
+  playwright: "\u672C\u673A Playwright",
+  runbridge: "\u8FDC\u7A0B RunBridge"
+};
 var values = (v, info) => ({
   browser: {
     ...browserPreferenceDefaults,
@@ -1032,6 +1038,7 @@ function BrowserSettings({
       resourceId: "dsh-test-runbridge-resource",
       leaseSeconds: "dsh-test-runbridge-lease",
       mcpId: "dsh-test-preview-mcp",
+      executionMcpId: "dsh-test-execution-mcp",
       port: "dsh-test-browscreen-port",
       browscreenExecutable: "dsh-test-browscreen-executable"
     };
@@ -1042,6 +1049,8 @@ function BrowserSettings({
   };
   const save = async () => {
     const invalid = {};
+    if (browser.backend === "mcp" && !info.mcpInstances.some((m) => m.id === browser.mcpId))
+      invalid.executionMcpId = "\u8BF7\u9009\u62E9\u5DF2\u914D\u7F6E\u7684\u4E3B\u8981 MCP \u5B9E\u4F8B\u3002";
     if (browser.backend === "runbridge") {
       if (!activeFile.trim())
         invalid[hubSource ? "hubFile" : "accessFile"] = "\u8BF7\u586B\u5199 DSH \u8FD0\u884C\u673A\u5668\u4E0A\u7684\u79C1\u6709 YAML \u6216 JSON \u6587\u4EF6\u8DEF\u5F84\u3002";
@@ -1053,7 +1062,9 @@ function BrowserSettings({
         invalid.resourceId = "\u8BF7\u586B\u5199\u6709\u6548\u7684\u53D7\u7BA1\u7406\u6D4F\u89C8\u5668\u8D44\u6E90 ID\u3002";
       if (!Number.isInteger(browser.leaseSeconds) || browser.leaseSeconds < 1 || browser.leaseSeconds > 3600)
         invalid.leaseSeconds = "\u4F1A\u8BDD\u79DF\u671F\u987B\u4E3A 1\uFF5E3600 \u79D2\u7684\u6574\u6570\u3002";
-    } else if (draft.preview.enabled || draft.preview.recordingEnabled) {
+    } else if ((draft.preview.enabled || draft.preview.recordingEnabled) && (browser.backend === "playwright" || info.mcpInstances.some(
+      (m) => m.id === draft.preview.mcpId && m.compatible
+    ))) {
       if (!draft.preview.mcpId || !info.mcpInstances.some(
         (m) => m.id === draft.preview.mcpId && m.compatible
       ))
@@ -1085,17 +1096,20 @@ function BrowserSettings({
       const normalized = {
         browser: {
           ...browser,
+          mcpId: browser.mcpId?.trim(),
           accessFile: browser.accessFile.trim(),
           hubFile: browser.hubFile?.trim(),
           nodeId: browser.nodeId?.trim(),
-          nodeLeaseSeconds: (browser.backend === "playwright" || !hubSource) && browser.nodeLeaseSeconds !== void 0 && (!Number.isInteger(browser.nodeLeaseSeconds) || browser.nodeLeaseSeconds < 1) ? base.browser.nodeLeaseSeconds : browser.nodeLeaseSeconds,
+          nodeLeaseSeconds: (browser.backend !== "runbridge" || !hubSource) && browser.nodeLeaseSeconds !== void 0 && (!Number.isInteger(browser.nodeLeaseSeconds) || browser.nodeLeaseSeconds < 1) ? base.browser.nodeLeaseSeconds : browser.nodeLeaseSeconds,
           resourceId: browser.resourceId.trim(),
-          leaseSeconds: browser.backend === "playwright" && (!Number.isInteger(browser.leaseSeconds) || browser.leaseSeconds < 1 || browser.leaseSeconds > 3600) ? base.browser.leaseSeconds : browser.leaseSeconds
+          leaseSeconds: browser.backend !== "runbridge" && (!Number.isInteger(browser.leaseSeconds) || browser.leaseSeconds < 1 || browser.leaseSeconds > 3600) ? base.browser.leaseSeconds : browser.leaseSeconds
         },
         preview: {
           ...draft.preview,
           browscreenExecutable: draft.preview.browscreenExecutable.trim() || "browscreen",
-          port: (browser.backend === "runbridge" || !draft.preview.enabled && !draft.preview.recordingEnabled) && (!Number.isInteger(draft.preview.port) || draft.preview.port < 1 || draft.preview.port > 65535) ? base.preview.port : draft.preview.port
+          port: (browser.backend === "runbridge" || !info.mcpInstances.some(
+            (m) => m.id === draft.preview.mcpId && m.compatible
+          ) || !draft.preview.enabled && !draft.preview.recordingEnabled) && (!Number.isInteger(draft.preview.port) || draft.preview.port < 1 || draft.preview.port > 65535) ? base.preview.port : draft.preview.port
         }
       };
       if (await form.mutate(
@@ -1103,7 +1117,7 @@ function BrowserSettings({
           {
             op: "set",
             path: ["browserConnection"],
-            value: { ...normalized.browser }
+            value: JSON.parse(JSON.stringify(normalized.browser))
           },
           {
             op: "set",
@@ -1147,11 +1161,11 @@ function BrowserSettings({
           dirty ? "\u6709\u672A\u4FDD\u5B58\u4FEE\u6539\uFF1B\u5173\u95ED\u8BBE\u7F6E\u540E\u8349\u7A3F\u4ECD\u4FDD\u7559\uFF0C\u8BF7\u4FDD\u5B58\u6216\u653E\u5F03\u3002" : "\u5F53\u524D\u914D\u7F6E\u5DF2\u4FDD\u5B58",
           " ",
           "\xB7 \u5DF2\u4FDD\u5B58\u7684\u6D4F\u89C8\u5668\u4F4D\u7F6E\uFF1A",
-          base.browser.backend === "runbridge" ? "\u8FDC\u7A0B RunBridge" : "\u672C\u673A Playwright"
+          sourceLabels[base.browser.backend]
         ] }),
         info.activeBrowser && /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("p", { className: "dsh-test-setting-hint", children: [
           "\u6253\u5F00\u8BBE\u7F6E\u65F6\uFF0C\u8FD0\u884C\u4E2D\u7684\u6D4B\u8BD5\u7ED1\u5B9A\uFF1A",
-          info.activeBrowser === "runbridge" ? "\u8FDC\u7A0B RunBridge" : "\u672C\u673A Playwright",
+          sourceLabels[info.activeBrowser],
           "\u3002\u4FDD\u5B58\u4E0D\u4F1A\u5207\u6362\u8BE5\u6D4B\u8BD5\u3002"
         ] }),
         !writable && /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("p", { role: "alert", children: [
@@ -1196,11 +1210,34 @@ function BrowserSettings({
                 }
               }),
               children: [
-                /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("option", { value: "playwright", children: "\u672C\u673A Playwright MCP" }),
+                /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("option", { value: "auto", children: "\u81EA\u52A8\u4F7F\u7528\u5F53\u524D\u53EF\u7528\u5DE5\u5177" }),
+                /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("option", { value: "mcp", children: "\u6307\u5B9A\u4E3B\u8981 MCP \u5B9E\u4F8B" }),
+                /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("option", { value: "playwright", children: "\u672C\u673A Playwright MCP\uFF08\u7BA1\u7406\u6D4B\u8BD5\u4E0A\u4E0B\u6587\uFF09" }),
                 /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("option", { value: "runbridge", children: "\u8FDC\u7A0B RunBridge MCP" })
               ]
             }
           ),
+          browser.backend === "auto" && /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { className: "dsh-test-setting-hint", children: "\u4F7F\u7528\u5F53\u524D\u5BF9\u8BDD\u5DF2\u542F\u7528\u7684\u4E1A\u52A1\u5DE5\u5177\uFF0C\u652F\u6301\u81EA\u5B9A\u4E49 Selenium \u7B49 MCP\uFF1B\u4E0A\u4E0B\u6587\u9ED8\u8BA4\u7531\u670D\u52A1\u7BA1\u7406\uFF0C\u539F\u751F\u6743\u9650\u4E0E\u5BA1\u6279\u7EE7\u7EED\u751F\u6548\u3002" }),
+          browser.backend === "mcp" && /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)(import_jsx_runtime5.Fragment, { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("label", { htmlFor: "dsh-test-execution-mcp", children: "\u4E3B\u8981 MCP \u5B9E\u4F8B" }),
+            /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)(
+              "select",
+              {
+                id: "dsh-test-execution-mcp",
+                value: browser.mcpId ?? "",
+                "aria-invalid": !!errors.executionMcpId,
+                onChange: (e) => edit({
+                  browser: { ...browser, mcpId: e.target.value },
+                  preview: { ...draft.preview, mcpId: e.target.value }
+                }),
+                children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("option", { value: "", children: "\u8BF7\u9009\u62E9 MCP \u5B9E\u4F8B" }),
+                  info.mcpInstances.map((m) => /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("option", { value: m.id, children: m.label }, m.id))
+                ]
+              }
+            ),
+            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { className: "dsh-test-setting-hint", children: "\u4F18\u5148\u4F7F\u7528\u8BE5\u5B9E\u4F8B\u7684\u539F\u6709\u5DE5\u5177\uFF1B\u5A92\u4F53\u80FD\u529B\u72EC\u7ACB\u68C0\u6D4B\uFF0C\u5176\u4ED6\u5DF2\u6388\u6743\u4E1A\u52A1\u5DE5\u5177\u4ECD\u53EF\u534F\u4F5C\u3002" })
+          ] }),
           browser.backend === "runbridge" && /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
             RunBridgeConnection,
             {
@@ -1233,7 +1270,9 @@ function BrowserSettings({
               "\u663E\u793A\u5B9E\u65F6\u753B\u9762"
             ] }),
             /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { className: "dsh-test-setting-hint", children: "RunBridge \u63D0\u4F9B\u540C\u4E00\u8FDC\u7A0B\u9875\u9762\u7684\u753B\u9762\uFF0C\u65E0\u9700\u672C\u673A Browscreen\uFF1B\u8FDC\u7A0B\u5F55\u50CF\u6682\u4E0D\u652F\u6301\u3002" })
-          ] }) : /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+          ] }) : browser.backend === "mcp" && !info.mcpInstances.some(
+            (m) => m.id === browser.mcpId && m.compatible
+          ) ? /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { className: "dsh-test-setting-hint", children: "\u5F53\u524D\u4E3B\u8981 MCP \u672A\u63D0\u4F9B\u81EA\u52A8\u753B\u9762\u6216\u5F55\u50CF\u63A5\u5165\uFF0C\u6D4B\u8BD5\u4E0E\u62A5\u544A\u4ECD\u53EF\u4F7F\u7528\u3002\u5DF2\u6709\u5A92\u4F53\u504F\u597D\u4F1A\u4FDD\u7559\u3002" }) : /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
             LocalPreviewSettings,
             {
               value: draft.preview,
@@ -1307,7 +1346,7 @@ function PreviewSettingsPage({
   }, [refresh]);
   return /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("section", { className: "dsh-test-settings", "data-test-preview-settings": true, children: [
     /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h2", { children: "\u6D4F\u89C8\u5668\u8BBE\u7F6E" }),
-    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { className: "dsh-test-setting-hint", children: "\u9009\u62E9\u6D4B\u8BD5\u6D4F\u89C8\u5668\u7684\u4F4D\u7F6E\uFF0C\u518D\u914D\u7F6E\u8FDE\u63A5\u548C\u753B\u9762\u3002\u63A5\u53E3\u6D4B\u8BD5\u65E0\u9700\u6D4F\u89C8\u5668\u3002" }),
+    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { className: "dsh-test-setting-hint", children: "\u9ED8\u8BA4\u4F7F\u7528\u5F53\u524D\u5BF9\u8BDD\u53EF\u7528\u7684\u5DE5\u5177\uFF0C\u4E5F\u53EF\u6307\u5B9A\u4E3B\u8981 MCP \u6216\u9009\u62E9\u53D7\u7BA1\u7406\u6D4F\u89C8\u5668\u3002\u753B\u9762\u4E0E\u5F55\u50CF\u6309\u8FDE\u63A5\u80FD\u529B\u63D0\u4F9B\u3002" }),
     error && /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { role: "alert", children: error }),
     info ? /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(
       BrowserSettings,

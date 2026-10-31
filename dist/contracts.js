@@ -1,5 +1,7 @@
 /** 测试计划、运行事实及结果的共同类型与输入校验。 */
 import { Ajv } from "ajv";
+import { toolExtractSchema } from "./tool-results.js";
+import { businessTool, toolArguments } from "./tool-runtime.js";
 export const ajv = new Ajv({ allErrors: true, strict: false });
 const id = { type: "string", pattern: "^[A-Za-z0-9_-]+$", minLength: 1 };
 const stepSchema = {
@@ -28,7 +30,7 @@ const stepSchema = {
             additionalProperties: false,
             properties: {
                 goal: { type: "string", minLength: 1 },
-                capability: { enum: ["browser", "api"] },
+                capability: { enum: ["browser", "api", "tool"] },
                 allowed_targets: {
                     type: "array",
                     minItems: 1,
@@ -49,7 +51,13 @@ const stepSchema = {
                         required: ["kind"],
                         additionalProperties: false,
                         properties: {
-                            kind: { enum: ["dom", "http", "browser_close", "browser_open"] },
+                            kind: {
+                                enum: ["dom", "http", "browser_close", "browser_open", "tool"],
+                            },
+                            tool_name: { type: "string", minLength: 1 },
+                            arguments: { type: "object" },
+                            arguments_json: { type: "string" },
+                            extract: toolExtractSchema,
                             selector: { type: "string" },
                             mode: {
                                 enum: [
@@ -127,8 +135,8 @@ export const planSchema = {
         },
         schema_version: {
             type: "string",
-            enum: ["1"],
-            description: '固定字符串1，JSON写作"1"，不是数字1',
+            enum: ["1", "2"],
+            description: '旧计划为"1"，通用工具计划为"2"，不是数字',
         },
         suite_id: id,
         name: { type: "string", minLength: 1 },
@@ -185,6 +193,16 @@ export function validateCaptures(action, captures) {
             throw new Error("采集输出未声明: " + name);
         if (cap.kind === "dom" && action.capability !== "browser")
             throw new Error("DOM采集需要浏览器步骤");
+        if (cap.kind === "tool") {
+            if (!cap.tool_name || !businessTool(cap.tool_name) || !cap.extract)
+                throw new Error("通用采集必须提供业务工具与结果提取定义");
+            toolArguments(cap);
+        }
+        else if (cap.tool_name ||
+            cap.arguments ||
+            cap.arguments_json ||
+            cap.extract)
+            throw new Error("通用工具字段仅用于tool采集");
         if (cap.kind === "browser_open" &&
             (action.capability !== "browser" || action.capture_mode === "runtime"))
             throw new Error("浏览器启动只能由冻结的浏览器初始化步骤控制");
@@ -260,6 +278,10 @@ export function parsePlan(input, allowIntents = false) {
                 throw new Error("步骤类型与内容不匹配");
             if (s.action) {
                 const a = s.action;
+                if (plan.schema_version === "1" &&
+                    (a.capability === "tool" ||
+                        Object.values(a.capture ?? {}).some((c) => c.kind === "tool")))
+                    throw new Error('通用工具计划请使用schema_version="2"');
                 for (const [name, schema] of Object.entries(a.outputs)) {
                     if (!/^[A-Za-z0-9_-]+$/.test(name))
                         throw new Error("非法输出名");
@@ -277,7 +299,9 @@ export function parsePlan(input, allowIntents = false) {
                         typeof value === "object" &&
                         !Array.isArray(value) &&
                         typeof value.resource_ref === "string" &&
-                        value.resource_ref !== "browser_context")
+                        value.resource_ref !== "browser_context" &&
+                        !(plan.schema_version === "2" &&
+                            value.resource_ref === "tool_context"))
                         throw new Error("输入资源未绑定: " + value.resource_ref);
                     if (value &&
                         typeof value === "object" &&
@@ -340,7 +364,9 @@ export function parsePlan(input, allowIntents = false) {
                 if (a.operator === "range" && (!a.unit || a.tolerance === undefined))
                     throw new Error("数值范围必须声明单位和容差");
             }
-            if (s.resource_ref && s.resource_ref !== "browser_context")
+            if (s.resource_ref &&
+                s.resource_ref !== "browser_context" &&
+                !(plan.schema_version === "2" && s.resource_ref === "tool_context"))
                 throw new Error("首版只支持由adapter登记的browser_context资源");
             if (c.cleanup.includes(s) &&
                 (!s.run_if || (s.run_if === "resource_exists" && !s.resource_ref)))

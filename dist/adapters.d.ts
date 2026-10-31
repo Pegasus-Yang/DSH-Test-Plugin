@@ -5,11 +5,14 @@ import { RunBridge } from "./runbridge.js";
 interface CaptureHost {
     id: string;
     browser?: RunBridge;
+    assertTool?(name: string): void;
     call(name: string, args: unknown, parent: ToolRunContext, explanation?: Pick<ActualOperation, "description" | "description_source">): Promise<{
         callId: string;
         result: ToolExecutionResult;
     }>;
 }
+/** 图片取自实际返回，按内容去重；没有媒体能力时不另行调用默认截图工具。 */
+export declare function archiveToolImages(recorder: Recorder, suite: SuiteRun, result: ToolExecutionResult): string[];
 export declare function mcpResult(value: unknown): unknown;
 /** 固定的只读DOM采集函数；选择器来自通过Schema校验的计划或本次运行绑定。 */
 export declare function domFunction(captures: Record<string, unknown>, origins: string[]): string;

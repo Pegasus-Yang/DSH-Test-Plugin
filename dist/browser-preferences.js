@@ -1,5 +1,5 @@
 export const browserPreferenceDefaults = {
-    backend: "playwright",
+    backend: "auto",
     accessFile: "",
     connectionSource: "access-file",
     hubFile: "",

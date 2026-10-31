@@ -4,7 +4,7 @@
 
 简体中文 · [English](README.en.md) · [快速开始](#快速开始) · [完整文档](doc/README.md) · [更新日志](changelog.md) · [问题反馈](https://github.com/Pegasus-Yang/DSH-Test-Plugin/issues)
 
-DSH Test Plugin 是 DeepSeek Harness（DSH）的原生测试插件。描述想验证的业务流程，插件会拆解计划，结合真实页面或接口响应执行检查，并在同一对话中展示进度、证据和结果。它复用当前对话的模型、工具、审批和会话记录，支持网页 UI 测试与 GET JSON 接口测试。
+DSH Test Plugin 是 DeepSeek Harness（DSH）的原生测试插件。描述想验证的业务流程，插件会拆解计划，结合真实页面或接口响应执行检查，并在同一对话中展示进度、证据和结果。它复用当前对话的模型、工具、审批和会话记录，支持通过已注册业务工具执行测试，并保留网页 UI 与 GET JSON 接口采集能力。
 
 从一次探索到重复执行：可以直接输入测试任务，也可以维护 TXT、Markdown 用例和 CSV 参数数据；执行后获得可复查的 HTML 报告，以及供其他执行人复用的 Markdown 手工用例。
 
@@ -13,7 +13,7 @@ DSH Test Plugin 是 DeepSeek Harness（DSH）的原生测试插件。描述想�
 | 能力 | 可以做什么 |
 | --- | --- |
 | 自然语言规划与审核 | 将任务拆成业务步骤和检查点；直接执行，或先审核、修改计划再运行 |
-| 网页与接口测试 | 通过 Playwright MCP 操作网页，执行时结合页面情况确定具体操作；采集 GET JSON 响应，检查状态码与响应字段 |
+| 通用工具与网页接口测试 | 使用当前对话已注册的 MCP 或业务工具，支持原生 Selenium 等自定义服务；提取真实返回值并计算断言，保留 Playwright、RunBridge 与 GET JSON 采集 |
 | 文件用例与参数化 | 使用 TXT、Markdown 保存用例，用 CSV 展开多组数据，逐项审核后串行执行 |
 | 执行进度与耗时 | 在输入框上方查看当前步骤、已结算数量和耗时；按需展开完整步骤，适应长文字与多实例 |
 | 实时画面与录像 | 在同一页面观看无头浏览器画面；可独立开启录像，在报告中回看、拖动和下载 MP4 |
@@ -43,7 +43,7 @@ DSH Test Plugin 是 DeepSeek Harness（DSH）的原生测试插件。描述想�
 ### 1. 准备 DSH 与测试工具
 
 - Node.js **22.19+**，已安装并配置可用模型的 DeepSeek Harness **0.2.1-alpha.1～alpha.5、rc.1～rc.5**。
-- 在 DSH 中使用 **native 工具模式**；网页测试选择本机专用 Playwright MCP 或远程 RunBridge 浏览器。
+- 在 DSH 中使用 **native 工具模式**；默认使用当前可用工具；自定义 Selenium 等 MCP 在 DSH 中正常注册后即可使用。需要管理测试上下文时可选择 Playwright 或 RunBridge。
 - 仅做接口测试时无需安装浏览器；源码开发需要 pnpm **11.7.0**。
 
 宿主安装按 DSH 自身文档完成，插件和浏览器工具的具体配置见[安装与运维](doc/deployment/安装与运维.md#配置)。
@@ -55,26 +55,26 @@ DSH Test Plugin 是 DeepSeek Harness（DSH）的原生测试插件。描述想�
 本地审核时，使用维护者提供的同一个 tgz：
 
 ```sh
-dsh plugin --profile web add /绝对路径/dsh-test-plugin-0.17.0.tgz
+dsh plugin --profile web add /绝对路径/dsh-test-plugin-0.18.0.tgz
 dsh web
 ```
 
 维护者完成验收并推送标签后，可在 DSH 插件管理页填写下面的仓库地址，安装后启用：
 
 ```text
-https://github.com/Pegasus-Yang/DSH-Test-Plugin.git#v0.17.0
+https://github.com/Pegasus-Yang/DSH-Test-Plugin.git#v0.18.0
 ```
 
 也可以使用独立 DSH CLI 安装：
 
 ```sh
-dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.17.0
+dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.18.0
 dsh web
 ```
 
 命令行安装前先正常停止正在运行的 DSH，安装与后续启动使用同一 profile 和 `DSH_HOME`，启动后刷新页面。从 DSH 源码目录运行时，将 `dsh` 替换为 `pnpm dsh`。仓库发行版本包含构建产物，可以直接安装。
 
-这 10 个宿主使用同一个插件包，无需版本豁免。当前开发 SDK 固定 alpha.3；后续插件升级继续保留已支持宿主。[状态与已验证范围](doc/project/0.17.0版本发布验收.md)详见记录，支持集合以 [dsh-compatibility.json](dsh-compatibility.json) 为准。
+这 10 个宿主使用同一个插件包，无需版本豁免。当前开发 SDK 固定 alpha.3；后续插件升级继续保留已支持宿主。[状态与已验证范围](doc/project/0.18.0版本发布验收.md)详见记录，支持集合以 [dsh-compatibility.json](dsh-compatibility.json) 为准。
 
 升级、卸载和本地安装包的操作见[安装与运维](doc/deployment/安装与运维.md)。
 
@@ -114,6 +114,8 @@ dsh web
 想体验更完整的流程，可以使用[GitLab 样例](examples/gitlab/README.md)：两条 UI 用例覆盖组合筛选和草稿预览取消，三条接口用例覆盖搜索、分页和错误响应，另有 CSV 参数化模板。按[测试指南](doc/user-guide/GitLab测试要求与本地调试.md)准备专用账号和本轮数据，账号保存在不提交的本机配置中。
 
 ## 支持范围
+
+- 通用工具保持原有名称、参数与返回格式；截图、预览、录像和自动回收按实际能力提供。基本执行不要求这些可选能力；用例明确要求的检查或清理缺失时不能算作通过。见[通用工具运行](doc/user-guide/通用工具运行.md)。
 
 - 运行于 DSH native 工具模式，共享测试环境按串行方式执行；多对话独立浏览器并行运行属于[后续优化](doc/design/多对话并行测试优化方案.md)。
 - 接口测试支持 **GET JSON** 采集；自动预览使用本机 Chromium Playwright MCP，当前支持单活动页面。

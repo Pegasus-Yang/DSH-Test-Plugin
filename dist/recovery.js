@@ -7,6 +7,9 @@ import { RunBridge, runbridgeResult, remoteReleaseConfirmed, } from "./runbridge
 import { browserPreferenceDefaults } from "./browser-preferences.js";
 import { readRunBridgeAccess } from "./runbridge-access.js";
 import { NodeLease } from "./runbridge-lease.js";
+import { TestToolCatalog, toolArguments, toolConnections, } from "./tool-runtime.js";
+import { extractToolResult } from "./tool-results.js";
+import { validateToolResource } from "./tool-resource.js";
 export class RecoveryManager {
     outputRoot;
     timeoutMs;
@@ -50,6 +53,7 @@ export class RecoveryManager {
         let browser = false;
         let missingLeaseCredentials = false;
         let backend;
+        let toolUnavailable;
         if (validId) {
             try {
                 const run = JSON.parse(readFileSync(join(this.outputRoot, id, "results.json"), "utf8"));
@@ -67,6 +71,22 @@ export class RecoveryManager {
                         run.instances.some((instance) => instance.resources.browser_context?.remote)
                         ? "runbridge"
                         : "playwright";
+                const tool = run.instances
+                    .flatMap((instance) => Object.values(instance.resources))
+                    .find((resource) => resource.tool && ["exists", "unknown"].includes(resource.state));
+                if (tool?.tool) {
+                    backend = "tool";
+                    browser = true;
+                    const config = tool.tool.config;
+                    toolUnavailable =
+                        config.scope !== "resource" ||
+                            tool.tool.identity === undefined ||
+                            !tool.tool.connection
+                            ? "原工具资源缺少可跨连接核对的身份或连接摘要，请在设置页提交实际处置证据。"
+                            : tool.tool.close_call_id && tool.state === "unknown"
+                                ? "原工具关闭结果未知，不能自动重放，请查询原结果或提交处置证据。"
+                                : undefined;
+                }
             }
             catch {
                 /* 缺少资源归属时保留手工处置入口。 */
@@ -82,7 +102,7 @@ export class RecoveryManager {
                         ? "原 Node 领取没有取得可恢复的节点令牌，请由 Hub 维护者核查后提交处置证据。"
                         : !browser
                             ? "未能确认浏览器资源归属，请核实外部环境后在设置页提交处置证据。"
-                            : undefined;
+                            : toolUnavailable;
         return {
             quarantine: {
                 token: this.token(current.raw),
@@ -162,14 +182,39 @@ export class RecoveryManager {
         const saved = JSON.parse(readFileSync(join(this.outputRoot, state.run_id, "results.json"), "utf8"));
         if (saved.node_lease)
             return this.recoverNodeLease(saved, token, signal);
+        const toolResource = saved.instances
+            .flatMap((instance) => Object.values(instance.resources))
+            .find((resource) => resource.tool && ["exists", "unknown"].includes(resource.state));
+        let toolArguments_ = {};
+        if (toolResource?.tool) {
+            const { config, connection, close_digest, identity } = toolResource.tool;
+            validateToolResource(config);
+            if (config.scope !== "resource" || identity === undefined || !connection)
+                throw new Error("无法核对原工具资源身份，不能自动关闭新会话");
+            const catalog = new TestToolCatalog(agent.ctx.tools, [], toolConnections(agent.ctx), undefined, agent);
+            const close = catalog
+                .snapshot()
+                .find((entry) => entry.name === config.close.tool_name);
+            if (!close ||
+                close.digest !== close_digest ||
+                close.connection?.digest !== connection.digest ||
+                close.connection.id !== connection.id)
+                throw new Error("资源工具或连接配置已改变，请恢复原连接或提交实际处置证据");
+            toolArguments_ = {
+                ...toolArguments(config.close),
+                [config.identity_argument]: identity,
+            };
+        }
         const resource = saved.instances
             .map((instance) => instance.resources.browser_context)
             .find((item) => item?.remote && ["exists", "unknown"].includes(item.state));
         let remote;
         let unregister;
-        const name = resource
-            ? "mcp__runbridge__browser_stop"
-            : "mcp__playwright__browser_close";
+        const name = toolResource?.tool
+            ? toolResource.tool.config.close.tool_name
+            : resource
+                ? "mcp__runbridge__browser_stop"
+                : "mcp__playwright__browser_close";
         if (resource) {
             if (!resource.remote?.access_file)
                 throw new Error("远程恢复记录缺少原私有访问文件，请提交所有者的处置证据");
@@ -217,7 +262,7 @@ export class RecoveryManager {
             const result = await agent.ctx.tools.execute({
                 callId,
                 name,
-                arguments: {},
+                arguments: toolArguments_,
                 agent,
                 signal: controller.signal,
             });
@@ -228,6 +273,9 @@ export class RecoveryManager {
             const remoteProof = remote ? runbridgeResult(result.value) : undefined;
             if (remote && !remoteReleaseConfirmed(remoteProof, remote.resource))
                 throw new Error("远程会话清理未确认，隔离仍保留");
+            if (toolResource?.tool &&
+                extractToolResult(result, toolResource.tool.config.released) !== true)
+                throw new Error("原工具资源释放未确认，隔离仍保留");
             await remote?.close();
             await this.stopPreview();
             if (controller.signal.aborted)
@@ -236,11 +284,15 @@ export class RecoveryManager {
                 operator: "DSH 页面确认的操作者",
                 external_stopped: true,
                 environment_reset: true,
-                details: remoteProof?.request && !remoteProof.session
-                    ? "用户确认旧测试及外部操作已停止；原许可核对确认本次请求未分配浏览器，并停止本插件预览。旧测试结果保持原样。"
-                    : "用户确认旧测试及外部操作已停止；原生工具关闭测试专用浏览器，并停止本插件预览。旧测试结果保持原样。",
+                details: toolResource
+                    ? "用户确认旧测试及外部操作已停止；通过原连接和资源身份确认工具资源释放，旧测试结果保持原样。"
+                    : remoteProof?.request && !remoteProof.session
+                        ? "用户确认旧测试及外部操作已停止；原许可核对确认本次请求未分配浏览器，并停止本插件预览。旧测试结果保持原样。"
+                        : "用户确认旧测试及外部操作已停止；原生工具关闭测试专用浏览器，并停止本插件预览。旧测试结果保持原样。",
                 evidence: {
-                    method: "confirmed-browser-recovery",
+                    method: toolResource
+                        ? "confirmed-tool-recovery"
+                        : "confirmed-browser-recovery",
                     session_id: agent.id,
                     tool: name,
                     call_id: callId,

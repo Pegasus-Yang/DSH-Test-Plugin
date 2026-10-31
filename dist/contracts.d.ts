@@ -1,6 +1,7 @@
 /** 测试计划、运行事实及结果的共同类型与输入校验。 */
 import { Ajv } from "ajv";
 import type { TextInput } from "./case-input.js";
+import { type ToolExtract } from "./tool-results.js";
 export type Json = null | boolean | number | string | Json[] | {
     [key: string]: Json;
 };
@@ -21,7 +22,11 @@ export interface DataRow {
     expected: Record<string, Json>;
 }
 export interface Capture {
-    kind: "dom" | "http" | "browser_close" | "browser_open";
+    kind: "dom" | "http" | "browser_close" | "browser_open" | "tool";
+    tool_name?: string;
+    arguments?: Record<string, Json>;
+    arguments_json?: string;
+    extract?: ToolExtract;
     selector?: string;
     mode?: "text" | "number" | "count" | "visible" | "url" | "attribute" | "value";
     attribute?: string;
@@ -31,7 +36,7 @@ export interface Capture {
 }
 export interface ActionSpec {
     goal: string;
-    capability: "browser" | "api";
+    capability: "browser" | "api" | "tool";
     allowed_targets: string[];
     inputs: Record<string, Json>;
     outputs: Record<string, Record<string, unknown>>;
@@ -77,7 +82,7 @@ export interface TestSuite {
         rationale: string;
         input?: TextInput;
     };
-    schema_version: "1";
+    schema_version: "1" | "2";
     suite_id: string;
     name: string;
     source_refs: SourceRef[];
@@ -121,6 +126,7 @@ export interface CallRecord {
     isError?: boolean;
     result?: Json;
     body_started: "unknown" | boolean;
+    external_outcome?: "UNKNOWN";
 }
 export interface AssertionResult {
     assertion_id: string;
@@ -147,7 +153,8 @@ export interface ActualOperation {
     description_source: "model" | "capture_reason" | "template";
     parent_call_id: string;
     tool_call_id: string;
-    granularity: "atomic" | "composite";
+    granularity: "atomic" | "composite" | "unknown";
+    purpose?: "action" | "observe" | "cleanup";
     dispatch_observed: boolean;
     state: "REGISTERED" | "DISPATCHED" | "SUCCEEDED" | "ERROR" | "NOT_DISPATCHED" | "UNKNOWN";
     created_at: string;
@@ -205,6 +212,15 @@ export interface CaseRun {
 export interface BrowserResource {
     id: string;
     state: "exists" | "absent" | "unknown";
+    ownership?: "run";
+    tool?: {
+        config: import("./tool-resource.js").ToolResourceConfig;
+        identity?: string | number;
+        start_call_id?: string;
+        close_call_id?: string;
+        close_digest: string;
+        connection?: import("./tool-runtime.js").ToolConnection;
+    };
     remote?: {
         hub_url: string;
         access_file?: string;
@@ -457,6 +473,52 @@ export declare const planSchema: {
                                                     kind: {
                                                         enum: string[];
                                                     };
+                                                    tool_name: {
+                                                        type: string;
+                                                        minLength: number;
+                                                    };
+                                                    arguments: {
+                                                        type: string;
+                                                    };
+                                                    arguments_json: {
+                                                        type: string;
+                                                    };
+                                                    extract: {
+                                                        type: string;
+                                                        required: string[];
+                                                        additionalProperties: boolean;
+                                                        properties: {
+                                                            from: {
+                                                                enum: string[];
+                                                            };
+                                                            pointer: {
+                                                                type: string;
+                                                                pattern: string;
+                                                            };
+                                                            block: {
+                                                                type: string;
+                                                                minimum: number;
+                                                            };
+                                                            type: {
+                                                                enum: string[];
+                                                            };
+                                                            between: {
+                                                                type: string;
+                                                                required: string[];
+                                                                additionalProperties: boolean;
+                                                                properties: {
+                                                                    after: {
+                                                                        type: string;
+                                                                        minLength: number;
+                                                                    };
+                                                                    before: {
+                                                                        type: string;
+                                                                        minLength: number;
+                                                                    };
+                                                                };
+                                                            };
+                                                        };
+                                                    };
                                                     selector: {
                                                         type: string;
                                                     };
@@ -643,6 +705,52 @@ export declare const planSchema: {
                                                     kind: {
                                                         enum: string[];
                                                     };
+                                                    tool_name: {
+                                                        type: string;
+                                                        minLength: number;
+                                                    };
+                                                    arguments: {
+                                                        type: string;
+                                                    };
+                                                    arguments_json: {
+                                                        type: string;
+                                                    };
+                                                    extract: {
+                                                        type: string;
+                                                        required: string[];
+                                                        additionalProperties: boolean;
+                                                        properties: {
+                                                            from: {
+                                                                enum: string[];
+                                                            };
+                                                            pointer: {
+                                                                type: string;
+                                                                pattern: string;
+                                                            };
+                                                            block: {
+                                                                type: string;
+                                                                minimum: number;
+                                                            };
+                                                            type: {
+                                                                enum: string[];
+                                                            };
+                                                            between: {
+                                                                type: string;
+                                                                required: string[];
+                                                                additionalProperties: boolean;
+                                                                properties: {
+                                                                    after: {
+                                                                        type: string;
+                                                                        minLength: number;
+                                                                    };
+                                                                    before: {
+                                                                        type: string;
+                                                                        minLength: number;
+                                                                    };
+                                                                };
+                                                            };
+                                                        };
+                                                    };
                                                     selector: {
                                                         type: string;
                                                     };
@@ -807,6 +915,52 @@ export declare const planSchema: {
                                                     kind: {
                                                         enum: string[];
                                                     };
+                                                    tool_name: {
+                                                        type: string;
+                                                        minLength: number;
+                                                    };
+                                                    arguments: {
+                                                        type: string;
+                                                    };
+                                                    arguments_json: {
+                                                        type: string;
+                                                    };
+                                                    extract: {
+                                                        type: string;
+                                                        required: string[];
+                                                        additionalProperties: boolean;
+                                                        properties: {
+                                                            from: {
+                                                                enum: string[];
+                                                            };
+                                                            pointer: {
+                                                                type: string;
+                                                                pattern: string;
+                                                            };
+                                                            block: {
+                                                                type: string;
+                                                                minimum: number;
+                                                            };
+                                                            type: {
+                                                                enum: string[];
+                                                            };
+                                                            between: {
+                                                                type: string;
+                                                                required: string[];
+                                                                additionalProperties: boolean;
+                                                                properties: {
+                                                                    after: {
+                                                                        type: string;
+                                                                        minLength: number;
+                                                                    };
+                                                                    before: {
+                                                                        type: string;
+                                                                        minLength: number;
+                                                                    };
+                                                                };
+                                                            };
+                                                        };
+                                                    };
                                                     selector: {
                                                         type: string;
                                                     };
@@ -930,6 +1084,52 @@ export declare const actionSchema: {
                     kind: {
                         enum: string[];
                     };
+                    tool_name: {
+                        type: string;
+                        minLength: number;
+                    };
+                    arguments: {
+                        type: string;
+                    };
+                    arguments_json: {
+                        type: string;
+                    };
+                    extract: {
+                        type: string;
+                        required: string[];
+                        additionalProperties: boolean;
+                        properties: {
+                            from: {
+                                enum: string[];
+                            };
+                            pointer: {
+                                type: string;
+                                pattern: string;
+                            };
+                            block: {
+                                type: string;
+                                minimum: number;
+                            };
+                            type: {
+                                enum: string[];
+                            };
+                            between: {
+                                type: string;
+                                required: string[];
+                                additionalProperties: boolean;
+                                properties: {
+                                    after: {
+                                        type: string;
+                                        minLength: number;
+                                    };
+                                    before: {
+                                        type: string;
+                                        minLength: number;
+                                    };
+                                };
+                            };
+                        };
+                    };
                     selector: {
                         type: string;
                     };
@@ -1003,6 +1203,52 @@ export declare const captureSchema: {
         properties: {
             kind: {
                 enum: string[];
+            };
+            tool_name: {
+                type: string;
+                minLength: number;
+            };
+            arguments: {
+                type: string;
+            };
+            arguments_json: {
+                type: string;
+            };
+            extract: {
+                type: string;
+                required: string[];
+                additionalProperties: boolean;
+                properties: {
+                    from: {
+                        enum: string[];
+                    };
+                    pointer: {
+                        type: string;
+                        pattern: string;
+                    };
+                    block: {
+                        type: string;
+                        minimum: number;
+                    };
+                    type: {
+                        enum: string[];
+                    };
+                    between: {
+                        type: string;
+                        required: string[];
+                        additionalProperties: boolean;
+                        properties: {
+                            after: {
+                                type: string;
+                                minLength: number;
+                            };
+                            before: {
+                                type: string;
+                                minLength: number;
+                            };
+                        };
+                    };
+                };
             };
             selector: {
                 type: string;

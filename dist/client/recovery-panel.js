@@ -67,7 +67,9 @@ export function RecoveryPanel({ readRecovery, recover, releaseEvidence, }) {
         setPending(true);
         setMessage(quarantine.browser_backend === "runbridge"
             ? "正在用原节点令牌归还 Node 并等待清理确认，期间保留隔离。"
-            : "正在关闭测试专用浏览器并停止预览，请留意宿主的工具审批。");
+            : quarantine.browser_backend === "tool"
+                ? "正在按原连接和资源身份处理释放，期间保留隔离。"
+                : "正在关闭测试专用浏览器并停止预览，请留意宿主的工具审批。");
         setError(false);
         try {
             setMessage(await recover(quarantine.token));
@@ -109,11 +111,17 @@ export function RecoveryPanel({ readRecovery, recover, releaseEvidence, }) {
                                         ? "隔离开始时间无法确认。"
                                         : `隔离已持续 ${elapsed(quarantine.elapsed_ms)}；清理超时阈值为 ${elapsed(quarantine.timeout_ms)}。`, quarantine.overdue && " 已超过阈值，请确认是否处理并释放。"] })] }), quarantine.run_id && (_jsxs("details", { children: [_jsx("summary", { children: "\u67E5\u770B\u9057\u7559\u6D4B\u8BD5" }), _jsx("code", { children: quarantine.run_id })] })), quarantine.unavailable_reason && (_jsx("p", { children: quarantine.unavailable_reason })), state?.last_error && !message && (_jsx("p", { role: "alert", children: state.last_error })), confirmation === quarantine.token ? (_jsxs("div", { className: "dsh-test-recovery-confirm", role: "group", "aria-label": "\u91CA\u653E\u9694\u79BB\u786E\u8BA4", children: [_jsx("strong", { children: quarantine.browser_backend === "runbridge"
                                     ? "是否归还原 Node 使用权并释放隔离？"
-                                    : "是否关闭测试专用浏览器并释放隔离？" }), _jsxs("p", { children: [quarantine.browser_backend === "runbridge"
+                                    : quarantine.browser_backend === "tool"
+                                        ? "是否释放原工具资源并解除隔离？"
+                                        : "是否关闭测试专用浏览器并释放隔离？" }), _jsxs("p", { children: [quarantine.browser_backend === "runbridge"
                                         ? "这会使用原节点令牌回收该租约下的远程会话与预览，并等待确认 Node 归还；共享同一令牌的其他客户端也会失去这份使用权。"
-                                        : "这会关闭测试专用的本机浏览器和预览。", "\u65E7\u6D4B\u8BD5\u7684\u9519\u8BEF\u4E0E\u62A5\u544A\u4F1A\u4FDD\u7559\uFF1B\u6210\u529F\u540E\u9700\u8981\u91CD\u65B0\u53D1\u9001\u7528\u4F8B\u3002"] }), _jsxs("label", { children: [_jsx("input", { type: "checkbox", checked: checked, disabled: pending, onChange: (event) => setChecked(event.target.checked) }), quarantine.browser_backend === "runbridge"
+                                        : quarantine.browser_backend === "tool"
+                                            ? "这会按已保存的原连接和资源身份调用关闭工具，并核对释放结果。"
+                                            : "这会关闭测试专用的本机浏览器和预览。", "\u65E7\u6D4B\u8BD5\u7684\u9519\u8BEF\u4E0E\u62A5\u544A\u4F1A\u4FDD\u7559\uFF1B\u6210\u529F\u540E\u9700\u8981\u91CD\u65B0\u53D1\u9001\u7528\u4F8B\u3002"] }), _jsxs("label", { children: [_jsx("input", { type: "checkbox", checked: checked, disabled: pending, onChange: (event) => setChecked(event.target.checked) }), quarantine.browser_backend === "runbridge"
                                         ? "我已确认旧测试及共享这份租约的其他操作已停止，允许归还原 Node 使用权。"
-                                        : "我已确认旧测试及其他外部操作已停止，允许关闭测试专用浏览器。"] }), _jsxs("div", { className: "dsh-test-actions", children: [_jsx("button", { type: "button", disabled: !checked || pending || failed || !quarantine.can_recover, onClick: () => void release(), children: "\u786E\u8BA4\u5173\u95ED\u5E76\u91CA\u653E" }), _jsx("button", { type: "button", disabled: pending, onClick: () => {
+                                        : quarantine.browser_backend === "tool"
+                                            ? "我已确认旧测试及外部操作已停止，允许释放原工具资源。"
+                                            : "我已确认旧测试及其他外部操作已停止，允许关闭测试专用浏览器。"] }), _jsxs("div", { className: "dsh-test-actions", children: [_jsx("button", { type: "button", disabled: !checked || pending || failed || !quarantine.can_recover, onClick: () => void release(), children: "\u786E\u8BA4\u5173\u95ED\u5E76\u91CA\u653E" }), _jsx("button", { type: "button", disabled: pending, onClick: () => {
                                             setConfirmation(undefined);
                                             setChecked(false);
                                         }, children: "\u6682\u4E0D\u91CA\u653E" })] })] })) : (_jsx("div", { className: "dsh-test-actions", children: _jsx("button", { type: "button", disabled: pending || failed || !quarantine.can_recover, onClick: () => {

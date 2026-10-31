@@ -1,5 +1,7 @@
 # 开发者 JSON 用例与调试
 
+通用工具计划使用 `schema_version: "2"`、`capability: "tool"`。`kind: "tool"` 采集提供 `tool_name`、`arguments`／`arguments_json` 二选一及 `extract`；提取定义包括 `from`、可选 JSON Pointer `pointer`、文本块 `block`、显式 `type` 或固定 `between` 分隔。来源支持 `structured`、`value`、`json`、`text`、旧 `playwright-result`。预期保持冻结；`test_execute_operation.observations` 在派发前登记并复用同一次真实响应。既有浏览器／接口采集的格式 1 保留支持。见[通用工具运行](../user-guide/通用工具运行.md)及[方案合同](../design/通用工具运行方案.md)。
+
 本页用于插件开发、调试和程序生成回归资料。用户用例以 TXT、Markdown 和 CSV 参数化为入口；命令菜单、README 和用户指南不推荐编写 JSON 用例。JSON 执行能力继续保留，运行时仍复用当前对话的模型和工具。
 
 [English](开发者JSON用例与调试.en.md) · [当前架构](../architecture/当前实现.md) · [用户文件用例](../user-guide/使用说明.md)

@@ -42,8 +42,15 @@ export interface PluginConfig extends Partial<TestConfig> {
 }
 const BrowserSchema = z.object({
   backend: z
-    .union([z.const("playwright"), z.const("runbridge")])
-    .default("playwright"),
+    .union([
+      z.const("auto"),
+      z.const("mcp"),
+      z.const("playwright"),
+      z.const("runbridge"),
+    ])
+    .default("auto"),
+  mcpId: z.string().default(""),
+  resourceLifecycle: z.any(),
   accessFile: z.string().default(""),
   connectionSource: z
     .union([z.const("access-file"), z.const("hub")])

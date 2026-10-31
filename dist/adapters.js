@@ -1,8 +1,39 @@
 /** 从受信工具响应生成唯一绑定观察；模型不能提交实际值。 */
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { ajv, field, } from "./contracts.js";
 import { redact } from "./recorder.js";
+import { extractToolResult } from "./tool-results.js";
+import { toolArguments } from "./tool-runtime.js";
 import { runbridgeResult, remoteReleaseConfirmed, } from "./runbridge.js";
+/** 图片取自实际返回，按内容去重；没有媒体能力时不另行调用默认截图工具。 */
+export function archiveToolImages(recorder, suite, result) {
+    const raw = field(result.value, "content");
+    const blocks = [...(Array.isArray(raw) ? raw : []), ...result.content];
+    const refs = new Set();
+    for (const block of blocks) {
+        const data = field(block, "data"), mime = field(block, "mimeType");
+        if (field(block, "type") !== "image" ||
+            typeof data !== "string" ||
+            !["image/png", "image/jpeg", "image/webp"].includes(String(mime)))
+            continue;
+        const bytes = Buffer.from(data, "base64");
+        const sha = createHash("sha256").update(bytes).digest("hex");
+        const previous = suite.evidence.find((e) => e.sha256 === sha && e.media_type === mime);
+        if (previous) {
+            refs.add(previous.evidence_id);
+            continue;
+        }
+        const evidence = recorder.evidence(randomUUID() +
+            (mime === "image/jpeg"
+                ? ".jpg"
+                : mime === "image/webp"
+                    ? ".webp"
+                    : ".png"), bytes, String(mime), false);
+        suite.evidence.push(evidence);
+        refs.add(evidence.evidence_id);
+    }
+    return [...refs];
+}
 export function mcpResult(value) {
     const blocks = field(value, "content");
     if (!Array.isArray(blocks))
@@ -45,7 +76,9 @@ export async function captureStep(host, recorder, suite, step, result, binding, 
     const captures = Object.fromEntries(Object.entries(step.action.capture ?? {}).filter(([name]) => !result.observations.some((o) => o.output_name === name)));
     const previousObservations = result.observations.length;
     const dom = Object.fromEntries(Object.entries(captures).filter(([, c]) => c.kind === "dom"));
-    const origins = step.action.allowed_targets.map((t) => new URL(t).origin);
+    const origins = Object.keys(dom).length
+        ? step.action.allowed_targets.map((t) => new URL(t).origin)
+        : [];
     const save = (name, value, callId, adapter, evidenceId, path) => {
         if (value === undefined)
             return;
@@ -70,6 +103,15 @@ export async function captureStep(host, recorder, suite, step, result, binding, 
         recorder.event("observation_bound", observation, binding);
         result.observations.push(observation);
     };
+    for (const [name, cap] of Object.entries(captures).filter(([, c]) => c.kind === "tool")) {
+        host.assertTool?.(cap.tool_name);
+        const response = await host.call(cap.tool_name, toolArguments(cap), exec);
+        const evidence = recorder.evidence(randomUUID() + ".json", JSON.stringify(redact(response.result), null, 2), "application/json");
+        suite.evidence.push(evidence);
+        const imageRefs = archiveToolImages(recorder, suite, response.result);
+        save(name, extractToolResult(response.result, cap.extract), response.callId, "tool-result-v1", evidence.evidence_id, JSON.stringify(cap.extract));
+        result.observations.at(-1).evidence_refs.push(...imageRefs);
+    }
     if (Object.keys(dom).length) {
         const response = await host.call(host.browser
             ? host.browser.prefix + "browser_capture"
@@ -140,19 +182,11 @@ export async function captureStep(host, recorder, suite, step, result, binding, 
             ? host.browser.prefix + "browser_screenshot"
             : "mcp__playwright__browser_take_screenshot", host.browser ? { full_page: true } : { type: "png", fullPage: true }, exec);
         if (!shot.result.isError) {
-            const blocks = [
-                ...shot.result.content,
-                ...(Array.isArray(field(shot.result.value, "content"))
-                    ? field(shot.result.value, "content")
-                    : []),
-            ];
-            const img = blocks.find((b) => field(b, "type") === "image" && typeof field(b, "data") === "string");
-            if (img && typeof field(img, "data") === "string") {
-                const evidence = recorder.evidence(randomUUID() + ".png", Buffer.from(field(img, "data"), "base64"), "image/png", false);
-                suite.evidence.push(evidence);
-                for (const observation of result.observations.slice(previousObservations))
-                    observation.evidence_refs.push(evidence.evidence_id);
-            }
+            const refs = archiveToolImages(recorder, suite, shot.result);
+            for (const observation of result.observations.slice(previousObservations))
+                observation.evidence_refs = [
+                    ...new Set([...observation.evidence_refs, ...refs]),
+                ];
         }
     }
     return { outputs: result.observations.map((o) => o.output_name) };

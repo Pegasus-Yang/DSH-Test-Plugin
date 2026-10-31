@@ -1,6 +1,8 @@
 /** 浏览器连接来源在每次运行前冻结，凭据只从服务端私有文件读取。 */
 export interface BrowserPreferences {
-    backend: "playwright" | "runbridge";
+    backend: "auto" | "mcp" | "playwright" | "runbridge";
+    mcpId?: string;
+    resourceLifecycle?: import("./tool-resource.js").ToolResourceConfig;
     accessFile: string;
     connectionSource?: "access-file" | "hub";
     hubFile?: string;

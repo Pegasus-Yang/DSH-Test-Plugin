@@ -326,6 +326,21 @@ it("手工用例只含五部分和三列，成功动作合并真实输入，无�
   expect(md).toContain(run.plan.planning.original_task);
 });
 
+it("自定义工具手工步骤保留业务输入，不重复地址和 CSS 定位参数", () => {
+  const { run, step } = fixture();
+  step.actual_operations![0]!.description = "打开 https://example.test/counter";
+  step.calls[0]!.name = "mcp__custom__go_to";
+  step.calls[0]!.args_redacted = { address: "https://example.test/counter" };
+  step.actual_operations![1]!.description = "在账号框中输入用户名";
+  step.calls[1]!.name = "mcp__custom__fill";
+  step.calls[1]!.args_redacted = { css: "#username", text: "qa_user_1" };
+  const md = manualCasesMarkdown(run);
+  expect(md.match(/https:\/\/example\.test\/counter/g)).toHaveLength(1);
+  expect(md).toContain("在账号框中输入用户名；text：「qa_user_1」");
+  expect(md).not.toContain("#username");
+  expect(md).not.toContain("；address：");
+});
+
 it("JSON 没有原始文字描述时留空，不使用套件名或任务包装", () => {
   const { run } = fixture();
   run.name = "系统自动拼出的执行说明";

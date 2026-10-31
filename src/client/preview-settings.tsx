@@ -37,7 +37,8 @@ export function PreviewSettingsPage({
     <section className="dsh-test-settings" data-test-preview-settings>
       <h2>浏览器设置</h2>
       <p className="dsh-test-setting-hint">
-        选择测试浏览器的位置，再配置连接和画面。接口测试无需浏览器。
+        默认使用当前对话可用的工具，也可指定主要 MCP
+        或选择受管理浏览器。画面与录像按连接能力提供。
       </p>
       {error && <p role="alert">{error}</p>}
       {info ? (

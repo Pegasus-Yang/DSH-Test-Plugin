@@ -499,6 +499,8 @@ try {
     {
       id: "harness-test",
       config: {
+        // 多版本正式场景验证已有受管理浏览器；通用模式由原生Selenium专项覆盖。
+        browser: { backend: "playwright" },
         workspace: join(cohort.root, "workspace"),
         outputRoot: join(cohort.root, "runs"),
         stepTimeoutMs: 600000,

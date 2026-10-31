@@ -9,7 +9,7 @@ import type {
   SuiteRun,
 } from "./contracts.js";
 
-export const operationSchemaVersion = "1";
+export const operationSchemaVersion = "2";
 const prefix = "mcp__playwright__";
 export const runbridgeOperationNames = [
   "browser_navigate",
@@ -150,9 +150,14 @@ export function operationArguments(value: unknown): Record<string, Json> {
             Object.entries(value)
               .filter(
                 ([key]) =>
-                  !["ref", "startRef", "endRef", "function", "code"].includes(
-                    key,
-                  ),
+                  ![
+                    "ref",
+                    "startRef",
+                    "endRef",
+                    "function",
+                    "code",
+                    "script",
+                  ].includes(key),
               )
               .map(([key, v]) => [key, withoutLocators(v)]),
           )
@@ -169,8 +174,9 @@ export function projectActualCase(
     (i) => i.id === instance.case_id,
   );
   const recorded =
-    run.manifest.actual_operations_schema === operationSchemaVersion ||
-    instance.steps.some((s) => s.actual_operations?.length);
+    ["1", operationSchemaVersion].includes(
+      String(run.manifest.actual_operations_schema),
+    ) || instance.steps.some((s) => s.actual_operations?.length);
   const steps: ActualRow[] = [],
     setup: ActualRow[] = [],
     cleanup: ActualRow[] = [],
@@ -178,7 +184,12 @@ export function projectActualCase(
   const reasons = new Set<string>();
   let needsReview = false;
   for (const step of instance.steps) {
-    if (["__reset", "__close"].includes(step.step_id)) continue;
+    if (
+      ["__reset", "__close", "__resource_open", "__resource_close"].includes(
+        step.step_id,
+      )
+    )
+      continue;
     for (const note of step.actual_operation_notes ?? []) reasons.add(note);
     const rows: ActualRow[] = [];
     for (const op of step.actual_operations ?? []) {
@@ -191,6 +202,7 @@ export function projectActualCase(
         reasons.add("操作归属与当前实例不一致，未纳入步骤");
         continue;
       }
+      if (op.purpose === "observe") continue;
       const row: ActualRow = {
         id: op.operation_id,
         kind: "operation",
@@ -219,6 +231,10 @@ export function projectActualCase(
         reasons.add("存在未获确认的操作结果");
       if (op.granularity === "composite")
         reasons.add("包含复合操作，内部每个动作尚未逐项确认");
+      if (op.granularity === "unknown") {
+        reasons.add("自定义工具的操作粒度未确认");
+        needsReview = true;
+      }
       if (op.state !== "SUCCEEDED") needsReview = true;
     }
     if (recorded && step.assertion) {

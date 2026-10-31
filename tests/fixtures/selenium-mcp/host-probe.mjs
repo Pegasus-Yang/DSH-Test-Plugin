@@ -9,7 +9,7 @@ import { createHash } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 import { parse, stringify } from "yaml";
 import { chromium } from "playwright";
-import { enter, rpc } from "../../../scripts/compat/browser.mjs";
+import { enter, openSettings, rpc } from "../../../scripts/compat/browser.mjs";
 import { createCounterFixture } from "./counter.mjs";
 import { rebuild } from "../../../dist/recorder.js";
 assert(process.argv[2], "请提供独立输出目录");
@@ -38,9 +38,20 @@ const archive = resolve(
       ".tgz",
 );
 const selectedMode = process.argv[3] ?? "all";
-assert(["native", "playwright-contract", "all"].includes(selectedMode));
+assert(
+  [
+    "native",
+    "renamed",
+    "minimal",
+    "managed",
+    "playwright-contract",
+    "all",
+  ].includes(selectedMode),
+);
 const entryFormat = process.argv[4] ?? "json";
 assert(["json", "markdown"].includes(entryFormat));
+const expected = Number(process.env.SELENIUM_PROBE_EXPECTED ?? 1);
+assert([1, 2].includes(expected));
 const fixtureCode = project + "/tests/fixtures/selenium-mcp";
 const sha256 = createHash("sha256")
   .update(await readFile(archive))
@@ -106,8 +117,14 @@ async function until(action, message, timeout = 300000) {
 }
 try {
   for (const mode of selectedMode === "all"
-    ? ["native", "playwright-contract"]
+    ? ["native", "renamed", "minimal", "managed"]
     : [selectedMode]) {
+    const serverName =
+      mode === "playwright-contract"
+        ? "playwright"
+        : mode === "renamed"
+          ? "custom"
+          : "selenium";
     const output = root + "/" + entryFormat + "-" + mode;
     activeOutput = output;
     await mkdir(output);
@@ -143,9 +160,34 @@ try {
         config: {
           workspace,
           outputRoot: runRoot,
-          stepTimeoutMs: 90000,
-          cleanupTimeoutMs: 90000,
+          stepTimeoutMs: 600000,
+          cleanupTimeoutMs: 180000,
           cancelGraceMs: 500,
+          browser: {
+            backend: "auto",
+            ...(mode === "managed"
+              ? {
+                  resourceLifecycle: {
+                    scope: "resource",
+                    start: {
+                      tool_name: "mcp__selenium__create_context",
+                      arguments: {},
+                    },
+                    close: {
+                      tool_name: "mcp__selenium__dispose_context",
+                      arguments: {},
+                    },
+                    identity: { from: "structured", pointer: "/id" },
+                    identity_argument: "context_id",
+                    released: {
+                      from: "structured",
+                      pointer: "/released",
+                      type: "boolean",
+                    },
+                  },
+                }
+              : {}),
+          },
         },
       },
       ...model,
@@ -156,7 +198,7 @@ try {
             name: "@deepseek-ai/dsh-mcp-client",
             config: {
               transport: "stdio",
-              serverName: mode === "native" ? "selenium" : "playwright",
+              serverName,
               command: process.execPath,
               args: [fixtureCode + "/server.mjs"],
               cwd: project,
@@ -189,10 +231,10 @@ try {
       mode: 0o600,
     });
     const target = fixture.origin + "/counter?scenario=" + mode;
-    const task = `# 计数器按钮递增验证\n\n- 打开 ${target}，点击“增加 1”按钮一次，检查页面中 id 为 counter 的当前计数数值等于 1。\n`;
+    const task = `# 计数器按钮递增验证\n\n- 打开 ${target}，点击“增加 1”按钮一次，检查页面中 id 为 counter 的当前计数数值等于 ${expected}，不得修改此业务预期。${mode !== "minimal" ? "使用当前服务的截图工具记录页面。" : ""}\n`;
     await writeFile(workspace + "/counter.md", task);
     const plan = {
-      schema_version: "1",
+      schema_version: "2",
       suite_id: "selenium-counter",
       name: "Selenium 计数器按钮递增",
       source_refs: [
@@ -202,7 +244,7 @@ try {
           uri: "fixture:counter",
           version: "1",
           locator: "固定种子",
-          excerpt: "每次打开计数为0，点击一次后计数应等于1。",
+          excerpt: "点击一次后计数应等于" + expected + "。",
         },
       ],
       cases: [
@@ -210,7 +252,7 @@ try {
           case_id: "counter",
           name: "计数器点击一次",
           datasets: [
-            { data_id: "default", inputs: {}, expected: { counter: 1 } },
+            { data_id: "default", inputs: {}, expected: { counter: expected } },
           ],
           preconditions: [],
           cleanup: [],
@@ -223,15 +265,23 @@ try {
               depends_on: [],
               action: {
                 goal: `打开 ${target}，使用当前浏览器工具观察页面，然后通过 test_execute_operation 点击“增加 1”按钮一次，最后 test_capture 采集真实计数。不得运行 shell、安装新工具或修改固定预期；缺少插件所需工具时，如实 test_fail_step 并按 test_current 结算收尾和报告。`,
-                capability: "browser",
+                capability: "tool",
                 allowed_targets: [target],
                 inputs: { url: target },
                 outputs: { counter: { type: "number" } },
                 capture: {
                   counter: {
-                    kind: "dom",
-                    mode: "number",
-                    selector: "#counter",
+                    kind: "tool",
+                    tool_name: `mcp__${serverName}__${mode === "renamed" ? "get_text" : "browser_read"}`,
+                    arguments:
+                      mode === "renamed"
+                        ? { css: "#counter" }
+                        : { selector: "#counter" },
+                    extract: {
+                      from: "structured",
+                      pointer: "/text",
+                      type: "number",
+                    },
                   },
                 },
                 completion_requirements: ["counter"],
@@ -254,6 +304,9 @@ try {
         },
       ],
     };
+    if (mode !== "minimal")
+      plan.cases[0].steps[0].action.goal +=
+        " 使用当前服务的截图工具记录页面，调用用途为observe。";
     await writeFile(
       workspace + "/counter-plan.json",
       JSON.stringify(plan, null, 2) + "\n",
@@ -299,11 +352,7 @@ try {
       const catalog = await until(
         async () => {
           const a = await audit();
-          return a.catalog.some((n) =>
-            n.startsWith(
-              mode === "native" ? "mcp__selenium__" : "mcp__playwright__",
-            ),
-          )
+          return a.catalog.some((n) => n.startsWith(`mcp__${serverName}__`))
             ? a.catalog
             : false;
         },
@@ -312,7 +361,7 @@ try {
       );
       const mcp = catalog.filter((n) => n.startsWith("mcp__"));
       assert(!mcp.some((n) => n.startsWith("mcp__runbridge__")));
-      if (mode === "native")
+      if (mode !== "playwright-contract")
         assert(!mcp.some((n) => n.startsWith("mcp__playwright__")));
       assert(!existsSync(host + "/node_modules/@playwright/mcp"));
       await writeFile(
@@ -327,6 +376,61 @@ try {
           2,
         ),
       );
+      const settings = await context.newPage();
+      await enter(settings, { url });
+      await openSettings(settings);
+      assert.equal(
+        await settings.locator("#dsh-test-browser-backend").inputValue(),
+        "auto",
+      );
+      for (const [width, height] of [
+        [1440, 900],
+        [1920, 1080],
+      ]) {
+        await settings.setViewportSize({ width, height });
+        await settings.screenshot({
+          path: output + `/settings-auto-${width}x${height}.png`,
+        });
+      }
+      if (mode === "native") {
+        await settings.locator("#dsh-test-browser-backend").selectOption("mcp");
+        await settings
+          .locator("#dsh-test-execution-mcp")
+          .selectOption("selenium-mcp");
+        await settings
+          .getByRole("button", { name: "保存浏览器设置", exact: true })
+          .click();
+        await settings
+          .getByRole("status")
+          .filter({ hasText: "已保存" })
+          .first()
+          .waitFor();
+        const prefs = await until(
+          async () => {
+            const value = await settings.evaluate(async () =>
+              (await fetch("/test-preview-settings")).json(),
+            );
+            return value.browserConnection?.backend === "mcp" &&
+              value.browserConnection?.mcpId === "selenium-mcp"
+              ? value
+              : false;
+          },
+          "设置保存后运行配置未更新",
+          15000,
+        );
+        assert.equal(prefs.browserConnection.backend, "mcp");
+        assert.equal(prefs.browserConnection.mcpId, "selenium-mcp");
+        for (const [width, height] of [
+          [1440, 900],
+          [1920, 1080],
+        ]) {
+          await settings.setViewportSize({ width, height });
+          await settings.screenshot({
+            path: output + `/settings-mcp-${width}x${height}.png`,
+          });
+        }
+      }
+      await settings.close();
       const workspaceValue = await rpc(page, "workspace/create", {
         request: { path: workspace },
       });
@@ -381,7 +485,7 @@ try {
           return run?.lifecycle === "FINISHED";
         },
         "用例未在期限内封存",
-        420000,
+        1200000,
       );
       const settled = await until(
         async () => {
@@ -406,7 +510,7 @@ try {
         await readFile(directory + "/results.json", "utf8"),
       );
       const statuses = saved.instances.map((i) => i.status);
-      assert.deepEqual(statuses, [mode === "native" ? "ERROR" : "PASS"]);
+      assert.deepEqual(statuses, [expected === 1 ? "PASS" : "FAIL"]);
       assert(existsSync(directory + "/report.html"));
       assert(existsSync(directory + "/manual-cases.md"));
       assert(existsSync(directory + "/actual-steps.json"));
@@ -421,7 +525,25 @@ try {
           .href,
       );
       assert((await report.locator("body").innerText()).includes("测试用例"));
-      await report.screenshot({ path: output + "/report.png", fullPage: true });
+      for (const [width, height] of [
+        [1440, 900],
+        [1920, 1080],
+      ]) {
+        await report.setViewportSize({ width, height });
+        await report.screenshot({
+          path: output + `/report-${width}x${height}.png`,
+        });
+      }
+      const download = report.waitForEvent("download");
+      await report
+        .getByRole("link", { name: /下载手工用例/ })
+        .first()
+        .click();
+      await (await download).saveAs(output + "/downloaded-manual.md");
+      assert.equal(
+        await readFile(output + "/downloaded-manual.md", "utf8"),
+        await readFile(directory + "/manual-cases-1.md", "utf8"),
+      );
       await report.close();
       const calls = saved.instances
         .flatMap((i) => i.steps)
@@ -438,30 +560,39 @@ try {
             .map(JSON.parse)
         : [];
       const clicks = fixture.clicks.filter((c) => c.scenario === mode).length;
-      if (mode === "native") {
-        assert.equal(clicks, 0);
-        assert(!checks.some((c) => c.status === "PASS"));
-      } else {
-        assert.equal(clicks, 1);
-        assert(trace.some((e) => e.event === "session_opened"));
+      assert.equal(clicks, 1);
+      assert(trace.some((e) => e.event === "session_opened"));
+      assert(
+        trace.some(
+          (e) =>
+            (e.operation ?? e.tool) === "browser_click" &&
+            e.event === "tool_finished" &&
+            e.ok,
+        ),
+      );
+      assert(
+        checks.some(
+          (c) =>
+            c.status === (expected === 1 ? "PASS" : "FAIL") &&
+            c.actual === 1 &&
+            c.expected === expected,
+        ),
+      );
+      if (mode === "minimal")
+        assert(!saved.evidence.some((e) => e.media_type.startsWith("image/")));
+      else assert(saved.evidence.some((e) => e.media_type === "image/png"));
+      if (mode === "managed") {
         assert(trace.some((e) => e.event === "session_closed"));
-        assert(
-          trace.some(
-            (e) =>
-              e.tool === "browser_click" && e.event === "tool_finished" && e.ok,
-          ),
-        );
-        assert(
-          checks.some(
-            (c) => c.status === "PASS" && c.actual === 1 && c.expected === 1,
-          ),
-        );
-        assert(saved.evidence.some((e) => e.media_type === "image/png"));
-      }
+        assert.equal(saved.instances[0].resources.tool_context.state, "absent");
+      } else assert.equal(saved.manifest.resource_management, "external");
       assert.deepEqual(errors, []);
       const result = {
         mode,
         entry_format: entryFormat,
+        expected,
+        resource_management: saved.manifest.resource_management,
+        execution_source: saved.manifest.execution_source,
+        manual_download_verified: true,
         status: "PASS",
         plugin_version: saved.manifest.plugin_version,
         host_version: hostPackage.version,
@@ -512,6 +643,12 @@ try {
     }
     const stopped = await stop();
     results.at(-1).host_stopped = stopped;
+    const ended = (await readFile(output + "/service/selenium.jsonl", "utf8"))
+      .trim()
+      .split("\n")
+      .map(JSON.parse);
+    assert(ended.some((e) => e.event === "session_closed"));
+    results.at(-1).selenium_released_after_host_stop = true;
     await writeFile(
       output + "/summary.json",
       JSON.stringify(results.at(-1), null, 2),

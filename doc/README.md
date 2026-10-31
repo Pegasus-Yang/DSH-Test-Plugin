@@ -10,6 +10,8 @@ The English guides describe the current implementation. Historical design and ac
 
 ## 当前版本
 
+- [0.18.0 版本发布验收](project/0.18.0版本发布验收.md)：通用工具执行、真实结果提取、可选资源管理及新旧后端回归；当前交付状态见记录。
+- [通用工具运行](user-guide/通用工具运行.md)：自定义 MCP、自动来源、结果与媒体能力、可选生命周期及旧配置。
 - [0.17.0 版本发布验收](project/0.17.0版本发布验收.md)：DSH alpha.1～5、rc.1～5 同包支持，以及逐版安装、SDK、Web 和真实模型验证。
 - [自定义 Selenium MCP 兼容性核验](project/自定义SeleniumMCP兼容性核验.md)：真实 WebDriver 自检、原生接口阻断、现有协议兼容模式及 Markdown 用例报告验证。
 - [0.16.0 历史版本发布验收](project/0.16.0版本发布验收.md)：报告执行过程归组、主要手工用例下载及完整预期句，验证范围见记录。
@@ -83,7 +85,7 @@ The English guides describe the current implementation. Historical design and ac
 
 ## 设计与实施
 
-- [通用工具运行方案](design/通用工具运行方案.md)：待审核；取消固定浏览器后端准入，统一工具调用、真实结果采集、可选生命周期与报告，保留旧连接能力。
+- [通用工具运行方案](design/通用工具运行方案.md)：已获用户批准；取消固定浏览器后端准入，统一工具调用、真实结果采集、可选生命周期与报告，实施状态见 0.18.0 验收。
 - [测试报告展示与手工用例优化方案](design/测试报告展示与手工用例优化方案.md)：已确认实施；压缩顶部说明、突出手工 MD 下载、统一执行过程，以及补齐预期结果主语。
 - [配置展现与交互优化方案](design/配置展现与交互优化方案.md)：访问文件方式、状态分层与统一保存；实施结果见 0.14.0 验收。
 - [RunBridge 升级对接核查](design/RunBridge升级对接核查.md)：插件 0.13.1 的缺陷复现与原适配建议，实施结果见 0.13.2 验收。

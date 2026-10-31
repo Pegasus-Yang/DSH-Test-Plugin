@@ -603,3 +603,115 @@ it("未知领取没有原令牌时只保留人工处置，不用 Hub 凭据抢�
   await expect(t.recover()).rejects.toThrow("没有取得可恢复的节点令牌");
   expect(fetch).not.toHaveBeenCalled();
 });
+
+it("通用资源恢复核对原工具、连接摘要和资源身份，不回退Playwright", async () => {
+  const { TestToolCatalog, toolConnections } = await import(
+    "../../src/tool-runtime.js"
+  );
+  const t = setup();
+  const connection = {
+    serverName: "custom",
+    transport: "stdio",
+    command: "/test/server",
+  };
+  const definition = {
+    name: "mcp__custom__dispose",
+    description: "关闭原资源",
+    parameters: { type: "object" },
+  };
+  const ctx: any = t.agent.ctx;
+  ctx.get = () => ({
+    entries: () => [
+      {
+        options: {
+          id: "custom",
+          name: "@deepseek-ai/dsh-mcp-client",
+          config: connection,
+        },
+      },
+    ],
+  });
+  ctx.tools.schemas = () => [definition];
+  ctx.tools.get = () => definition;
+  const snapshot = new TestToolCatalog(
+    ctx.tools,
+    [],
+    toolConnections(ctx),
+  ).snapshot()[0]!;
+  const resource: any = {
+    id: "run-resource",
+    state: "exists",
+    ownership: "run",
+    tool: {
+      identity: "original-resource",
+      close_digest: snapshot.digest,
+      connection: snapshot.connection,
+      config: {
+        scope: "resource",
+        start: { tool_name: "mcp__custom__create", arguments: {} },
+        close: { tool_name: definition.name, arguments: {} },
+        identity: { from: "structured", pointer: "/id" },
+        identity_argument: "context_id",
+        released: { from: "structured", pointer: "/released" },
+      },
+    },
+  };
+  t.run.instances[0]!.resources = { tool_context: resource };
+  writeFileSync(join(t.root, "run-old/results.json"), JSON.stringify(t.run));
+  expect(t.manager.status().quarantine?.browser_backend).toBe("tool");
+  expect(t.manager.status().quarantine?.can_recover).toBe(true);
+  t.close.mockImplementation(
+    async () =>
+      ({
+        isError: false,
+        value: { structuredContent: { released: true } },
+        content: [],
+      }) as any,
+  );
+  await t.recover();
+  expect(t.close).toHaveBeenCalledWith(
+    expect.objectContaining({
+      name: definition.name,
+      arguments: { context_id: "original-resource" },
+    }),
+  );
+  expect(t.manager.status().quarantine).toBeNull();
+
+  t.manager.mark(t.run, "再次隔离");
+  connection.command = "/another/server";
+  await expect(t.recover()).rejects.toThrow("连接配置已改变");
+  expect(t.close).toHaveBeenCalledTimes(1);
+  resource.tool.config.scope = "connection";
+  writeFileSync(join(t.root, "run-old/results.json"), JSON.stringify(t.run));
+  expect(t.manager.status().quarantine?.can_recover).toBe(false);
+  expect(t.manager.status().quarantine?.browser_backend).toBe("tool");
+});
+
+it("通用资源的未知关闭记录只能保留隔离，不自动重放原关闭", () => {
+  const t = setup();
+  t.run.instances[0]!.resources = {
+    tool_context: {
+      id: "original",
+      state: "unknown",
+      tool: {
+        identity: "id",
+        close_call_id: "original-call",
+        close_digest: "digest",
+        connection: { id: "custom", prefix: "mcp__custom__", digest: "hash" },
+        config: {
+          scope: "resource",
+          start: { tool_name: "create", arguments: {} },
+          close: { tool_name: "close", arguments: {} },
+          identity_argument: "id",
+          released: { from: "structured", pointer: "/released" },
+        },
+      },
+    },
+  } as any;
+  writeFileSync(join(t.root, "run-old/results.json"), JSON.stringify(t.run));
+  expect(t.manager.status().quarantine?.can_recover).toBe(false);
+  expect(t.manager.status().quarantine?.unavailable_reason).toContain(
+    "不能自动重放",
+  );
+  expect(t.close).not.toHaveBeenCalled();
+});

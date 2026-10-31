@@ -27,6 +27,12 @@ const drafts = new WeakMap<
   ConfigForm<BrowserSettingsFields>,
   { draft: Draft; base: Draft; revision?: number }
 >();
+const sourceLabels: Record<BrowserPreferences["backend"], string> = {
+  auto: "自动使用可用工具",
+  mcp: "指定主要 MCP",
+  playwright: "本机 Playwright",
+  runbridge: "远程 RunBridge",
+};
 const values = (
   v: BrowserSettingsFields | undefined,
   info: PreviewSettingsInfo,
@@ -216,6 +222,7 @@ export function BrowserSettings({
       resourceId: "dsh-test-runbridge-resource",
       leaseSeconds: "dsh-test-runbridge-lease",
       mcpId: "dsh-test-preview-mcp",
+      executionMcpId: "dsh-test-execution-mcp",
       port: "dsh-test-browscreen-port",
       browscreenExecutable: "dsh-test-browscreen-executable",
     };
@@ -226,6 +233,11 @@ export function BrowserSettings({
   };
   const save = async () => {
     const invalid: Record<string, string> = {};
+    if (
+      browser.backend === "mcp" &&
+      !info.mcpInstances.some((m) => m.id === browser.mcpId)
+    )
+      invalid.executionMcpId = "请选择已配置的主要 MCP 实例。";
     if (browser.backend === "runbridge") {
       if (!activeFile.trim())
         invalid[hubSource ? "hubFile" : "accessFile"] =
@@ -251,7 +263,13 @@ export function BrowserSettings({
         browser.leaseSeconds > 3600
       )
         invalid.leaseSeconds = "会话租期须为 1～3600 秒的整数。";
-    } else if (draft.preview.enabled || draft.preview.recordingEnabled) {
+    } else if (
+      (draft.preview.enabled || draft.preview.recordingEnabled) &&
+      (browser.backend === "playwright" ||
+        info.mcpInstances.some(
+          (m) => m.id === draft.preview.mcpId && m.compatible,
+        ))
+    ) {
       if (
         !draft.preview.mcpId ||
         !info.mcpInstances.some(
@@ -296,11 +314,12 @@ export function BrowserSettings({
       const normalized: Draft = {
         browser: {
           ...browser,
+          mcpId: browser.mcpId?.trim(),
           accessFile: browser.accessFile.trim(),
           hubFile: browser.hubFile?.trim(),
           nodeId: browser.nodeId?.trim(),
           nodeLeaseSeconds:
-            (browser.backend === "playwright" || !hubSource) &&
+            (browser.backend !== "runbridge" || !hubSource) &&
             browser.nodeLeaseSeconds !== undefined &&
             (!Number.isInteger(browser.nodeLeaseSeconds) ||
               browser.nodeLeaseSeconds < 1)
@@ -308,7 +327,7 @@ export function BrowserSettings({
               : browser.nodeLeaseSeconds,
           resourceId: browser.resourceId.trim(),
           leaseSeconds:
-            browser.backend === "playwright" &&
+            browser.backend !== "runbridge" &&
             (!Number.isInteger(browser.leaseSeconds) ||
               browser.leaseSeconds < 1 ||
               browser.leaseSeconds > 3600)
@@ -321,6 +340,9 @@ export function BrowserSettings({
             draft.preview.browscreenExecutable.trim() || "browscreen",
           port:
             (browser.backend === "runbridge" ||
+              !info.mcpInstances.some(
+                (m) => m.id === draft.preview.mcpId && m.compatible,
+              ) ||
               (!draft.preview.enabled && !draft.preview.recordingEnabled)) &&
             (!Number.isInteger(draft.preview.port) ||
               draft.preview.port < 1 ||
@@ -336,7 +358,7 @@ export function BrowserSettings({
             {
               op: "set",
               path: ["browserConnection"],
-              value: { ...normalized.browser },
+              value: JSON.parse(JSON.stringify(normalized.browser)),
             },
             {
               op: "set",
@@ -383,16 +405,12 @@ export function BrowserSettings({
           ? "有未保存修改；关闭设置后草稿仍保留，请保存或放弃。"
           : "当前配置已保存"}{" "}
         · 已保存的浏览器位置：
-        {base.browser.backend === "runbridge"
-          ? "远程 RunBridge"
-          : "本机 Playwright"}
+        {sourceLabels[base.browser.backend]}
       </p>
       {info.activeBrowser && (
         <p className="dsh-test-setting-hint">
           打开设置时，运行中的测试绑定：
-          {info.activeBrowser === "runbridge"
-            ? "远程 RunBridge"
-            : "本机 Playwright"}
+          {sourceLabels[info.activeBrowser]}
           。保存不会切换该测试。
         </p>
       )}
@@ -443,9 +461,45 @@ export function BrowserSettings({
             })
           }
         >
-          <option value="playwright">本机 Playwright MCP</option>
+          <option value="auto">自动使用当前可用工具</option>
+          <option value="mcp">指定主要 MCP 实例</option>
+          <option value="playwright">
+            本机 Playwright MCP（管理测试上下文）
+          </option>
           <option value="runbridge">远程 RunBridge MCP</option>
         </select>
+        {browser.backend === "auto" && (
+          <p className="dsh-test-setting-hint">
+            使用当前对话已启用的业务工具，支持自定义 Selenium 等
+            MCP；上下文默认由服务管理，原生权限与审批继续生效。
+          </p>
+        )}
+        {browser.backend === "mcp" && (
+          <>
+            <label htmlFor="dsh-test-execution-mcp">主要 MCP 实例</label>
+            <select
+              id="dsh-test-execution-mcp"
+              value={browser.mcpId ?? ""}
+              aria-invalid={!!errors.executionMcpId}
+              onChange={(e) =>
+                edit({
+                  browser: { ...browser, mcpId: e.target.value },
+                  preview: { ...draft.preview, mcpId: e.target.value },
+                })
+              }
+            >
+              <option value="">请选择 MCP 实例</option>
+              {info.mcpInstances.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+            <p className="dsh-test-setting-hint">
+              优先使用该实例的原有工具；媒体能力独立检测，其他已授权业务工具仍可协作。
+            </p>
+          </>
+        )}
         {browser.backend === "runbridge" && (
           <RunBridgeConnection
             value={browser}
@@ -481,6 +535,14 @@ export function BrowserSettings({
               Browscreen；远程录像暂不支持。
             </p>
           </>
+        ) : browser.backend === "mcp" &&
+          !info.mcpInstances.some(
+            (m) => m.id === browser.mcpId && m.compatible,
+          ) ? (
+          <p className="dsh-test-setting-hint">
+            当前主要 MCP
+            未提供自动画面或录像接入，测试与报告仍可使用。已有媒体偏好会保留。
+          </p>
         ) : (
           <LocalPreviewSettings
             value={draft.preview}

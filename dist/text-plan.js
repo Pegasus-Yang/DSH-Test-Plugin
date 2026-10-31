@@ -94,7 +94,7 @@ export function parseBatchPlan(input, snapshot, task, session, language = "zh", 
         return plan;
     });
     return parsePlan({
-        schema_version: "1",
+        schema_version: "2",
         suite_id: "text_batch",
         name: input.name,
         planning: {
@@ -200,7 +200,7 @@ export function parseTextPlan(input, task, session, originalTask = task, languag
         throw new Error("请用文字保留用户要求的检查点；没有明确预期时正常追问，不要编造断言参数");
     const source = { kind: "user", uri: `session:${session}`, version: "1" };
     return parsePlan({
-        schema_version: "1",
+        schema_version: "2",
         suite_id: "text_plan",
         name: input.name.trim(),
         planning: {

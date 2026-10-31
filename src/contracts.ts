@@ -1,6 +1,8 @@
 /** 测试计划、运行事实及结果的共同类型与输入校验。 */
 import { Ajv } from "ajv";
 import type { TextInput } from "./case-input.js";
+import { toolExtractSchema, type ToolExtract } from "./tool-results.js";
+import { businessTool, toolArguments } from "./tool-runtime.js";
 export type Json =
   | null
   | boolean
@@ -39,7 +41,11 @@ export interface DataRow {
   expected: Record<string, Json>;
 }
 export interface Capture {
-  kind: "dom" | "http" | "browser_close" | "browser_open";
+  kind: "dom" | "http" | "browser_close" | "browser_open" | "tool";
+  tool_name?: string;
+  arguments?: Record<string, Json>;
+  arguments_json?: string;
+  extract?: ToolExtract;
   selector?: string;
   mode?:
     | "text"
@@ -56,7 +62,7 @@ export interface Capture {
 }
 export interface ActionSpec {
   goal: string;
-  capability: "browser" | "api";
+  capability: "browser" | "api" | "tool";
   allowed_targets: string[];
   inputs: Record<string, Json>;
   outputs: Record<string, Record<string, unknown>>;
@@ -98,7 +104,7 @@ export interface TestCase {
 }
 export interface TestSuite {
   planning?: { original_task: string; rationale: string; input?: TextInput };
-  schema_version: "1";
+  schema_version: "1" | "2";
   suite_id: string;
   name: string;
   source_refs: SourceRef[];
@@ -138,6 +144,7 @@ export interface CallRecord {
   isError?: boolean;
   result?: Json;
   body_started: "unknown" | boolean;
+  external_outcome?: "UNKNOWN";
 }
 export interface AssertionResult {
   assertion_id: string;
@@ -164,7 +171,8 @@ export interface ActualOperation {
   description_source: "model" | "capture_reason" | "template";
   parent_call_id: string;
   tool_call_id: string;
-  granularity: "atomic" | "composite";
+  granularity: "atomic" | "composite" | "unknown";
+  purpose?: "action" | "observe" | "cleanup";
   dispatch_observed: boolean;
   state:
     | "REGISTERED"
@@ -228,6 +236,15 @@ export interface CaseRun {
 export interface BrowserResource {
   id: string;
   state: "exists" | "absent" | "unknown";
+  ownership?: "run";
+  tool?: {
+    config: import("./tool-resource.js").ToolResourceConfig;
+    identity?: string | number;
+    start_call_id?: string;
+    close_call_id?: string;
+    close_digest: string;
+    connection?: import("./tool-runtime.js").ToolConnection;
+  };
   remote?: {
     hub_url: string;
     access_file?: string;
@@ -333,7 +350,7 @@ const stepSchema = {
       additionalProperties: false,
       properties: {
         goal: { type: "string", minLength: 1 },
-        capability: { enum: ["browser", "api"] },
+        capability: { enum: ["browser", "api", "tool"] },
         allowed_targets: {
           type: "array",
           minItems: 1,
@@ -354,7 +371,13 @@ const stepSchema = {
             required: ["kind"],
             additionalProperties: false,
             properties: {
-              kind: { enum: ["dom", "http", "browser_close", "browser_open"] },
+              kind: {
+                enum: ["dom", "http", "browser_close", "browser_open", "tool"],
+              },
+              tool_name: { type: "string", minLength: 1 },
+              arguments: { type: "object" },
+              arguments_json: { type: "string" },
+              extract: toolExtractSchema,
               selector: { type: "string" },
               mode: {
                 enum: [
@@ -433,8 +456,8 @@ export const planSchema = {
     },
     schema_version: {
       type: "string",
-      enum: ["1"],
-      description: '固定字符串1，JSON写作"1"，不是数字1',
+      enum: ["1", "2"],
+      description: '旧计划为"1"，通用工具计划为"2"，不是数字',
     },
     suite_id: id,
     name: { type: "string", minLength: 1 },
@@ -494,6 +517,17 @@ export function validateCaptures(
       throw new Error("采集输出未声明: " + name);
     if (cap.kind === "dom" && action.capability !== "browser")
       throw new Error("DOM采集需要浏览器步骤");
+    if (cap.kind === "tool") {
+      if (!cap.tool_name || !businessTool(cap.tool_name) || !cap.extract)
+        throw new Error("通用采集必须提供业务工具与结果提取定义");
+      toolArguments(cap);
+    } else if (
+      cap.tool_name ||
+      cap.arguments ||
+      cap.arguments_json ||
+      cap.extract
+    )
+      throw new Error("通用工具字段仅用于tool采集");
     if (
       cap.kind === "browser_open" &&
       (action.capability !== "browser" || action.capture_mode === "runtime")
@@ -589,6 +623,12 @@ export function parsePlan(input: unknown, allowIntents = false): TestSuite {
         throw new Error("步骤类型与内容不匹配");
       if (s.action) {
         const a = s.action;
+        if (
+          plan.schema_version === "1" &&
+          (a.capability === "tool" ||
+            Object.values(a.capture ?? {}).some((c) => c.kind === "tool"))
+        )
+          throw new Error('通用工具计划请使用schema_version="2"');
         for (const [name, schema] of Object.entries(a.outputs)) {
           if (!/^[A-Za-z0-9_-]+$/.test(name)) throw new Error("非法输出名");
           ajv.compile(schema);
@@ -608,7 +648,11 @@ export function parsePlan(input: unknown, allowIntents = false): TestSuite {
             typeof value === "object" &&
             !Array.isArray(value) &&
             typeof value.resource_ref === "string" &&
-            value.resource_ref !== "browser_context"
+            value.resource_ref !== "browser_context" &&
+            !(
+              plan.schema_version === "2" &&
+              value.resource_ref === "tool_context"
+            )
           )
             throw new Error("输入资源未绑定: " + value.resource_ref);
           if (
@@ -688,7 +732,11 @@ export function parsePlan(input: unknown, allowIntents = false): TestSuite {
         if (a.operator === "range" && (!a.unit || a.tolerance === undefined))
           throw new Error("数值范围必须声明单位和容差");
       }
-      if (s.resource_ref && s.resource_ref !== "browser_context")
+      if (
+        s.resource_ref &&
+        s.resource_ref !== "browser_context" &&
+        !(plan.schema_version === "2" && s.resource_ref === "tool_context")
+      )
         throw new Error("首版只支持由adapter登记的browser_context资源");
       if (
         c.cleanup.includes(s) &&

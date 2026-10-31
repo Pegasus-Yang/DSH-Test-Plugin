@@ -25,7 +25,7 @@ export declare class PreviewSetup {
     /** 停用或卸载时解除运行配置接入，仍在运行的 MCP 恢复原始配置。 */
     dispose(): Promise<void>;
     describe(): PreviewSettingsInfo;
-    prepare(): Promise<PreviewConfig | undefined>;
+    prepare(browser?: import("./browser-preferences.js").BrowserPreferences): Promise<PreviewConfig | undefined>;
     failed(error: unknown): string;
 }
 export {};

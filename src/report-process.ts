@@ -63,7 +63,12 @@ export function executionGroups(
       planned,
       steps: [],
       rows: [],
-      system: ["__reset", "__close"].includes(id),
+      system: [
+        "__reset",
+        "__close",
+        "__resource_open",
+        "__resource_close",
+      ].includes(id),
       status: "PENDING",
       needs_review: false,
     };
@@ -146,7 +151,7 @@ export function executionGroups(
       group.rows.some(
         (row) =>
           attention.has(row.state) ||
-          row.operation?.granularity === "composite",
+          (row.operation && row.operation.granularity !== "atomic"),
       );
   }
   return groups;
@@ -170,7 +175,7 @@ export function executionProcess(context: ProcessContext): string {
   const firstProblem = groups.find((group) => group.needs_review);
   const initial = firstProblem ?? business[0] ?? groups[0];
   const runtimeStep = (step: StepResult) =>
-    `<details class="step" data-step-id="${escape(step.step_id)}"><summary><span class="step-copy"><strong>${escape(step.description)}</strong><small>${escape(step.step_id)} · ${step.required ? "必需" : "可选"}</small></span><span class="duration">${duration(step.duration_ms)}</span>${badge(step.status)}${icon("chevron-down", "chevron")}</summary><div class="step-content">${step.reason ? `<p class="reason">${escape(step.reason)}</p>` : ""}${step.assertion ? compare(step, index) : ""}${step.observations.map((o) => `<div class="observation-line">${escape(o.output_name)} = <code>${escape(JSON.stringify(o.value))}</code>${o.evidence_refs[0] ? ` <button class="evidence-button" data-evidence="evidence-${index}-${escape(o.evidence_refs[0])}">查看证据</button>` : ""}</div>`).join("")}${step.capture_attempts?.length ? `<details class="inspect"><summary>采集方式与调整记录 · ${step.capture_attempts.length} 次</summary><pre>${json(step.capture_attempts)}</pre></details>` : ""}${step.calls.length ? `<details class="inspect"><summary>${step.calls.length} 次工具调用 · 展开执行记录</summary>${step.calls.map((call) => `<div class="call"><strong>${escape(call.name)}</strong><small>${call.finished_at ? (call.isError ? "错误" : "已结算") : "未结算"}</small><pre>${json(call.args_redacted)}</pre>${callDetails(`${instance.case_run_id}:${call.call_id}`, call)}</div>`).join("")}</details>` : ""}</div></details>`;
+    `<details class="step" data-step-id="${escape(step.step_id)}"><summary><span class="step-copy"><strong>${escape(step.description)}</strong><small>${escape(step.step_id)} · ${step.required ? "必需" : "可选"}</small></span><span class="duration">${duration(step.duration_ms)}</span>${badge(step.status)}${icon("chevron-down", "chevron")}</summary><div class="step-content">${step.reason ? `<p class="reason">${escape(step.reason)}</p>` : ""}${step.assertion ? compare(step, index) : ""}${step.observations.map((o) => `<div class="observation-line">${escape(o.output_name)} = <code>${escape(JSON.stringify(o.value))}</code>${o.evidence_refs[0] ? ` <button class="evidence-button" data-evidence="evidence-${index}-${escape(o.evidence_refs[0])}">查看证据</button>` : ""}</div>`).join("")}${step.observations.some((o) => o.producer.adapter === "tool-result-v1") ? `<details class="inspect"><summary>工具结果采集依据</summary><pre>${json(step.observations.map((o) => ({ name: o.output_name, producer: o.producer, context_id: o.context_id })))}</pre></details>` : ""}${step.capture_attempts?.length ? `<details class="inspect"><summary>采集方式与调整记录 · ${step.capture_attempts.length} 次</summary><pre>${json(step.capture_attempts)}</pre></details>` : ""}${step.calls.length ? `<details class="inspect"><summary>${step.calls.length} 次工具调用 · 展开执行记录</summary>${step.calls.map((call) => `<div class="call"><strong>${escape(call.name)}</strong><small>${call.finished_at ? (call.isError ? "错误" : "已结算") : "未结算"}</small><pre>${json(call.args_redacted)}</pre>${callDetails(`${instance.case_run_id}:${call.call_id}`, call)}</div>`).join("")}</details>` : ""}</div></details>`;
   const actualRow = (row: ActualRow, position: string) => {
     const step = instance.steps.find(
       (s) => s.step_id === row.source_step_id && s.phase === row.phase,
@@ -205,7 +210,7 @@ export function executionProcess(context: ProcessContext): string {
           ),
       ),
     );
-    return `<section class="actual-row actual-operation" data-actual-id="${escape(row.id)}"><div class="actual-heading"><span class="row-kind">${position}</span><h4>${escape(row.description)}</h4>${badge(row.state, row.state === "SUCCEEDED" ? "操作完成" : row.state === "ERROR" ? "操作执行异常" : (operationLabels[row.state] ?? row.state))}</div>${Object.keys(inputs).length ? `<p class="human-input">${escape(inputText({ ...row, inputs }))}</p>` : ""}${row.operation?.reason ? `<p class="reason">${escape(row.operation.reason)}</p>` : ""}${row.operation?.granularity === "composite" ? '<p class="reason">复合操作，内部动作需复核。</p>' : ""}${row.evidence_refs[0] ? `<button class="evidence-button" data-evidence="evidence-${index}-${escape(row.evidence_refs[0])}">查看证据</button>` : ""}<details class="inspect operation-details"><summary>操作依据</summary><p>来源：${escape(row.source_step_id)} · ${escape(row.source_description)}</p><pre>${json(row.inputs)}</pre>${call ? callDetails(`${instance.case_run_id}:${call.call_id}`, call) : ""}</details></section>`;
+    return `<section class="actual-row actual-operation" data-actual-id="${escape(row.id)}"><div class="actual-heading"><span class="row-kind">${position}</span><h4>${escape(row.description)}</h4>${badge(row.state, row.state === "SUCCEEDED" ? "操作完成" : row.state === "ERROR" ? "操作执行异常" : (operationLabels[row.state] ?? row.state))}</div>${Object.keys(inputs).length ? `<p class="human-input">${escape(inputText({ ...row, inputs }))}</p>` : ""}${row.operation?.reason ? `<p class="reason">${escape(row.operation.reason)}</p>` : ""}${row.operation?.granularity === "unknown" ? '<p class="reason">自定义工具的内部操作粒度未确认。</p>' : row.operation?.granularity === "composite" ? '<p class="reason">复合操作，内部动作需复核。</p>' : ""}${row.evidence_refs[0] ? `<button class="evidence-button" data-evidence="evidence-${index}-${escape(row.evidence_refs[0])}">查看证据</button>` : ""}<details class="inspect operation-details"><summary>操作依据</summary><p>来源：${escape(row.source_step_id)} · ${escape(row.source_description)}</p><pre>${json(row.inputs)}</pre>${call ? callDetails(`${instance.case_run_id}:${call.call_id}`, call) : ""}</details></section>`;
   };
   const renderGroup = (group: ExecutionGroup, number?: number) => {
     const checks = group.rows.filter((row) => row.kind === "check").length;

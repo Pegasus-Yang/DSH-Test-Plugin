@@ -7,6 +7,12 @@ import { RunBridgeConnection, remoteGuide } from "./runbridge-connection.js";
 import { LocalPreviewSettings, localGuide } from "./local-preview-settings.js";
 // 宿主未提供离开拦截 API，按表单保留草稿；成功保存或明确放弃后清除。
 const drafts = new WeakMap();
+const sourceLabels = {
+    auto: "自动使用可用工具",
+    mcp: "指定主要 MCP",
+    playwright: "本机 Playwright",
+    runbridge: "远程 RunBridge",
+};
 const values = (v, info) => ({
     browser: {
         ...browserPreferenceDefaults,
@@ -175,6 +181,7 @@ export function BrowserSettings({ form, info, refresh, }) {
             resourceId: "dsh-test-runbridge-resource",
             leaseSeconds: "dsh-test-runbridge-lease",
             mcpId: "dsh-test-preview-mcp",
+            executionMcpId: "dsh-test-execution-mcp",
             port: "dsh-test-browscreen-port",
             browscreenExecutable: "dsh-test-browscreen-executable",
         };
@@ -186,6 +193,9 @@ export function BrowserSettings({ form, info, refresh, }) {
     };
     const save = async () => {
         const invalid = {};
+        if (browser.backend === "mcp" &&
+            !info.mcpInstances.some((m) => m.id === browser.mcpId))
+            invalid.executionMcpId = "请选择已配置的主要 MCP 实例。";
         if (browser.backend === "runbridge") {
             if (!activeFile.trim())
                 invalid[hubSource ? "hubFile" : "accessFile"] =
@@ -206,7 +216,9 @@ export function BrowserSettings({ form, info, refresh, }) {
                 browser.leaseSeconds > 3600)
                 invalid.leaseSeconds = "会话租期须为 1～3600 秒的整数。";
         }
-        else if (draft.preview.enabled || draft.preview.recordingEnabled) {
+        else if ((draft.preview.enabled || draft.preview.recordingEnabled) &&
+            (browser.backend === "playwright" ||
+                info.mcpInstances.some((m) => m.id === draft.preview.mcpId && m.compatible))) {
             if (!draft.preview.mcpId ||
                 !info.mcpInstances.some((m) => m.id === draft.preview.mcpId && m.compatible))
                 invalid.mcpId = "请先选择可用的测试专用 Playwright MCP。";
@@ -242,17 +254,18 @@ export function BrowserSettings({ form, info, refresh, }) {
             const normalized = {
                 browser: {
                     ...browser,
+                    mcpId: browser.mcpId?.trim(),
                     accessFile: browser.accessFile.trim(),
                     hubFile: browser.hubFile?.trim(),
                     nodeId: browser.nodeId?.trim(),
-                    nodeLeaseSeconds: (browser.backend === "playwright" || !hubSource) &&
+                    nodeLeaseSeconds: (browser.backend !== "runbridge" || !hubSource) &&
                         browser.nodeLeaseSeconds !== undefined &&
                         (!Number.isInteger(browser.nodeLeaseSeconds) ||
                             browser.nodeLeaseSeconds < 1)
                         ? base.browser.nodeLeaseSeconds
                         : browser.nodeLeaseSeconds,
                     resourceId: browser.resourceId.trim(),
-                    leaseSeconds: browser.backend === "playwright" &&
+                    leaseSeconds: browser.backend !== "runbridge" &&
                         (!Number.isInteger(browser.leaseSeconds) ||
                             browser.leaseSeconds < 1 ||
                             browser.leaseSeconds > 3600)
@@ -263,6 +276,7 @@ export function BrowserSettings({ form, info, refresh, }) {
                     ...draft.preview,
                     browscreenExecutable: draft.preview.browscreenExecutable.trim() || "browscreen",
                     port: (browser.backend === "runbridge" ||
+                        !info.mcpInstances.some((m) => m.id === draft.preview.mcpId && m.compatible) ||
                         (!draft.preview.enabled && !draft.preview.recordingEnabled)) &&
                         (!Number.isInteger(draft.preview.port) ||
                             draft.preview.port < 1 ||
@@ -276,7 +290,7 @@ export function BrowserSettings({ form, info, refresh, }) {
                 {
                     op: "set",
                     path: ["browserConnection"],
-                    value: { ...normalized.browser },
+                    value: JSON.parse(JSON.stringify(normalized.browser)),
                 },
                 {
                     op: "set",
@@ -311,21 +325,21 @@ export function BrowserSettings({ form, info, refresh, }) {
             void save();
         }, children: [_jsxs("p", { className: "dsh-test-config-state", role: "status", children: [dirty
                         ? "有未保存修改；关闭设置后草稿仍保留，请保存或放弃。"
-                        : "当前配置已保存", " ", "\u00B7 \u5DF2\u4FDD\u5B58\u7684\u6D4F\u89C8\u5668\u4F4D\u7F6E\uFF1A", base.browser.backend === "runbridge"
-                        ? "远程 RunBridge"
-                        : "本机 Playwright"] }), info.activeBrowser && (_jsxs("p", { className: "dsh-test-setting-hint", children: ["\u6253\u5F00\u8BBE\u7F6E\u65F6\uFF0C\u8FD0\u884C\u4E2D\u7684\u6D4B\u8BD5\u7ED1\u5B9A\uFF1A", info.activeBrowser === "runbridge"
-                        ? "远程 RunBridge"
-                        : "本机 Playwright", "\u3002\u4FDD\u5B58\u4E0D\u4F1A\u5207\u6362\u8BE5\u6D4B\u8BD5\u3002"] })), !writable && (_jsxs("p", { role: "alert", children: ["\u5F53\u524D\u8FDE\u63A5\u4E3A\u53EA\u8BFB\u6216\u914D\u7F6E\u7531\u542F\u52A8 patch \u56FA\u5B9A\u3002\u8BF7\u5728\u53EF\u7F16\u8F91\u7684 DSH profile \u4E2D\u8C03\u6574\uFF0C\u4E0D\u80FD\u901A\u8FC7\u6B64\u9875\u8986\u76D6\u542F\u52A8\u914D\u7F6E\u3002", _jsx("a", { href: browser.backend === "runbridge" ? remoteGuide : localGuide, target: "_blank", rel: "noreferrer", children: "\u67E5\u770B\u914D\u7F6E\u8BF4\u660E" })] })), !!Object.keys(errors).length && (_jsxs("div", { role: "alert", className: "dsh-test-command-check", children: [_jsx("strong", { children: "\u8BBE\u7F6E\u5C1A\u672A\u4FDD\u5B58" }), Object.entries(errors).map(([key, message]) => (_jsxs("p", { children: [message, key !== "save" && (_jsx("button", { type: "button", className: "dsh-test-inline-action", onClick: () => focusError(key), children: "\u5B9A\u4F4D\u5B57\u6BB5" }))] }, key)))] })), _jsxs("fieldset", { disabled: saving || !writable, children: [_jsx("label", { htmlFor: "dsh-test-browser-backend", children: "\u6D4F\u89C8\u5668\u4F4D\u7F6E" }), _jsxs("select", { id: "dsh-test-browser-backend", value: browser.backend, disabled: !writable, onChange: (e) => edit({
+                        : "当前配置已保存", " ", "\u00B7 \u5DF2\u4FDD\u5B58\u7684\u6D4F\u89C8\u5668\u4F4D\u7F6E\uFF1A", sourceLabels[base.browser.backend]] }), info.activeBrowser && (_jsxs("p", { className: "dsh-test-setting-hint", children: ["\u6253\u5F00\u8BBE\u7F6E\u65F6\uFF0C\u8FD0\u884C\u4E2D\u7684\u6D4B\u8BD5\u7ED1\u5B9A\uFF1A", sourceLabels[info.activeBrowser], "\u3002\u4FDD\u5B58\u4E0D\u4F1A\u5207\u6362\u8BE5\u6D4B\u8BD5\u3002"] })), !writable && (_jsxs("p", { role: "alert", children: ["\u5F53\u524D\u8FDE\u63A5\u4E3A\u53EA\u8BFB\u6216\u914D\u7F6E\u7531\u542F\u52A8 patch \u56FA\u5B9A\u3002\u8BF7\u5728\u53EF\u7F16\u8F91\u7684 DSH profile \u4E2D\u8C03\u6574\uFF0C\u4E0D\u80FD\u901A\u8FC7\u6B64\u9875\u8986\u76D6\u542F\u52A8\u914D\u7F6E\u3002", _jsx("a", { href: browser.backend === "runbridge" ? remoteGuide : localGuide, target: "_blank", rel: "noreferrer", children: "\u67E5\u770B\u914D\u7F6E\u8BF4\u660E" })] })), !!Object.keys(errors).length && (_jsxs("div", { role: "alert", className: "dsh-test-command-check", children: [_jsx("strong", { children: "\u8BBE\u7F6E\u5C1A\u672A\u4FDD\u5B58" }), Object.entries(errors).map(([key, message]) => (_jsxs("p", { children: [message, key !== "save" && (_jsx("button", { type: "button", className: "dsh-test-inline-action", onClick: () => focusError(key), children: "\u5B9A\u4F4D\u5B57\u6BB5" }))] }, key)))] })), _jsxs("fieldset", { disabled: saving || !writable, children: [_jsx("label", { htmlFor: "dsh-test-browser-backend", children: "\u6D4F\u89C8\u5668\u4F4D\u7F6E" }), _jsxs("select", { id: "dsh-test-browser-backend", value: browser.backend, disabled: !writable, onChange: (e) => edit({
                             browser: {
                                 ...browser,
                                 backend: e.target.value,
                             },
-                        }), children: [_jsx("option", { value: "playwright", children: "\u672C\u673A Playwright MCP" }), _jsx("option", { value: "runbridge", children: "\u8FDC\u7A0B RunBridge MCP" })] }), browser.backend === "runbridge" && (_jsx(RunBridgeConnection, { value: browser, edit: (v) => edit({ browser: { ...browser, ...v } }), result: result, checking: checking, read: (connect) => void inspect(connect), cancel: () => {
+                        }), children: [_jsx("option", { value: "auto", children: "\u81EA\u52A8\u4F7F\u7528\u5F53\u524D\u53EF\u7528\u5DE5\u5177" }), _jsx("option", { value: "mcp", children: "\u6307\u5B9A\u4E3B\u8981 MCP \u5B9E\u4F8B" }), _jsx("option", { value: "playwright", children: "\u672C\u673A Playwright MCP\uFF08\u7BA1\u7406\u6D4B\u8BD5\u4E0A\u4E0B\u6587\uFF09" }), _jsx("option", { value: "runbridge", children: "\u8FDC\u7A0B RunBridge MCP" })] }), browser.backend === "auto" && (_jsx("p", { className: "dsh-test-setting-hint", children: "\u4F7F\u7528\u5F53\u524D\u5BF9\u8BDD\u5DF2\u542F\u7528\u7684\u4E1A\u52A1\u5DE5\u5177\uFF0C\u652F\u6301\u81EA\u5B9A\u4E49 Selenium \u7B49 MCP\uFF1B\u4E0A\u4E0B\u6587\u9ED8\u8BA4\u7531\u670D\u52A1\u7BA1\u7406\uFF0C\u539F\u751F\u6743\u9650\u4E0E\u5BA1\u6279\u7EE7\u7EED\u751F\u6548\u3002" })), browser.backend === "mcp" && (_jsxs(_Fragment, { children: [_jsx("label", { htmlFor: "dsh-test-execution-mcp", children: "\u4E3B\u8981 MCP \u5B9E\u4F8B" }), _jsxs("select", { id: "dsh-test-execution-mcp", value: browser.mcpId ?? "", "aria-invalid": !!errors.executionMcpId, onChange: (e) => edit({
+                                    browser: { ...browser, mcpId: e.target.value },
+                                    preview: { ...draft.preview, mcpId: e.target.value },
+                                }), children: [_jsx("option", { value: "", children: "\u8BF7\u9009\u62E9 MCP \u5B9E\u4F8B" }), info.mcpInstances.map((m) => (_jsx("option", { value: m.id, children: m.label }, m.id)))] }), _jsx("p", { className: "dsh-test-setting-hint", children: "\u4F18\u5148\u4F7F\u7528\u8BE5\u5B9E\u4F8B\u7684\u539F\u6709\u5DE5\u5177\uFF1B\u5A92\u4F53\u80FD\u529B\u72EC\u7ACB\u68C0\u6D4B\uFF0C\u5176\u4ED6\u5DF2\u6388\u6743\u4E1A\u52A1\u5DE5\u5177\u4ECD\u53EF\u534F\u4F5C\u3002" })] })), browser.backend === "runbridge" && (_jsx(RunBridgeConnection, { value: browser, edit: (v) => edit({ browser: { ...browser, ...v } }), result: result, checking: checking, read: (connect) => void inspect(connect), cancel: () => {
                             cancel();
                             setNotice("检测已取消，未保存设置。");
                         }, errors: errors })), _jsx("h3", { children: "\u753B\u9762\u4E0E\u5F55\u50CF" }), browser.backend === "runbridge" ? (_jsxs(_Fragment, { children: [_jsxs("label", { className: "dsh-test-setting-switch", children: [_jsx("input", { type: "checkbox", checked: browser.previewEnabled, disabled: !writable, onChange: (e) => edit({
                                             browser: { ...browser, previewEnabled: e.target.checked },
-                                        }) }), "\u663E\u793A\u5B9E\u65F6\u753B\u9762"] }), _jsx("p", { className: "dsh-test-setting-hint", children: "RunBridge \u63D0\u4F9B\u540C\u4E00\u8FDC\u7A0B\u9875\u9762\u7684\u753B\u9762\uFF0C\u65E0\u9700\u672C\u673A Browscreen\uFF1B\u8FDC\u7A0B\u5F55\u50CF\u6682\u4E0D\u652F\u6301\u3002" })] })) : (_jsx(LocalPreviewSettings, { value: draft.preview, edit: (v) => edit({ preview: { ...draft.preview, ...v } }), info: info, refresh: refresh, errors: errors }))] }), _jsxs("div", { className: "dsh-test-settings-save dsh-test-setting-actions", children: [_jsx("button", { type: "submit", disabled: !writable || !dirty || saving || checking, children: saving ? "正在保存…" : "保存浏览器设置" }), _jsx("button", { type: "button", disabled: !dirty || saving, onClick: () => {
+                                        }) }), "\u663E\u793A\u5B9E\u65F6\u753B\u9762"] }), _jsx("p", { className: "dsh-test-setting-hint", children: "RunBridge \u63D0\u4F9B\u540C\u4E00\u8FDC\u7A0B\u9875\u9762\u7684\u753B\u9762\uFF0C\u65E0\u9700\u672C\u673A Browscreen\uFF1B\u8FDC\u7A0B\u5F55\u50CF\u6682\u4E0D\u652F\u6301\u3002" })] })) : browser.backend === "mcp" &&
+                        !info.mcpInstances.some((m) => m.id === browser.mcpId && m.compatible) ? (_jsx("p", { className: "dsh-test-setting-hint", children: "\u5F53\u524D\u4E3B\u8981 MCP \u672A\u63D0\u4F9B\u81EA\u52A8\u753B\u9762\u6216\u5F55\u50CF\u63A5\u5165\uFF0C\u6D4B\u8BD5\u4E0E\u62A5\u544A\u4ECD\u53EF\u4F7F\u7528\u3002\u5DF2\u6709\u5A92\u4F53\u504F\u597D\u4F1A\u4FDD\u7559\u3002" })) : (_jsx(LocalPreviewSettings, { value: draft.preview, edit: (v) => edit({ preview: { ...draft.preview, ...v } }), info: info, refresh: refresh, errors: errors }))] }), _jsxs("div", { className: "dsh-test-settings-save dsh-test-setting-actions", children: [_jsx("button", { type: "submit", disabled: !writable || !dirty || saving || checking, children: saving ? "正在保存…" : "保存浏览器设置" }), _jsx("button", { type: "button", disabled: !dirty || saving, onClick: () => {
                             cancel();
                             const current = values(state.value, info);
                             setDraft(current);

@@ -8,8 +8,12 @@ import { appendFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
 const mode = process.env.SELENIUM_MCP_MODE ?? "native";
-if (!["native", "playwright-contract"].includes(mode))
-  throw new Error("SELENIUM_MCP_MODE 只支持 native 或 playwright-contract");
+if (
+  !["native", "renamed", "minimal", "managed", "playwright-contract"].includes(
+    mode,
+  )
+)
+  throw new Error("SELENIUM_MCP_MODE 不支持该测试模式");
 if (!process.env.SELENIUM_MCP_ORIGIN || !process.env.SELENIUM_MCP_OUTPUT)
   throw new Error("必须提供本轮计数页的 origin 和独立输出目录");
 const origin = new URL(process.env.SELENIUM_MCP_ORIGIN).origin;
@@ -115,29 +119,76 @@ function response(value, state, image) {
 serveStdio(() => {
   const server = new McpServer({ name: "selenium-fixture", version: "1.0.0" });
   function tool(name, description, inputSchema, handler) {
-    server.registerTool(name, { description, inputSchema }, async (args) => {
-      await audit({ event: "tool_started", tool: name, args });
-      try {
-        const result = await handler(args);
-        await audit({ event: "tool_finished", tool: name, ok: true });
-        return result;
-      } catch (error) {
+    if (
+      (mode === "minimal" &&
+        ["browser_close", "browser_take_screenshot"].includes(name)) ||
+      (mode === "managed" && name === "browser_close")
+    )
+      return;
+    const aliases = {
+      browser_navigate: "go_to",
+      browser_snapshot: "inspect_page",
+      browser_click: "click_element",
+      browser_evaluate: "evaluate_readonly",
+      browser_read: "get_text",
+      browser_take_screenshot: "photo",
+      browser_close: "dispose",
+    };
+    const publicName = mode === "renamed" ? (aliases[name] ?? name) : name;
+    let normalize = (args) => args;
+    if (mode === "renamed" && name === "browser_navigate") {
+      inputSchema = z.object({ address: z.string() });
+      normalize = (args) => ({ url: args.address });
+    }
+    if (
+      mode === "renamed" &&
+      ["browser_click", "browser_read"].includes(name)
+    ) {
+      inputSchema = z.object({ css: z.string() });
+      normalize = (args) => ({ selector: args.css });
+    }
+    if (mode === "renamed" && name === "browser_evaluate") {
+      inputSchema = z.object({ source: z.string() });
+      normalize = (args) => ({ script: args.source });
+    }
+    server.registerTool(
+      publicName,
+      { description, inputSchema },
+      async (args) => {
         await audit({
-          event: "tool_finished",
-          tool: name,
-          ok: false,
-          error: error.message,
+          event: "tool_started",
+          tool: publicName,
+          operation: name,
+          args,
         });
-        return {
-          isError: true,
-          content: [{ type: "text", text: error.message }],
-        };
-      }
-    });
+        try {
+          const result = await handler(normalize(args));
+          await audit({
+            event: "tool_finished",
+            tool: publicName,
+            operation: name,
+            ok: true,
+          });
+          return result;
+        } catch (error) {
+          await audit({
+            event: "tool_finished",
+            tool: publicName,
+            operation: name,
+            ok: false,
+            error: error.message,
+          });
+          return {
+            isError: true,
+            content: [{ type: "text", text: error.message }],
+          };
+        }
+      },
+    );
   }
   tool(
     "browser_navigate",
-    "使用 Selenium 打开本轮本地计数页面。",
+    "使用 Selenium 打开本轮本地计数页面。返回 structuredContent:{url,title}，content[0] 为同一对象的 JSON 文本。",
     z.object({ url: z.string() }),
     async ({ url }) => {
       if (new URL(url).origin !== origin)
@@ -172,7 +223,7 @@ serveStdio(() => {
   );
   tool(
     "browser_evaluate",
-    "在当前本地页面执行 JavaScript 观察并返回真实值。",
+    "在当前本地页面执行 Selenium JavaScript 观察，脚本需要 return。返回对象直接放入 structuredContent；标量返回 structuredContent:{value:标量}，content[0] 为同一对象的 JSON 文本。",
     compatible
       ? z.object({ function: z.string() })
       : z.object({ script: z.string() }),
@@ -190,7 +241,7 @@ serveStdio(() => {
   if (!compatible)
     tool(
       "browser_read",
-      "使用 Selenium 读取指定 CSS 元素的文字。",
+      "使用 Selenium 读取指定 CSS 元素的文字。返回 structuredContent:{text:字符串}，content[0] 为同一对象的 JSON 文本。",
       z.object({ selector: z.string() }),
       async ({ selector }) =>
         response({
@@ -217,6 +268,27 @@ serveStdio(() => {
     z.object({}),
     async () => response(await closeBrowser()),
   );
+  if (mode === "managed") {
+    tool(
+      "create_context",
+      "新建本服务的独立 Selenium 会话并返回真实身份。",
+      z.object({}),
+      async () => {
+        await browser();
+        return response({ id: identity.session_id });
+      },
+    );
+    tool(
+      "dispose_context",
+      "按原会话身份释放本服务的浏览器。",
+      z.object({ context_id: z.string() }),
+      async ({ context_id }) => {
+        if (context_id !== identity?.session_id)
+          throw new Error("资源身份不匹配");
+        return response(await closeBrowser());
+      },
+    );
+  }
   return server;
 });
 

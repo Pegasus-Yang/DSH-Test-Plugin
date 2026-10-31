@@ -3,7 +3,7 @@ import type { Context } from "@deepseek-ai/cordis";
 import type { Agent } from "@deepseek-ai/dsh-agent";
 import { ToolCallId } from "@deepseek-ai/dsh-llm/brand";
 import type { ToolExecutionResult, ToolRunContext } from "@deepseek-ai/dsh-tools";
-import { type Phase, type Step, type SuiteRun } from "./contracts.js";
+import { type Phase, type Step, type SuiteRun, type Json } from "./contracts.js";
 import { Recorder } from "./recorder.js";
 import { RecoveryManager } from "./recovery.js";
 import { RunBridge } from "./runbridge.js";
@@ -50,6 +50,11 @@ export declare class NativeTest {
     readonly browser?: RunBridge;
     closed: boolean;
     private planned;
+    private legacyPlanBrowser;
+    private toolCatalog;
+    private readonly captureLocks;
+    private readonly resourceConfig?;
+    private resourcePhase?;
     private reportReady;
     private cancelled;
     private cleanupTurn;
@@ -81,8 +86,13 @@ export declare class NativeTest {
     private announcement?;
     constructor(owner: NativeTests, agent: Agent, task: string, review?: boolean, input?: TextInput | undefined);
     preparePlanning(): Promise<void>;
-    private get browserPrefix();
+    get managedBrowser(): boolean;
+    assertTool(name: string): void;
     private get closeTool();
+    private scheduleToolCleanup;
+    private genericGuidance;
+    private lockToolCaptures;
+    private prepareOperationObservations;
     private guidance;
     private initialStep;
     get id(): string;
@@ -110,7 +120,7 @@ export declare class NativeTest {
             }[];
             observations: {
                 ref: string;
-                value: import("./contracts.js").Json;
+                value: Json;
             }[];
             inputs: {
                 [k: string]: unknown;
@@ -150,7 +160,7 @@ export declare class NativeTest {
     private bind;
     private isTrusted;
     private settle;
-    call(name: string, args: unknown, parent: ToolRunContext, explanation?: Pick<ActualOperation, "description" | "description_source">): Promise<{
+    call(name: string, args: unknown, parent: ToolRunContext, explanation?: Pick<ActualOperation, "description" | "description_source" | "purpose">): Promise<{
         callId: ToolCallId;
         result: ToolExecutionResult;
     }>;

@@ -13,7 +13,7 @@ For both exploration and repeatable testing, enter a task directly or maintain T
 | Capability | What you can do |
 | --- | --- |
 | Natural-language planning and review | Split a task into business steps and checks; execute directly, or review and revise the plan first |
-| Browser and API testing | Operate a Playwright MCP browser and determine concrete actions from the actual page; capture GET JSON responses and check status codes or response fields |
+| Generic tool and UI/API testing | Use registered business tools, including custom Selenium MCP services; extract actual results and compute assertions, with existing Playwright, RunBridge and GET JSON collection retained |
 | File cases and parameters | Save cases as TXT or Markdown, expand CSV rows, and review each instance before serial execution |
 | Progress and timing | See the current step, settled count, and elapsed time above the input; expand the full list for long text and multiple instances |
 | Live preview and recording | Watch headless browser frames in the same page; independently enable recording, then play, seek, and download MP4 from the report |
@@ -43,7 +43,7 @@ See the [visual tour](doc/user-guide/使用说明.en.md#visual-tour) for more pl
 ### 1. Prepare DSH and testing tools
 
 - Node.js **22.19+**, and DeepSeek Harness **0.2.1-alpha.1–alpha.5 and rc.1–rc.5** with a working model configured.
-- DSH **native tool mode**; browser tests use a dedicated local Playwright MCP or a remote RunBridge browser.
+- DSH **native tool mode** with the business tools required by your case. Custom Selenium MCP services can use their original names and schemas; managed Playwright and RunBridge connections remain available.
 - API-only tests need no browser. Source development requires pnpm **11.7.0**.
 
 Follow DSH's own instructions to install the host. See [plugin and browser configuration](doc/deployment/安装与运维.en.md#configure-the-installed-plugin).
@@ -55,20 +55,20 @@ For remote or VM browsers, use **RunBridge Hub 0.9.1 / Node 0.8.1**. See the [re
 For local review, install the same tgz supplied by the maintainer:
 
 ```sh
-dsh plugin --profile web add /absolute/path/dsh-test-plugin-0.17.0.tgz
+dsh plugin --profile web add /absolute/path/dsh-test-plugin-0.18.0.tgz
 dsh web
 ```
 
 After completed acceptance, review, and a manual push, enter this repository address in DSH's plugin manager, then enable the plugin:
 
 ```text
-https://github.com/Pegasus-Yang/DSH-Test-Plugin.git#v0.17.0
+https://github.com/Pegasus-Yang/DSH-Test-Plugin.git#v0.18.0
 ```
 
 Alternatively, install with the standalone DSH CLI:
 
 ```sh
-dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.17.0
+dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.18.0
 dsh web
 ```
 
@@ -76,7 +76,7 @@ Stop a running DSH normally before CLI installation. Use the same profile and `D
 
 See [installation and deployment](doc/deployment/安装与运维.en.md) for upgrades, uninstalling, and local packages.
 
-All 10 hosts use the same package without version exemptions. The build SDK remains alpha.3; ordinary plugin upgrades retain the supported hosts. See the [validation status (Chinese)](doc/project/0.17.0版本发布验收.md) and [dsh-compatibility.json](dsh-compatibility.json) for the exact support set.
+All 10 hosts use the same package without version exemptions. The build SDK remains alpha.3; ordinary plugin upgrades retain the supported hosts. See the [validation status (Chinese)](doc/project/0.18.0版本发布验收.md) and [dsh-compatibility.json](dsh-compatibility.json) for the exact support set.
 
 ### 3. Run your first test in a conversation
 
@@ -114,6 +114,8 @@ Use DSH's native Stop button to stop a run. After completion, rebuild a report f
 For a fuller workflow, try the [GitLab examples (Chinese)](examples/gitlab/README.md): two UI cases cover combined filtering and draft preview cancellation; three API cases cover search, pagination, and error responses, with a CSV parameter template also provided. Follow the [testing guide (Chinese)](doc/user-guide/GitLab测试要求与本地调试.md) to prepare a dedicated account and run-specific data. Credentials remain in a local configuration excluded from Git.
 
 ## Supported scope
+
+- Generic execution uses business tools already registered with the current DSH Agent, including custom Selenium MCP services, under their original names and schemas. Structured or textual results feed deterministic assertions. Screenshots, preview, recording, and resource cleanup depend on the connection capabilities; explicitly required checks or cleanup must still succeed. See [generic tool execution (Chinese)](doc/user-guide/通用工具运行.md).
 
 - Runs in DSH native tool mode with a shared, serial test environment. Independent browsers for concurrent conversations are a [future improvement (Chinese)](doc/design/多对话并行测试优化方案.md).
 - API collection supports **GET JSON**. Automatic preview uses a local Chromium Playwright MCP and currently supports one active page.

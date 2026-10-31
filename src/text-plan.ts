@@ -136,7 +136,7 @@ export function parseBatchPlan(
   });
   return parsePlan(
     {
-      schema_version: "1",
+      schema_version: "2",
       suite_id: "text_batch",
       name: input.name,
       planning: {
@@ -282,7 +282,7 @@ export function parseTextPlan(
   const source = { kind: "user", uri: `session:${session}`, version: "1" };
   return parsePlan(
     {
-      schema_version: "1",
+      schema_version: "2",
       suite_id: "text_plan",
       name: input.name.trim(),
       planning: {

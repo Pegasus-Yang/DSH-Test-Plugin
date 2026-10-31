@@ -220,8 +220,8 @@ export function LocalPreviewSettings({
         </>
       ) : (
         <p className="dsh-test-setting-hint">
-          画面与录像均已关闭，不需要配置 Browscreen。浏览器用例仍需已注册的本机
-          Playwright MCP。
+          画面与录像均已关闭，不需要配置
+          Browscreen。用例使用当前已注册的业务工具，不限定浏览器引擎。
           <a href={localGuide} target="_blank" rel="noreferrer">
             查看配置指南
           </a>
