@@ -78,6 +78,7 @@ The English guides describe the current implementation. Historical design and ac
 
 ## 设计与实施
 
+- [测试报告展示与手工用例优化方案](design/测试报告展示与手工用例优化方案.md)：待审阅、尚未实施；压缩顶部说明、突出手工 MD 下载、统一执行过程，以及补齐预期结果主语。
 - [配置展现与交互优化方案](design/配置展现与交互优化方案.md)：访问文件方式、状态分层与统一保存；实施结果见 0.14.0 验收。
 - [RunBridge 升级对接核查](design/RunBridge升级对接核查.md)：插件 0.13.1 的缺陷复现与原适配建议，实施结果见 0.13.2 验收。
 - [DSH 多版本兼容方案](design/DSH多版本兼容方案.md)：已按方案实施；明确 alpha.1–alpha.3 同包支持、开发基线与支持集合分离、必要改造、同一候选包的矩阵和旧宿主安装方式。
