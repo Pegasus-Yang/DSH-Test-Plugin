@@ -6,7 +6,7 @@
 
 ## 准备服务与私有文件
 
-需要插件 **0.15.0 及以上**（当前版本为 **0.16.0**）、公开 DSH **0.2.1-alpha.1／alpha.2／alpha.3**、Node.js **22.19+**，配套 RunBridge **Hub 0.9.1／Node 0.8.1**。租约接口从 Hub 0.9.0／Node 0.8.0 引入，具体实测版本见本轮验收。Hub 开启 MCP、配置独立 hub_token_file 与 public_url；Node 完成登记并提供 READY 的受管理 Chromium。服务安装、启动及迁移按两端自己的当前指南进行，浏览器操作及 PNG 采集由 Node 的 Python Playwright 执行。
+需要插件 **0.15.0 及以上**（当前版本为 **0.17.0**）、公开 DSH **0.2.1-alpha.1～alpha.5、rc.1～rc.5**、Node.js **22.19+**，配套 RunBridge **Hub 0.9.1／Node 0.8.1**。租约接口从 Hub 0.9.0／Node 0.8.0 引入，具体实测版本见本轮验收。Hub 开启 MCP、配置独立 hub_token_file 与 public_url；Node 完成登记并提供 READY 的受管理 Chromium。服务安装、启动及迁移按两端自己的当前指南进行，浏览器操作及 PNG 采集由 Node 的 Python Playwright 执行。
 
 两类文件都放在 **运行 DSH 的机器** 的私有目录，建议权限 600。支持 JSON 与带注释 YAML，默认模板为 YAML，按内容解析，不依赖后缀；最多 32 KiB，只允许单一配置对象，不使用重复字段或多文档。字段用字符串并保留引号，不把令牌发给模型、写进用例或提交 Git。enrollment.token 只用于 Node 登记，node_token 只用于设备身份，均不能代替下列凭据。
 

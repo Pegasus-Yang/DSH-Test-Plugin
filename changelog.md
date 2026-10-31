@@ -4,8 +4,13 @@
 
 ## 未发布
 
+## [0.17.0](https://github.com/Pegasus-Yang/DSH-Test-Plugin/tree/v0.17.0) — 2026-10-31
+
+- 新增 DSH `0.2.1-alpha.4`、`alpha.5` 和 `rc.1`～`rc.5` 支持，与已有 alpha.1～3 共用同一个插件包；全部 22 个 DSH peer 精确覆盖这 10 版，保留 alpha.3 构建 SDK，不依赖版本豁免。
+- CI 从统一兼容策略生成全部支持宿主矩阵；准入回归兼容旧 `peers` 与新 `requirements` 返回字段，同批类型回归显式安装目标版本的公开客户端 SDK。
 - 更新中英文 README 和当前使用指南的报告截图，展示统一执行过程、完整预期与实际值、手工 MD 下载主按钮；保留真实运行的记录复核提示。
-- CI 在版本标签推送且三版宿主全部通过后，自动发布 GitHub Release；上传同一候选包的版本化 tgz 和 SHA-256 校验文件，核对标签、源码与包内版本，预发布标签标记为 prerelease。
+- CI 在版本标签推送且全部支持宿主通过后，自动发布 GitHub Release；上传同一候选包的版本化 tgz 和 SHA-256 校验文件，核对标签、源码与包内版本，预发布标签标记为 prerelease。
+- 安装、SDK 回归、Web 设置及真实模型验收的结果和边界见 [0.17.0 验收](doc/project/0.17.0版本发布验收.md)；提交与附注标签由用户审核后手动推送。
 
 ## [0.16.0](https://github.com/Pegasus-Yang/DSH-Test-Plugin/tree/v0.16.0) — 2026-10-31
 

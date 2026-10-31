@@ -108,7 +108,7 @@ jobs:
             ${{ runner.temp }}/host-check/profile-locks/**
 
   compatibility:
-    name: 三个宿主全部通过
+    name: 全部支持宿主通过
     needs: [plugin, host]
     if: always()
     runs-on: ubuntu-24.04

@@ -77,7 +77,7 @@ await writeFile(
 );
 const browser = await chromium.launch({ headless: true });
 const context = await browser.newContext({
-  viewport: { width: 1440, height: 1050 },
+  viewport: { width: 1440, height: 900 },
   locale: "zh-CN",
 });
 const page = await context.newPage();

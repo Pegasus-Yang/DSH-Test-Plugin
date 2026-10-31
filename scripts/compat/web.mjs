@@ -10,7 +10,7 @@ const [stateFile, mode] = process.argv.slice(2);
 const state = JSON.parse(await readFile(stateFile, "utf8"));
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage({
-  viewport: { width: 1440, height: 1050 },
+  viewport: { width: 1440, height: 900 },
   locale: "zh-CN",
 });
 const errors = [];

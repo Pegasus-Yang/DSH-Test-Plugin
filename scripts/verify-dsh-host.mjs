@@ -193,9 +193,14 @@ async function installHost(root, cohort) {
   if (cohort) {
     manifest.overrides = overrides;
     manifest.devDependencies = Object.fromEntries(
-      Object.entries({ ...pkg.dependencies, ...pkg.devDependencies }).filter(
-        ([name]) => !name.startsWith("@deepseek-ai/"),
-      ),
+      Object.entries({ ...pkg.dependencies, ...pkg.devDependencies })
+        .filter(
+          ([name]) =>
+            !name.startsWith("@deepseek-ai/") ||
+            name.startsWith("@deepseek-ai/dsh-"),
+        )
+        // 部分客户端 SDK 不作为宿主的 Node 依赖安装；类型回归须显式安装同批公开 SDK。
+        .map(([name, dependency]) => [name, overrides[name] ?? dependency]),
     );
   }
   await writeFile(

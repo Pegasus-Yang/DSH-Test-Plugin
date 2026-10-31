@@ -34,12 +34,27 @@ describe("DSH 多版本发行合同", () => {
       expect(() => assertSupportedHost(policy, host)).not.toThrow();
   });
   it.each([
+    "0.2.1-alpha.4",
+    "0.2.1-alpha.5",
+    "0.2.1-rc.1",
+    "0.2.1-rc.2",
+    "0.2.1-rc.3",
+    "0.2.1-rc.4",
+    "0.2.1-rc.5",
+  ])("新增宿主 %s 已纳入安装声明", (host) => {
+    expect(() => assertSupportedHost(policy, host)).not.toThrow();
+    for (const [name, range] of Object.entries(manifest().peerDependencies))
+      if (name.startsWith("@deepseek-ai/dsh-"))
+        expect(String(range).split(" || ")).toContain(host);
+  });
+  it.each([
     "0.2.0",
     "0.2.1-alpha.0",
-    "0.2.1-alpha.4",
+    "0.2.1-alpha.6",
     "0.2.1-alpha.10",
-    "0.2.1-rc.1",
+    "0.2.1-rc.6",
     "0.2.1",
+    "0.2.2-alpha.2",
     "0.3.0",
   ])("不放行未验证宿主 %s", (host) => {
     expect(() => assertSupportedHost(policy, host)).toThrow("未声明支持");
@@ -51,9 +66,9 @@ describe("DSH 多版本发行合同", () => {
     },
   );
   it("升级开发 SDK 不能隐式改变支持集合", () => {
-    expect(() =>
-      validatePolicy({ ...policy, buildSdk: "0.2.1-alpha.4" }),
-    ).toThrow("构建 SDK");
+    expect(() => validatePolicy({ ...policy, buildSdk: "0.2.1-rc.6" })).toThrow(
+      "构建 SDK",
+    );
     const pkg = manifest();
     pkg.devDependencies["@deepseek-ai/dsh-agent"] = "0.2.1-alpha.2";
     expect(() => checkCompatibility(pkg, policy)).toThrow("开发版本");

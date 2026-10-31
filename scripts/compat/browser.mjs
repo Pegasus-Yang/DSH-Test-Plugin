@@ -1,4 +1,4 @@
-/** 三版共用浏览器操作；先完成宿主首次引导，再使用实际设置入口。 */
+/** 各宿主共用浏览器操作；先完成宿主首次引导，再使用实际设置入口。 */
 import assert from "node:assert/strict";
 
 async function withOnboarding(page, action, timeout) {

@@ -42,7 +42,7 @@ See the [visual tour](doc/user-guide/使用说明.en.md#visual-tour) for more pl
 
 ### 1. Prepare DSH and testing tools
 
-- Node.js **22.19+**, and DeepSeek Harness **0.2.1-alpha.1, alpha.2, or alpha.3** with a working model configured.
+- Node.js **22.19+**, and DeepSeek Harness **0.2.1-alpha.1–alpha.5 and rc.1–rc.5** with a working model configured.
 - DSH **native tool mode**; browser tests use a dedicated local Playwright MCP or a remote RunBridge browser.
 - API-only tests need no browser. Source development requires pnpm **11.7.0**.
 
@@ -55,20 +55,20 @@ For remote or VM browsers, use **RunBridge Hub 0.9.1 / Node 0.8.1**. See the [re
 For local review, install the same tgz supplied by the maintainer:
 
 ```sh
-dsh plugin --profile web add /absolute/path/dsh-test-plugin-0.16.0.tgz
+dsh plugin --profile web add /absolute/path/dsh-test-plugin-0.17.0.tgz
 dsh web
 ```
 
 After completed acceptance, review, and a manual push, enter this repository address in DSH's plugin manager, then enable the plugin:
 
 ```text
-https://github.com/Pegasus-Yang/DSH-Test-Plugin.git#v0.16.0
+https://github.com/Pegasus-Yang/DSH-Test-Plugin.git#v0.17.0
 ```
 
 Alternatively, install with the standalone DSH CLI:
 
 ```sh
-dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.16.0
+dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.17.0
 dsh web
 ```
 
@@ -76,7 +76,7 @@ Stop a running DSH normally before CLI installation. Use the same profile and `D
 
 See [installation and deployment](doc/deployment/安装与运维.en.md) for upgrades, uninstalling, and local packages.
 
-All three hosts use the same package without version exemptions. The build SDK remains alpha.3; ordinary plugin upgrades retain the supported hosts. See the [validation status (Chinese)](doc/project/0.16.0版本发布验收.md) and [dsh-compatibility.json](dsh-compatibility.json) for the exact support set.
+All 10 hosts use the same package without version exemptions. The build SDK remains alpha.3; ordinary plugin upgrades retain the supported hosts. See the [validation status (Chinese)](doc/project/0.17.0版本发布验收.md) and [dsh-compatibility.json](dsh-compatibility.json) for the exact support set.
 
 ### 3. Run your first test in a conversation
 
