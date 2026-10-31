@@ -255,8 +255,3 @@ export function inputText(row) {
         .map(([key, value]) => `${labels[key] ?? key}：${typeof value === "string" ? value : JSON.stringify(value)}`)
         .join("；") || "—");
 }
-export function expectedText(row) {
-    return typeof row.expected === "string"
-        ? row.expected
-        : `${row.expected.description}；${row.expected.operator} ${JSON.stringify(row.expected.value)}`;
-}

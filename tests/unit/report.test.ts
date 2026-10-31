@@ -61,7 +61,59 @@ it("用户字段安全转义，报告脚本与图标离线自包含", () => {
   expect(html).toContain("data:image/svg+xml;base64,");
 });
 
-it("新报告默认显示编号实际步骤和实例下载，旧记录继续使用原步骤页", () => {
+it.each(["COMPLETE", "PENDING"] as const)(
+  "资源 %s 与业务状态分开，顶部不重复整批统计或租约标识",
+  (cleanup) => {
+    const html = render((run) => {
+      run.instances[0]!.status = "ERROR";
+      run.node_lease = {
+        source: "hub",
+        hub_url: "https://hub.example",
+        node_id: "node-fixture",
+        grant_id: "grant-fixture",
+        state: "RELEASED",
+        cleanup,
+      };
+    });
+    const header = html
+      .split('<header class="run-header">')[1]!
+      .split("</header>")[0]!;
+    expect(header).not.toContain('class="metrics"');
+    expect(header).not.toContain("grant-fixture");
+    expect(header).toContain(
+      cleanup === "COMPLETE" ? "Node 已归还" : "Node 归还未获确认",
+    );
+    expect(header.includes("resource-warning")).toBe(cleanup !== "COMPLETE");
+    const info = html.split('<section class="run-info"')[1]!;
+    expect(info).toContain("grant-fixture");
+    expect(html).toContain('data-status="ERROR"');
+  },
+);
+
+it("多实例的主要下载分别指向本实例，整批下载使用独立文件", () => {
+  const html = render((run) => {
+    const other = structuredClone(run.instances[0]!);
+    other.case_run_id = "second-instance";
+    other.data_id = "second-data";
+    run.instances.push(other);
+  });
+  const articles = [
+    ...html.matchAll(/<article class="case"[\s\S]*?<\/article>/g),
+  ].map((match) => match[0]);
+  expect(articles).toHaveLength(2);
+  expect(articles[0]).toContain(
+    'class="primary-download" href="manual-cases-1.md?download=1"',
+  );
+  expect(articles[1]).toContain(
+    'class="primary-download" href="manual-cases-2.md?download=1"',
+  );
+  expect(articles[1]).not.toContain('href="manual-cases-1.md?download=1"');
+  expect(html).toContain(
+    'class="primary-download" href="manual-cases.md?download=1"',
+  );
+});
+
+it("新旧报告统一显示执行过程和实例 MD 下载，旧记录明确说明缺少实际动作", () => {
   const html = render((run) => {
     run.manifest.actual_operations_schema = "1";
     const binding = {
@@ -109,16 +161,20 @@ it("新报告默认显示编号实际步骤和实例下载，旧记录继续使�
       },
     ];
   });
-  expect(html).toContain('aria-selected="true" data-tab="actual"');
-  expect(html).toContain('data-panel="steps" hidden');
+  expect(html).toContain('data-tab="process"');
+  expect(html).not.toContain('data-tab="actual"');
+  expect(html).not.toContain('data-tab="steps"');
   expect(html).toContain('data-actual-id="operation"');
   expect(html).toContain("输入 &lt;agent&gt; | 关键词");
-  expect(html).toContain("下载手工用例 Markdown");
+  expect(html).toContain(
+    'class="primary-download" href="manual-cases-1.md?download=1"',
+  );
+  expect(html).toContain("下载手工用例 .md");
   expect(html).not.toContain('data-tab="recordings"');
   expect(html).not.toContain('id="image-dialog"');
   const old = render(() => {});
-  expect(old).not.toMatch(/<button[^>]+data-tab="actual"/);
-  expect(old).toContain('aria-selected="true" data-tab="steps"');
+  expect(old).toContain('data-tab="process"');
+  expect(old).toContain("该历史运行未记录实际动作");
 });
 it("缺失证据显示明确提示，不产生无效预览或捏造附件", () => {
   const html = render((run) => {

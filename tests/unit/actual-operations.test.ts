@@ -306,7 +306,9 @@ it("手工用例只含五部分和三列，成功动作合并真实输入，无�
   ]);
   expect(md.match(/^\| 序号 \| 操作步骤 \| 预期结果 \|$/gm)).toHaveLength(3);
   expect(md).toContain("| 1 | 在搜索框中输入「qa_user_1」 |  |");
-  expect(md).toContain("| 2 | 核对点赞不为0 | 不等于 0 |");
+  expect(md).toContain(
+    "| 2 | 核对点赞不为0 | 核对点赞不为0；该检查采集到的值应不等于 0。 |",
+  );
   for (const text of [
     "本次状态",
     "完整性",
@@ -452,7 +454,7 @@ it("前置与收尾按原定义排序、分别编号，声明的预期保留", (
   ];
   const md = manualCasesMarkdown(run);
   expect(md).toContain(
-    "## 前置用例\n\n| 序号 | 操作步骤 | 预期结果 |\n| --- | --- | --- |\n| 1 | 确认账号可用 | 等于 0 |",
+    "## 前置用例\n\n| 序号 | 操作步骤 | 预期结果 |\n| --- | --- | --- |\n| 1 | 确认账号可用 | 确认账号可用；该检查采集到的值应等于 0。 |",
   );
   expect(md).toContain("| 1 | 退出登录 |  |");
 });

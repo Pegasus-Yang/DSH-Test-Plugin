@@ -1,5 +1,6 @@
 /** 从操作事实生成供后续执行的手工用例；执行记录另存 JSON。 */
 import { join } from "node:path";
+import { expectationText, expectedValueText } from "./expectation-text.js";
 import { atomicWrite } from "./recorder.js";
 import { projectActualCase, } from "./actual-operations.js";
 import { manualCaseSource, readManualSource, } from "./manual-source.js";
@@ -14,21 +15,8 @@ export function actualStepsDocument(run) {
         cases: run.instances.map((i) => projectActualCase(run, i)),
     };
 }
-const valueText = (value) => typeof value === "string"
-    ? value === ""
-        ? "空字符串"
-        : `「${value.replace(/\r\n|\r|\n/g, "\\n")}」`
-    : JSON.stringify(value);
+const valueText = expectedValueText;
 const cell = (text) => text.replace(/[\\|<>]/g, "\\$&").replace(/\r\n|\r|\n/g, " ");
-const operators = {
-    eq: "等于",
-    neq: "不等于",
-    contains: "包含",
-    range: "满足范围",
-    exists: "存在性为",
-    text: "文本符合",
-    visible: "可见性为",
-};
 function operationDescription(description, name, inputs) {
     const tool = name.replace(/^mcp__playwright__/, "");
     const element = typeof inputs.element === "string" ? inputs.element : "";
@@ -87,17 +75,22 @@ function operationDescription(description, name, inputs) {
         return `${inputs.accept ? "确认" : "取消"}页面对话框${typeof inputs.promptText === "string" ? "，输入" + valueText(inputs.promptText) : ""}`;
     return description;
 }
-function manualRows(rows, source, data, calls = []) {
+function manualRows(rows, source, data, calls = [], definitions = []) {
     return rows
         .filter((r) => r.kind === "check" || r.state === "SUCCEEDED")
         .map((row) => {
         if (row.kind === "check") {
             const check = source.checks[row.source_step_id] ??
                 (typeof row.expected === "object" ? row.expected : undefined);
+            const spec = definitions.find((step) => step.step_id === row.source_step_id)?.assertion;
             return {
                 description: check?.description ?? row.description,
                 expected: check
-                    ? `${operators[check.operator] ?? check.operator} ${valueText(check.value)}`
+                    ? expectationText({
+                        ...check,
+                        unit: spec?.unit,
+                        tolerance: spec?.tolerance,
+                    })
                     : "",
             };
         }
@@ -110,22 +103,27 @@ function manualRows(rows, source, data, calls = []) {
         };
     });
 }
-function phaseRows(rows, definitions, source, data, calls = []) {
+function phaseRows(rows, definitions, source, data, calls = [], effective = []) {
     // 按原前置/收尾顺序补入声明的条件，不把失败尝试写成下一次必须重做的动作。
     const steps = [];
     for (const definition of definitions) {
         const recorded = rows.filter((r) => r.source_step_id === definition.step_id);
         if (recorded.length)
-            steps.push(...manualRows(recorded, source, data, calls));
+            steps.push(...manualRows(recorded, source, data, calls, effective));
         else
             steps.push({
                 description: definition.description,
                 expected: definition.expected
-                    ? `${operators[definition.expected.operator] ?? definition.expected.operator} ${valueText(definition.expected.value)}`
+                    ? expectationText({
+                        description: definition.description,
+                        ...definition.expected,
+                        unit: effective.find((step) => step.step_id === definition.step_id)?.assertion?.unit,
+                        tolerance: effective.find((step) => step.step_id === definition.step_id)?.assertion?.tolerance,
+                    })
                     : "",
             });
     }
-    steps.push(...manualRows(rows.filter((r) => !definitions.some((d) => d.step_id === r.source_step_id)), source, data, calls));
+    steps.push(...manualRows(rows.filter((r) => !definitions.some((d) => d.step_id === r.source_step_id)), source, data, calls, effective));
     return steps;
 }
 function rowsTable(rows) {
@@ -146,7 +144,7 @@ export function manualCasesMarkdown(run, caseRunId, data) {
         const c = projectActualCase(run, i);
         const source = sources[i.case_run_id] ?? manualCaseSource(run)[i.case_run_id];
         const original = source.original_case.replace(/[<>]/g, "\\$&");
-        return `# 用例名称：${cell(source.name)}\n\n## 原始用例\n\n${original}\n\n## 前置用例\n\n${rowsTable(phaseRows(c.preconditions.recorded, source.preconditions, source, data, c.call_records))}\n## 实际步骤\n\n${rowsTable(manualRows(c.steps, source, data, c.call_records))}\n## 收尾\n\n${rowsTable(phaseRows(c.cleanup.recorded, source.cleanup, source, data, c.call_records))}`;
+        return `# 用例名称：${cell(source.name)}\n\n## 原始用例\n\n${original}\n\n## 前置用例\n\n${rowsTable(phaseRows(c.preconditions.recorded, source.preconditions, source, data, c.call_records, i.effective_steps))}\n## 实际步骤\n\n${rowsTable(manualRows(c.steps, source, data, c.call_records, i.effective_steps))}\n## 收尾\n\n${rowsTable(phaseRows(c.cleanup.recorded, source.cleanup, source, data, c.call_records, i.effective_steps))}`;
     })
         .join("\n---\n\n");
 }

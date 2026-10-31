@@ -36,11 +36,11 @@ export function reportInteractions() {
     const filters = ["case", "data", "status"].map((id) => document.getElementById(id));
     const search = document.getElementById("search");
     let selected = cases[0]?.id;
-    let tab = cases[0]?.querySelector('[data-tab="actual"]') ? "actual" : "steps";
+    let tab = "process";
     const navigate = (view) => {
         for (const page of document.querySelectorAll("[data-view]"))
             page.hidden = page.dataset.view !== view;
-        for (const button of document.querySelectorAll("[data-nav]")) {
+        for (const button of document.querySelectorAll(".rail [data-nav]")) {
             button.classList.toggle("active", button.dataset.nav === view);
             button.setAttribute("aria-current", button.dataset.nav === view ? "page" : "false");
         }
@@ -49,12 +49,14 @@ export function reportInteractions() {
         const active = cases.find((item) => item.id === selected);
         if (active &&
             ![...active.querySelectorAll("[data-tab]")].some((button) => button.dataset.tab === value))
-            value = active.querySelector('[data-tab="actual"]') ? "actual" : "steps";
+            value = "process";
         tab = value;
         for (const video of document.querySelectorAll("video"))
             video.pause();
-        for (const button of document.querySelectorAll("[data-tab]"))
+        for (const button of document.querySelectorAll("[data-tab]")) {
             button.setAttribute("aria-selected", String(button.dataset.tab === value));
+            button.tabIndex = button.dataset.tab === value ? 0 : -1;
+        }
         for (const panel of document.querySelectorAll("[data-panel]"))
             panel.hidden = panel.dataset.panel !== value;
     };
@@ -96,6 +98,29 @@ export function reportInteractions() {
         };
     for (const button of document.querySelectorAll("[data-tab]"))
         button.onclick = () => showTab(button.dataset.tab);
+    for (const button of document.querySelectorAll("[data-process-expand]"))
+        button.onclick = () => {
+            const article = button.closest("article.case");
+            for (const group of article.querySelectorAll("[data-process-group]"))
+                group.open = button.dataset.processExpand === "true";
+            for (const phase of article.querySelectorAll(".process-phase"))
+                phase.open = button.dataset.processExpand === "true";
+        };
+    for (const button of document.querySelectorAll("[data-process-focus]"))
+        button.onclick = () => {
+            showTab("process");
+            const article = button.closest("article.case");
+            const group = article.querySelector("[data-process-issue]") ??
+                article.querySelector("[data-process-group]");
+            if (!group)
+                return;
+            group.open = true;
+            const phase = group.closest(".process-phase");
+            if (phase)
+                phase.open = true;
+            group.scrollIntoView({ block: "nearest" });
+            group.querySelector("summary")?.focus();
+        };
     for (const button of document.querySelectorAll("[data-filter-status]"))
         button.onclick = () => {
             filters.forEach((f) => {
@@ -107,11 +132,19 @@ export function reportInteractions() {
             update();
         };
     for (const button of document.querySelectorAll("[data-evidence]"))
-        button.onclick = () => {
+        button.onclick = async () => {
             showTab("attachments");
-            document
-                .getElementById(button.dataset.evidence)
-                ?.scrollIntoView({ block: "nearest" });
+            const article = button.closest("article.case");
+            const target = document.getElementById(button.dataset.evidence);
+            // 隐藏面板中的懒加载截图须先取得尺寸，避免定位后被图片推离视口。
+            await Promise.all([...article.querySelectorAll(".attachments img")].map((image) => {
+                image.loading = "eager";
+                return image.decode().catch(() => { });
+            }));
+            if (!target || article.hidden || tab !== "attachments")
+                return;
+            target.scrollIntoView({ block: "start" });
+            target.focus({ preventScroll: true });
         };
     filters.forEach((f) => f.addEventListener("change", update));
     search.addEventListener("input", update);

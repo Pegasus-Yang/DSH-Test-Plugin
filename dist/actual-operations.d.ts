@@ -69,4 +69,3 @@ export declare function operationArguments(value: unknown): Record<string, Json>
 export declare function projectActualCase(run: SuiteRun, instance: CaseRun): ActualCase;
 export declare const operationLabels: Record<string, string>;
 export declare function inputText(row: ActualRow): string;
-export declare function expectedText(row: ActualRow): string;

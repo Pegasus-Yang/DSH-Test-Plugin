@@ -765,7 +765,7 @@ it.each([
     ).toBe(true);
     expect(
       readFileSync(join(run.recorder.directory, "report.html"), "utf8"),
-    ).toContain("实际值 ACTUAL");
+    ).toContain("本次实际值");
     expect(t.manager.reportId("other")).toBeUndefined();
   },
 );

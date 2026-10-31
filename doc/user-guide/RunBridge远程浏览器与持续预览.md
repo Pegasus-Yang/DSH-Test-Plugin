@@ -6,7 +6,7 @@
 
 ## 准备服务与私有文件
 
-需要插件 **0.15.0**、公开 DSH **0.2.1-alpha.1／alpha.2／alpha.3**、Node.js **22.19+**，配套 RunBridge **Hub 0.9.1／Node 0.8.1**。租约接口从 Hub 0.9.0／Node 0.8.0 引入，具体实测版本见本轮验收。Hub 开启 MCP、配置独立 hub_token_file 与 public_url；Node 完成登记并提供 READY 的受管理 Chromium。服务安装、启动及迁移按两端自己的当前指南进行，浏览器操作及 PNG 采集由 Node 的 Python Playwright 执行。
+需要插件 **0.15.0 及以上**（当前版本为 **0.16.0**）、公开 DSH **0.2.1-alpha.1／alpha.2／alpha.3**、Node.js **22.19+**，配套 RunBridge **Hub 0.9.1／Node 0.8.1**。租约接口从 Hub 0.9.0／Node 0.8.0 引入，具体实测版本见本轮验收。Hub 开启 MCP、配置独立 hub_token_file 与 public_url；Node 完成登记并提供 READY 的受管理 Chromium。服务安装、启动及迁移按两端自己的当前指南进行，浏览器操作及 PNG 采集由 Node 的 Python Playwright 执行。
 
 两类文件都放在 **运行 DSH 的机器** 的私有目录，建议权限 600。支持 JSON 与带注释 YAML，默认模板为 YAML，按内容解析，不依赖后缀；最多 32 KiB，只允许单一配置对象，不使用重复字段或多文档。字段用字符串并保留引号，不把令牌发给模型、写进用例或提交 Git。enrollment.token 只用于 Node 登记，node_token 只用于设备身份，均不能代替下列凭据。
 
@@ -98,4 +98,4 @@ browserConnection:
 
 隔离后在 **测试环境 → 处理并释放** 使用原节点令牌查询及归还原 grant；这会回收该租约下遗留会话，并等待 RELEASED／COMPLETE。旧业务结果、会话和请求 UNKNOWN 保持原样。QUARANTINED、释放超时、缺少原令牌或换成另一 grant 时保留隔离，由 Hub／设备维护者核查并按[环境处置指南](测试环境卡住怎么办.md)提交实际证据。共享 hub_token 不能强制回收，也不能接管旧会话。
 
-本轮租约适配见[0.15.0 验收](../project/0.15.0版本发布验收.md)。[0.14.1 YAML／JSON 验收](../project/0.14.1版本发布验收.md)、[0.14.0 配置交互](../project/0.14.0版本发布验收.md)和[0.13.2 的 0.7.0 适配](../project/0.13.2版本发布验收.md)保留历史范围。旧服务和旧静态许可不自动迁移到新的独占租约；升级服务前按 Hub 的迁移指南释放旧资源并重新领取。Windows、公网 TLS/NAT 与容量不纳入本轮新实测。
+租约适配的既有实机结果见[0.15.0 验收](../project/0.15.0版本发布验收.md)。[0.14.1 YAML／JSON 验收](../project/0.14.1版本发布验收.md)、[0.14.0 配置交互](../project/0.14.0版本发布验收.md)和[0.13.2 的 0.7.0 适配](../project/0.13.2版本发布验收.md)保留历史范围。旧服务和旧静态许可不自动迁移到新的独占租约；升级服务前按 Hub 的迁移指南释放旧资源并重新领取。Windows、公网 TLS/NAT 与容量不纳入本轮新实测。

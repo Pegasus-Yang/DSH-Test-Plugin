@@ -111,7 +111,7 @@ await cp(dir, copied, { recursive: true });
 const browser = await chromium.launch({ headless: true });
 const context = await browser.newContext({
   offline: true,
-  viewport: { width: 1440, height: 1050 },
+  viewport: { width: 1440, height: 900 },
 });
 const page = await context.newPage();
 const errors = [],
@@ -129,14 +129,19 @@ try {
   for (const [i, instance] of run.instances.entries()) {
     const article = page.locator("article.case").nth(i);
     assert.equal(await article.getAttribute("data-status"), instance.status);
-    for (const [n, step] of instance.steps.entries()) {
-      const row = article.locator(".step").nth(n);
+    for (const step of instance.steps) {
+      const row = article.locator(
+        `.step[data-step-id=${JSON.stringify(step.step_id)}]`,
+      );
       assert.equal(
         await row.locator(".step-copy strong").textContent(),
         step.description,
       );
       if (step.assertion) {
-        const values = await row.locator(".comparison pre").allTextContents();
+        const values = [
+          await row.locator(".actual-value").textContent(),
+          await row.locator(".frozen-value").textContent(),
+        ];
         assert.deepEqual(values, [
           JSON.stringify(step.assertion.actual, null, 2),
           JSON.stringify(step.assertion.expected, null, 2),
@@ -147,6 +152,32 @@ try {
         );
       }
     }
+  }
+  let evidenceNavigationChecked = false;
+  const evidenceButton = page
+    .locator("article.case:visible [data-evidence]:visible")
+    .first();
+  if (await evidenceButton.count()) {
+    const targetId = await evidenceButton.getAttribute("data-evidence");
+    await evidenceButton.click();
+    await page
+      .locator("article.case:visible .attachments img")
+      .evaluateAll((images) =>
+        Promise.all(images.map((image) => image.decode().catch(() => {}))),
+      );
+    const target = page.locator(`[id=${JSON.stringify(targetId)}]`);
+    await page.waitForFunction(
+      (id) => document.activeElement?.id === id,
+      targetId,
+    );
+    const box = await target.boundingBox();
+    // 滚动位置按整数像素结算，允许不足 1 CSS px 的边界舍入误差。
+    assert(
+      box && box.y >= -1 && box.y < 900,
+      `截图完成加载后，证据目标必须仍在视口中：${JSON.stringify(box)}`,
+    );
+    evidenceNavigationChecked = true;
+    await page.getByRole("tab", { name: "执行过程", exact: true }).click();
   }
   // CSV 按原用例模板分组；行实例的 case_id 不一定是筛选选项值。
   const caseFilter = await page
@@ -183,21 +214,25 @@ try {
   await page
     .locator("details")
     .evaluateAll((es) => es.forEach((e) => (e.open = false)));
-  await page.screenshot({
-    path: join(dir, "report-verified-desktop.png"),
-    fullPage: true,
-  });
-  await page.setViewportSize({ width: 390, height: 844 });
-  assert.equal(
-    await page.evaluate(
-      () => document.documentElement.scrollWidth <= innerWidth,
-    ),
-    true,
-  );
-  await page.screenshot({
-    path: join(dir, "report-verified-mobile.png"),
-    fullPage: true,
-  });
+  for (const viewport of [
+    { width: 1440, height: 900 },
+    { width: 1920, height: 1080 },
+  ]) {
+    await page.setViewportSize(viewport);
+    assert.equal(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+      true,
+    );
+    await page.screenshot({
+      path: join(
+        dir,
+        `report-verified-${viewport.width}x${viewport.height}.png`,
+      ),
+      fullPage: true,
+    });
+  }
   assert.deepEqual(errors, []);
   assert.deepEqual(network, []);
   const result = {
@@ -211,8 +246,10 @@ try {
     rendered_assertions_match: true,
     attachment_hashes: true,
     offline_filters: true,
+    evidence_navigation_checked: evidenceNavigationChecked,
     empty_filter: true,
-    narrow_no_horizontal_overflow: true,
+    desktop_viewports: ["1440x900", "1920x1080"],
+    desktop_no_horizontal_overflow: true,
     script_errors: errors,
     network_requests: network,
   };

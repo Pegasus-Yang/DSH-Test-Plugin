@@ -73,7 +73,7 @@ try {
   const errors = [];
   report.on("pageerror", (e) => errors.push(String(e)));
   await report.goto(href);
-  assert((await report.textContent("body")).includes("实际值 ACTUAL"));
+  assert((await report.textContent("body")).includes("本次实际值"));
   const evidence = join(directory, "acceptance");
   await mkdir(evidence, { recursive: true });
   await page.screenshot({

@@ -328,7 +328,7 @@ async function verify(sessionId, kind, statuses) {
   await report.goto(
     new URL(`/test-reports/${run.suite_run_id}/report.html`, state.url).href,
   );
-  assert((await report.textContent("body")).includes("实际值 ACTUAL"));
+  assert((await report.textContent("body")).includes("本次实际值"));
   await report.screenshot({
     path: join(evidence, `${kind}-report.png`),
     fullPage: true,

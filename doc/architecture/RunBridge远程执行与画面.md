@@ -2,7 +2,7 @@
 
 [文档导航](../README.md) · [使用指南](../user-guide/RunBridge远程浏览器与持续预览.md) · [历史提案](../design/runbridge-mcp/README.md)
 
-本文描述插件 0.15.0 与配套 Hub 0.9.1／Node 0.8.1 的实现。租约接口自 0.9.0／0.8.0 引入。每次测试冻结连接来源和私有文件，沿用发起命令的当前 DSH Agent，不引入执行子 Agent；旧服务与旧静态许可的记录只保留历史范围。
+本文描述插件 0.16.0 与配套 Hub 0.9.1／Node 0.8.1 的实现。租约接口自 0.9.0／0.8.0 引入。每次测试冻结连接来源和私有文件，沿用发起命令的当前 DSH Agent，不引入执行子 Agent；旧服务与旧静态许可的记录只保留历史范围。
 
 ```mermaid
 flowchart LR
@@ -61,4 +61,4 @@ NativeTest 的准备阶段只取只读目录；实际领取在原生工具守卫
 
 run.node_lease 与每条实例的 browser_context 分开持久化；进度只投影去除 access_file 的白名单状态，报告分别展示断言和设备归还。finish()、dispose()、卸载与恢复等待收尾 Promise，旧作用域关闭但仍在 dispose 时继续阻止新批次。报告封存前等待 Node 归还结果，不依赖 MCP 断开。
 
-RecoveryManager 使用原访问文件匹配 Hub、Node、grant，查询／重复释放原租约，确认实际终态后另存处置证明；旧结果与 UNKNOWN 原样保留。原令牌缺失时只能由维护者核查后提交实际证据，共享 Hub 凭据没有强制接管旁路。[本轮验收](../project/0.15.0版本发布验收.md)与[适配方案](../design/RunBridge节点租约适配方案.md)分别记录实现范围和交付结果。
+RecoveryManager 使用原访问文件匹配 Hub、Node、grant，查询／重复释放原租约，确认实际终态后另存处置证明；旧结果与 UNKNOWN 原样保留。原令牌缺失时只能由维护者核查后提交实际证据，共享 Hub 凭据没有强制接管旁路。[0.15.0 租约实机验收](../project/0.15.0版本发布验收.md)与[适配方案](../design/RunBridge节点租约适配方案.md)分别记录实现范围和交付结果。

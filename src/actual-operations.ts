@@ -354,8 +354,3 @@ export function inputText(row: ActualRow): string {
       .join("；") || "—"
   );
 }
-export function expectedText(row: ActualRow): string {
-  return typeof row.expected === "string"
-    ? row.expected
-    : `${row.expected.description}；${row.expected.operator} ${JSON.stringify(row.expected.value)}`;
-}
