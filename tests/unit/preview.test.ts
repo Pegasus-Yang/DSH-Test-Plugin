@@ -673,3 +673,89 @@ it("缺少视频依赖只回退一次预览，并提示精确安装命令", asyn
   await t.manager.finishRun(t.run);
   expect(spawn).toHaveBeenCalledTimes(2);
 });
+
+it("已知 CDP 候选必须匹配连接摘要，再按真实页面身份核对多标签目标", async () => {
+  const t = setup();
+  Object.assign(t.manager.config!, {
+    connectionId: "source",
+    connectionDigest: "digest",
+  });
+  t.publish({ connection_id: "source", connection_digest: "digest" });
+  t.manager.sync(t.run, t.context, {
+    run_id: "run-one",
+    case_run_id: "case-one",
+    connection_id: "source",
+    connection_digest: "digest",
+  });
+  const endpoint = "ws://127.0.0.1:9222/devtools/page/page-two";
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url) =>
+      String(url).includes("json/list")
+        ? new Response(
+            JSON.stringify([
+              {
+                type: "page",
+                id: "page-one",
+                webSocketDebuggerUrl: t.metadata.endpoint,
+              },
+              { type: "page", id: "page-two", webSocketDebuggerUrl: endpoint },
+            ]),
+          )
+        : new Response(Buffer.from("89504e470d0a1a0a", "hex"), {
+            headers: {
+              "X-Frame-Id": "1",
+              "X-Capture-Started-At": new Date().toISOString(),
+            },
+          }),
+    ),
+  );
+  expect(
+    await t.manager.adoptCdp(t.run, "case-one", "page-missing", "real-call"),
+  ).toBe(false);
+  expect(spawn).not.toHaveBeenCalled();
+  expect(
+    await t.manager.adoptCdp(t.run, "case-one", "page-two", "real-call"),
+  ).toBe(true);
+  expect(
+    JSON.parse(readFileSync(join(t.directory, "cdp.json"), "utf8")),
+  ).toMatchObject({
+    target_id: "page-two",
+    endpoint,
+    verified_by: "real-call",
+  });
+  expect(t.manager.summary("run-one").ready).toBe(true);
+  t.manager.invalidateCdpSelection("run-one");
+  vi.spyOn(Date, "now").mockReturnValue(Date.now() + 400);
+  await t.manager.screenshot("run-one");
+  expect(t.manager.summary("run-one").ready).toBe(false);
+});
+it("无消费者暂停定时截图但保留可重新打开的原帧入口", async () => {
+  const t = setup(false);
+  const frame = {
+    id: "original",
+    capturedAt: new Date().toISOString(),
+    mime: "image/png",
+    bytes: Buffer.from("frame"),
+  };
+  t.manager.setToolFrame("run-one", "case-one", frame, "poll");
+  expect(t.manager.summary("run-one")).toMatchObject({
+    ready: true,
+    mode: "once",
+    paused: true,
+  });
+  expect(await t.manager.screenshot("run-one")).toEqual(frame);
+  expect(t.manager.summary("run-one")).toMatchObject({
+    ready: true,
+    mode: "poll",
+    paused: false,
+  });
+  vi.spyOn(Date, "now").mockReturnValue(Date.now() + 11000);
+  expect(t.manager.summary("run-one")).toMatchObject({
+    ready: true,
+    mode: "once",
+    paused: true,
+  });
+  t.manager.clearTool("run-one");
+  expect(t.manager.summary("run-one").ready).toBe(false);
+});

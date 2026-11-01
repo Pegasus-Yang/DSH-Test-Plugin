@@ -43,7 +43,9 @@ function elapsed(milliseconds) {
 function RecoveryPanel({
   readRecovery,
   recover,
-  releaseEvidence
+  releaseEvidence,
+  compact,
+  onOpen
 }) {
   const [state, setState] = (0, import_react.useState)();
   const [failed, setFailed] = (0, import_react.useState)(false);
@@ -124,6 +126,28 @@ function RecoveryPanel({
       setPending(false);
     }
   };
+  if (compact)
+    return quarantine || failed ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+      "section",
+      {
+        className: "dsh-test-recovery dsh-test-command-check",
+        "data-state": "blocked",
+        role: "alert",
+        children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: failed ? "\u73AF\u5883\u72B6\u6001\u8BFB\u53D6\u5931\u8D25" : "\u6709\u5F85\u5904\u7406\u7684\u6D4B\u8BD5\u8D44\u6E90" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: quarantine?.reason ?? "\u8BF7\u68C0\u67E5\u5BBF\u4E3B\u8FDE\u63A5" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "button",
+            {
+              type: "button",
+              className: "dsh-test-inline-action",
+              onClick: onOpen,
+              children: "\u67E5\u770B\u5E76\u5904\u7406"
+            }
+          )
+        ]
+      }
+    ) : null;
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
     "section",
     {
@@ -378,6 +402,9 @@ function ReportSettings(actions) {
 var import_react5 = require("react");
 
 // src/browser-preferences.ts
+function runbridgeEnabled(preferences) {
+  return preferences?.runbridgeEnabled ?? preferences?.backend === "runbridge";
+}
 var browserPreferenceDefaults = {
   backend: "auto",
   accessFile: "",
@@ -408,12 +435,22 @@ hub_token: "<Hub\u5171\u4EAB\u7533\u8BF7\u51ED\u636E>"
 
 // src/preview-preferences.ts
 var previewPreferenceDefaults = {
+  schemaVersion: 2,
   enabled: false,
   recordingEnabled: false,
   browscreenExecutable: "browscreen",
   port: 13390,
   mcpId: ""
 };
+function effectivePreviewPreferences(browser, media) {
+  if (browser && runbridgeEnabled(browser) && media?.schemaVersion !== 2)
+    return {
+      ...previewPreferenceDefaults,
+      ...media,
+      enabled: browser.previewEnabled
+    };
+  return media;
+}
 var browscreenVersionRange = ">=0.3.0,<0.4.0";
 var videoInstallHint = "\u8BF7\u5728 DSH \u5BBF\u4E3B\u5B89\u88C5\u5F55\u5236\u4F9D\u8D56\uFF1Auv tool install --force --python 3.14 'browscreen[video]==0.3.0' -i http://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.aliyun.com\u3002\u5B89\u88C5\u540E\u91CD\u65B0\u6267\u884C\u6D4B\u8BD5\u3002";
 
@@ -741,8 +778,9 @@ function LocalPreviewSettings({
       "\u5F55\u5236\u6D4F\u89C8\u5668\u64CD\u4F5C\u89C6\u9891"
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { className: "dsh-test-setting-hint", children: "\u9884\u89C8\u7B49\u5F85\u9996\u5E27\u540E\u663E\u793A\uFF1B\u5F55\u50CF\u4E0E\u9884\u89C8\u72EC\u7ACB\uFF0C\u5173\u95ED\u6D6E\u7A97\u4E0D\u4F1A\u505C\u6B62\u5F55\u50CF\uFF0C\u7ED3\u675F\u540E\u5728\u62A5\u544A\u67E5\u770B\u3002" }),
-    value.enabled || value.recordingEnabled ? /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(import_jsx_runtime4.Fragment, { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("label", { htmlFor: "dsh-test-preview-mcp", children: "Playwright \u6D4F\u89C8\u5668" }),
+    value.enabled || value.recordingEnabled ? /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("details", { className: "dsh-test-command-advanced", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("summary", { children: "\u753B\u9762\u589E\u5F3A\u4E0E\u91C7\u96C6\u4F9D\u8D56\uFF08\u6309\u9700\u914D\u7F6E\uFF09" }),
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("label", { htmlFor: "dsh-test-preview-mcp", children: "\u5DF2\u77E5\u753B\u9762\u589E\u5F3A\u8FDE\u63A5\uFF08\u53EF\u9009\uFF09" }),
       /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
         "select",
         {
@@ -752,18 +790,18 @@ function LocalPreviewSettings({
           "aria-invalid": !!errors.mcpId,
           onChange: (e) => edit({ mcpId: e.target.value }),
           children: [
-            /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("option", { value: "", children: "\u8BF7\u9009\u62E9\u6D4F\u89C8\u5668" }),
-            info.mcpInstances.map((m) => /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("option", { value: m.id, disabled: !m.compatible, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("option", { value: "", children: "\u81EA\u52A8\u8BC6\u522B" }),
+            info.mcpInstances.filter((m) => m.compatible).map((m) => /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("option", { value: m.id, children: [
               m.label,
               m.compatible ? "" : "\uFF08\u6682\u4E0D\u652F\u6301\u6B64\u63A5\u5165\uFF09"
             ] }, m.id))
           ]
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { id: "dsh-test-mcp-help", className: "dsh-test-setting-hint", children: "\u9009\u62E9\u6D4B\u8BD5\u4E13\u7528\u7684\u672C\u673A Playwright MCP\uFF0C\u4E0D\u4E0E\u5176\u4ED6\u5BF9\u8BDD\u5171\u4EAB\u64CD\u4F5C\u3002" }),
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { id: "dsh-test-mcp-help", className: "dsh-test-setting-hint", children: "\u4EC5\u7528\u4E8E\u51C6\u5907 CDP\uFF0F\u5F55\u50CF\u589E\u5F3A\uFF0C\u4E0D\u51B3\u5B9A\u6267\u884C\u5DE5\u5177\u3002\u9009\u62E9\u540E\u4F1A\u5728\u4E0B\u6B21\u6D4B\u8BD5\u524D\u91CD\u8F7D\u8BE5 MCP\uFF0C\u8BF7\u53EA\u9009\u62E9\u6D4B\u8BD5\u4E13\u7528\u8FDE\u63A5\uFF1B\u7559\u7A7A\u65F6\u7531 Agent \u5C1D\u8BD5\u5F53\u524D\u9875\u9762\uFF0C\u4FDD\u6301\u73B0\u6709\u8FDE\u63A5\u3002" }),
       errors.mcpId && /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { id: "dsh-test-mcp-error", role: "alert", children: errors.mcpId }),
       !info.mcpInstances.some((m) => m.compatible) && /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("p", { role: "status", children: [
-        "\u672A\u627E\u5230\u53EF\u7528\u7684\u672C\u673A Playwright MCP\u3002",
+        "\u5C1A\u65E0\u53EF\u4E3B\u52A8\u589E\u5F3A\u7684\u8FDE\u63A5\uFF0C\u53EF\u8BA9 Agent \u5C1D\u8BD5\u73B0\u6709\u5DE5\u5177\u7684\u753B\u9762\u80FD\u529B\u3002",
         /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("a", { href: localGuide, target: "_blank", rel: "noreferrer", children: "\u67E5\u770B\u914D\u7F6E\u6307\u5357" }),
         "\uFF0C\u914D\u7F6E\u540E\u91CD\u65B0\u8BFB\u53D6\u5217\u8868\u3002"
       ] }),
@@ -785,7 +823,7 @@ function LocalPreviewSettings({
         }
       ) }),
       /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("p", { className: "dsh-test-setting-hint", children: [
-        "DSH \u8FD0\u884C\u673A\u5668\u9700\u8981 Browscreen\uFF08Python \u22653.14\uFF09\uFF0C\u652F\u6301\u7A33\u5B9A\u7248",
+        "CDP \u753B\u9762\u589E\u5F3A\u4F7F\u7528 Browscreen\uFF08Python \u22653.14\uFF09\uFF0C\u652F\u6301\u7A33\u5B9A\u7248",
         " ",
         browscreenVersionRange,
         "\u3002\u65E0\u9700\u63D0\u524D\u542F\u52A8\u91C7\u96C6\u670D\u52A1\u3002",
@@ -869,24 +907,29 @@ function LocalPreviewSettings({
 // src/client/browser-settings.tsx
 var import_jsx_runtime5 = require("react/jsx-runtime");
 var drafts = /* @__PURE__ */ new WeakMap();
-var sourceLabels = {
-  auto: "\u81EA\u52A8\u4F7F\u7528\u53EF\u7528\u5DE5\u5177",
-  mcp: "\u6307\u5B9A\u4E3B\u8981 MCP",
-  playwright: "\u672C\u673A Playwright",
-  runbridge: "\u8FDC\u7A0B RunBridge"
-};
-var values = (v, info) => ({
-  browser: {
-    ...browserPreferenceDefaults,
-    ...v?.browserConnection ?? v?.browser ?? info.browserConnection
-  },
-  preview: { ...previewPreferenceDefaults, ...v?.browserPreview }
-});
 var same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+var values = (v, info) => {
+  const old = v?.browserConnection ?? v?.browser ?? info.browserConnection;
+  return {
+    browser: {
+      ...browserPreferenceDefaults,
+      ...old,
+      backend: "auto",
+      runbridgeEnabled: runbridgeEnabled(old)
+    },
+    preview: {
+      ...previewPreferenceDefaults,
+      ...effectivePreviewPreferences(old, v?.browserPreview)
+    }
+  };
+};
 function BrowserSettings({
   form,
   info,
-  refresh
+  refresh,
+  view = "connections",
+  tryPreview,
+  stopPreview
 }) {
   const state = (0, import_react5.useSyncExternalStore)(
     form.subscribe.bind(form),
@@ -901,37 +944,27 @@ function BrowserSettings({
   );
   const [revision, setRevision] = (0, import_react5.useState)(cached?.revision ?? state.revision);
   const [notice, setNotice] = (0, import_react5.useState)(
-    cached ? "\u4E0A\u6B21\u672A\u4FDD\u5B58\u7684\u4FEE\u6539\u5DF2\u4FDD\u7559\u3002\u8BF7\u4FDD\u5B58\u6216\u653E\u5F03\u4FEE\u6539\u3002" : ""
+    cached ? "\u4E0A\u6B21\u672A\u4FDD\u5B58\u7684\u4FEE\u6539\u5DF2\u4FDD\u7559\u3002" : ""
   );
   const [errors, setErrors] = (0, import_react5.useState)({});
   const [saving, setSaving] = (0, import_react5.useState)(false);
   const [result, setResult] = (0, import_react5.useState)();
   const [checking, setChecking] = (0, import_react5.useState)(false);
+  const [details, setDetails] = (0, import_react5.useState)(false);
+  const [probing, setProbing] = (0, import_react5.useState)(false);
   const request = (0, import_react5.useRef)();
   const formRef = (0, import_react5.useRef)(null);
   const dirty = !same(base, draft);
+  const sectionDirty = view === "connections" ? !same(base.browser, draft.browser) : !same(base.preview, draft.preview);
   const browser = draft.browser;
-  const hubSource = browser.connectionSource === "hub";
-  const activeFile = hubSource ? browser.hubFile ?? "" : browser.accessFile;
-  const requestKey = JSON.stringify([
-    browser.backend,
-    browser.accessFile.trim(),
-    browser.connectionSource,
-    browser.hubFile?.trim(),
-    browser.nodeId?.trim(),
-    browser.nodeLeaseSeconds,
-    browser.resourceId,
-    browser.leaseSeconds
-  ]);
-  const latestKey = (0, import_react5.useRef)(requestKey);
-  latestKey.current = requestKey;
-  const resultRef = (0, import_react5.useRef)(result);
-  resultRef.current = result;
+  const connectionKey = JSON.stringify(browser);
+  const keyRef = (0, import_react5.useRef)(connectionKey);
+  keyRef.current = connectionKey;
   (0, import_react5.useEffect)(() => {
     if (!dirty && state.status === "ready") {
-      const current = values(state.value, info);
-      setBase(current);
-      setDraft(current);
+      const next = values(state.value, info);
+      setBase(next);
+      setDraft(next);
       setRevision(state.revision);
     }
   }, [state.value, state.revision, state.status, dirty, info]);
@@ -940,94 +973,62 @@ function BrowserSettings({
     else drafts.delete(form);
   }, [draft, base, revision, dirty, form]);
   (0, import_react5.useEffect)(() => {
-    const warn = (e) => {
+    const warn = (event) => {
       if (dirty) {
-        e.preventDefault();
-        e.returnValue = "";
+        event.preventDefault();
+        event.returnValue = "";
       }
     };
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
   }, [dirty]);
-  const cancel = () => {
-    request.current?.controller.abort();
-    request.current = void 0;
+  (0, import_react5.useEffect)(() => {
+    request.current?.abort();
+    setResult(void 0);
     setChecking(false);
+    return () => request.current?.abort();
+  }, [connectionKey]);
+  const edit = (part) => {
+    if (!dirty) setRevision(state.revision);
+    setDraft((current) => ({ ...current, ...part }));
+    setErrors({});
+    setNotice("");
   };
-  const inspect = async (connect, quiet = false) => {
-    if (request.current && quiet) return;
-    cancel();
-    const current = { controller: new AbortController(), key: requestKey };
-    request.current = current;
-    if (!quiet) setChecking(true);
+  const inspect = async (connect) => {
+    request.current?.abort();
+    const controller = new AbortController();
+    request.current = controller;
+    const key = connectionKey;
+    setChecking(true);
     try {
       const response = await fetch("/test-preview-settings/runbridge", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: connect ? "connect" : "read",
-          accessFile: browser.accessFile.trim(),
           connectionSource: browser.connectionSource ?? "access-file",
+          accessFile: browser.accessFile.trim(),
           hubFile: browser.hubFile?.trim(),
           nodeId: browser.nodeId?.trim(),
           resourceId: browser.resourceId.trim()
         }),
-        signal: current.controller.signal
+        signal: controller.signal
       });
       const next = await response.json();
-      if (current.controller.signal.aborted || latestKey.current !== current.key)
-        return;
-      if (!response.ok) throw new Error();
-      const previous = resultRef.current;
-      setResult(
-        !connect && previous?.checked_at && next.file?.revision === previous.file?.revision ? { ...previous, file: next.file } : next
-      );
-      return next;
+      if (!controller.signal.aborted && keyRef.current === key) {
+        setResult(next);
+        return next;
+      }
     } catch {
-      if (!current.controller.signal.aborted && latestKey.current === current.key) {
-        const failed = {
+      if (!controller.signal.aborted)
+        setResult({
           ok: false,
-          code: "SETTINGS_UNAVAILABLE",
-          message: "\u65E0\u6CD5\u8BFB\u53D6\u8FDE\u63A5\u8BBE\u7F6E\uFF0C\u8BF7\u6838\u5BF9\u5BBF\u4E3B\u8FDE\u63A5\u540E\u91CD\u8BD5\u3002"
-        };
-        setResult(failed);
-        return failed;
-      }
+          code: "CHECK_FAILED",
+          message: "\u68C0\u6D4B\u5931\u8D25\uFF0C\u8BF7\u6838\u5BF9\u79C1\u6709\u6587\u4EF6\u4E0E\u5BBF\u4E3B\u8FDE\u63A5\u3002"
+        });
     } finally {
-      if (request.current === current) {
-        request.current = void 0;
-        setChecking(false);
-      }
+      if (request.current === controller) setChecking(false);
     }
-  };
-  (0, import_react5.useEffect)(() => {
-    cancel();
-    setResult(void 0);
-    if (browser.backend !== "runbridge" || !activeFile.trim() || hubSource && !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(browser.nodeId ?? "") || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(browser.resourceId))
-      return;
-    const timer = setTimeout(() => void inspect(false), 450);
-    return () => {
-      clearTimeout(timer);
-      request.current?.controller.abort();
-    };
-  }, [browser.backend, requestKey]);
-  (0, import_react5.useEffect)(() => {
-    if (browser.backend !== "runbridge" || !result?.file) return;
-    const check = () => {
-      if (document.visibilityState === "visible") void inspect(false, true);
-    };
-    const timer = setInterval(check, 15e3);
-    window.addEventListener("focus", check);
-    return () => {
-      clearInterval(timer);
-      window.removeEventListener("focus", check);
-    };
-  }, [browser.backend, requestKey, result?.file?.revision]);
-  const edit = (next) => {
-    if (!dirty) setRevision(state.revision);
-    setDraft((v) => ({ ...v, ...next }));
-    setErrors({});
-    setNotice("");
   };
   const focusError = (key) => {
     const ids = {
@@ -1037,110 +1038,121 @@ function BrowserSettings({
       nodeLeaseSeconds: "dsh-test-runbridge-node-lease",
       resourceId: "dsh-test-runbridge-resource",
       leaseSeconds: "dsh-test-runbridge-lease",
-      mcpId: "dsh-test-preview-mcp",
-      executionMcpId: "dsh-test-execution-mcp",
       port: "dsh-test-browscreen-port",
       browscreenExecutable: "dsh-test-browscreen-executable"
     };
-    const element = formRef.current?.querySelector("#" + ids[key]);
-    const details = element?.closest("details");
-    if (details) details.open = true;
-    element?.focus();
+    const el = formRef.current?.querySelector("#" + ids[key]);
+    for (let parent = el?.parentElement; parent; parent = parent.parentElement)
+      if (parent instanceof HTMLDetailsElement) parent.open = true;
+    el?.focus();
   };
   const save = async () => {
     const invalid = {};
-    if (browser.backend === "mcp" && !info.mcpInstances.some((m) => m.id === browser.mcpId))
-      invalid.executionMcpId = "\u8BF7\u9009\u62E9\u5DF2\u914D\u7F6E\u7684\u4E3B\u8981 MCP \u5B9E\u4F8B\u3002";
-    if (browser.backend === "runbridge") {
-      if (!activeFile.trim())
-        invalid[hubSource ? "hubFile" : "accessFile"] = "\u8BF7\u586B\u5199 DSH \u8FD0\u884C\u673A\u5668\u4E0A\u7684\u79C1\u6709 YAML \u6216 JSON \u6587\u4EF6\u8DEF\u5F84\u3002";
-      if (hubSource && !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(browser.nodeId?.trim() ?? ""))
-        invalid.nodeId = "\u8BF7\u586B\u5199\u6709\u6548\u7684\u76EE\u6807 Node ID\u3002";
-      if (hubSource && browser.nodeLeaseSeconds !== void 0 && (!Number.isInteger(browser.nodeLeaseSeconds) || browser.nodeLeaseSeconds < 1))
-        invalid.nodeLeaseSeconds = "Node \u79DF\u671F\u987B\u4E3A\u6B63\u6574\u6570\u79D2\uFF0C\u6216\u7559\u7A7A\u4F7F\u7528 Hub \u9ED8\u8BA4\u503C\u3002";
+    if (view === "connections" && runbridgeEnabled(browser)) {
+      const hub = browser.connectionSource === "hub";
+      if (!(hub ? browser.hubFile : browser.accessFile)?.trim())
+        invalid[hub ? "hubFile" : "accessFile"] = "\u8BF7\u586B\u5199 DSH \u8FD0\u884C\u673A\u5668\u4E0A\u7684\u79C1\u6709 YAML \u6216 JSON \u6587\u4EF6\u8DEF\u5F84\u3002";
+      if (hub && !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(browser.nodeId?.trim() ?? ""))
+        invalid.nodeId = "\u8BF7\u586B\u5199\u6709\u6548\u7684 Node ID\u3002";
+      if (hub && browser.nodeLeaseSeconds !== void 0 && (!Number.isInteger(browser.nodeLeaseSeconds) || browser.nodeLeaseSeconds < 1))
+        invalid.nodeLeaseSeconds = "Node \u79DF\u671F\u987B\u4E3A\u6B63\u6574\u6570\u79D2\uFF0C\u6216\u7559\u7A7A\u3002";
       if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(browser.resourceId.trim()))
-        invalid.resourceId = "\u8BF7\u586B\u5199\u6709\u6548\u7684\u53D7\u7BA1\u7406\u6D4F\u89C8\u5668\u8D44\u6E90 ID\u3002";
+        invalid.resourceId = "\u8BF7\u586B\u5199\u6709\u6548\u7684\u6D4F\u89C8\u5668\u8D44\u6E90 ID\u3002";
       if (!Number.isInteger(browser.leaseSeconds) || browser.leaseSeconds < 1 || browser.leaseSeconds > 3600)
         invalid.leaseSeconds = "\u4F1A\u8BDD\u79DF\u671F\u987B\u4E3A 1\uFF5E3600 \u79D2\u7684\u6574\u6570\u3002";
-    } else if ((draft.preview.enabled || draft.preview.recordingEnabled) && (browser.backend === "playwright" || info.mcpInstances.some(
-      (m) => m.id === draft.preview.mcpId && m.compatible
-    ))) {
-      if (!draft.preview.mcpId || !info.mcpInstances.some(
-        (m) => m.id === draft.preview.mcpId && m.compatible
-      ))
-        invalid.mcpId = "\u8BF7\u5148\u9009\u62E9\u53EF\u7528\u7684\u6D4B\u8BD5\u4E13\u7528 Playwright MCP\u3002";
+    }
+    if (view === "media" && (draft.preview.enabled || draft.preview.recordingEnabled)) {
       if (!Number.isInteger(draft.preview.port) || draft.preview.port < 1 || draft.preview.port > 65535)
         invalid.port = "\u91C7\u96C6\u670D\u52A1\u7AEF\u53E3\u987B\u4E3A 1\uFF5E65535 \u7684\u6574\u6570\u3002";
       const command = draft.preview.browscreenExecutable.trim();
       if (command && command !== "browscreen" && !/^(\/|[a-zA-Z]:[\\/]|\\\\)/.test(command))
-        invalid.browscreenExecutable = "\u8BF7\u586B\u5199 browscreen \u6216\u5B8C\u6574\u53EF\u6267\u884C\u6587\u4EF6\u8DEF\u5F84\uFF0C\u4E0D\u586B\u5199\u989D\u5916\u53C2\u6570\u3002";
+        invalid.browscreenExecutable = "\u8BF7\u586B\u5199 browscreen \u6216\u5B8C\u6574\u547D\u4EE4\u8DEF\u5F84\uFF0C\u4E0D\u586B\u5199\u989D\u5916\u53C2\u6570\u3002";
     }
     if (Object.keys(invalid).length) {
       setErrors(invalid);
-      focusError(Object.keys(invalid)[0]);
+      setDetails(true);
+      requestAnimationFrame(() => focusError(Object.keys(invalid)[0]));
       return;
     }
     setSaving(true);
     setNotice("");
     try {
-      if (browser.backend === "runbridge") {
-        const file = await inspect(false);
-        if (!file?.ok) {
-          setErrors({
-            [hubSource ? "hubFile" : "accessFile"]: file?.message ?? "\u8BFB\u53D6\u914D\u7F6E\u672A\u5B8C\u6210\uFF0C\u8BF7\u91CD\u65B0\u68C0\u67E5\u6587\u4EF6\u3002"
-          });
-          focusError(hubSource ? "hubFile" : "accessFile");
-          return;
-        }
+      if (view === "connections" && runbridgeEnabled(browser) && !(await inspect(false))?.ok) {
+        setErrors({ save: "\u79C1\u6709\u914D\u7F6E\u5C1A\u672A\u8BFB\u53D6\u6210\u529F\uFF0C\u8BF7\u5148\u6838\u5BF9\u8FDE\u63A5\u8BE6\u60C5\u3002" });
+        setDetails(true);
+        return;
       }
-      const normalized = {
-        browser: {
-          ...browser,
-          mcpId: browser.mcpId?.trim(),
-          accessFile: browser.accessFile.trim(),
-          hubFile: browser.hubFile?.trim(),
-          nodeId: browser.nodeId?.trim(),
-          nodeLeaseSeconds: (browser.backend !== "runbridge" || !hubSource) && browser.nodeLeaseSeconds !== void 0 && (!Number.isInteger(browser.nodeLeaseSeconds) || browser.nodeLeaseSeconds < 1) ? base.browser.nodeLeaseSeconds : browser.nodeLeaseSeconds,
-          resourceId: browser.resourceId.trim(),
-          leaseSeconds: browser.backend !== "runbridge" && (!Number.isInteger(browser.leaseSeconds) || browser.leaseSeconds < 1 || browser.leaseSeconds > 3600) ? base.browser.leaseSeconds : browser.leaseSeconds
-        },
-        preview: {
-          ...draft.preview,
-          browscreenExecutable: draft.preview.browscreenExecutable.trim() || "browscreen",
-          port: (browser.backend === "runbridge" || !info.mcpInstances.some(
-            (m) => m.id === draft.preview.mcpId && m.compatible
-          ) || !draft.preview.enabled && !draft.preview.recordingEnabled) && (!Number.isInteger(draft.preview.port) || draft.preview.port < 1 || draft.preview.port > 65535) ? base.preview.port : draft.preview.port
-        }
+      const normalized = view === "connections" ? {
+        ...browser,
+        backend: "auto",
+        previewEnabled: base.preview.enabled,
+        accessFile: browser.accessFile.trim(),
+        hubFile: browser.hubFile?.trim(),
+        nodeId: browser.nodeId?.trim(),
+        resourceId: browser.resourceId.trim()
+      } : {
+        ...draft.preview,
+        schemaVersion: 2,
+        browscreenExecutable: draft.preview.browscreenExecutable.trim() || "browscreen"
       };
+      const path = view === "connections" ? "browserConnection" : "browserPreview";
       if (await form.mutate(
         [
           {
             op: "set",
-            path: ["browserConnection"],
-            value: JSON.parse(JSON.stringify(normalized.browser))
-          },
-          {
-            op: "set",
-            path: ["browserPreview"],
-            value: { ...normalized.preview }
+            path: [path],
+            value: JSON.parse(JSON.stringify(normalized))
           }
         ],
         revision
       )) {
-        setDraft(normalized);
-        setBase(normalized);
-        drafts.delete(form);
-        setNotice(
-          "\u5DF2\u4FDD\u5B58\uFF0C\u4E0B\u6B21\u6D4B\u8BD5\u751F\u6548\uFF1B\u5F53\u524D\u6D4B\u8BD5\u7EE7\u7EED\u4F7F\u7528\u539F\u8FDE\u63A5\u3002\u8FDE\u63A5\u68C0\u6D4B\u7ED3\u679C\u89C1\u4E0A\u65B9\uFF0C\u4FDD\u5B58\u672C\u8EAB\u4E0D\u4EE3\u8868\u8FDE\u63A5\u5DF2\u9A8C\u8BC1\u3002"
+        const next = view === "connections" ? { ...draft, browser: normalized } : { ...draft, preview: normalized };
+        setDraft(next);
+        setBase(
+          (current) => view === "connections" ? { ...current, browser: next.browser } : { ...current, preview: next.preview }
         );
+        setRevision(form.getSnapshot().revision);
+        setNotice(
+          "\u5DF2\u4FDD\u5B58\uFF0C\u4E0B\u6B21\u6D4B\u8BD5\u751F\u6548\uFF1B\u5F53\u524D\u6D4B\u8BD5\u7EE7\u7EED\u4F7F\u7528\u539F\u8FDE\u63A5\u3002\u4FDD\u5B58\u4E0D\u4EE3\u8868\u8FDE\u63A5\u5DF2\u9A8C\u8BC1\u3002"
+        );
+        await refresh();
       } else
         setErrors({
-          save: state.writable ? "\u8BBE\u7F6E\u5DF2\u88AB\u5176\u4ED6\u7A97\u53E3\u4FEE\u6539\u6216\u53D7\u542F\u52A8\u914D\u7F6E\u8986\u76D6\uFF0C\u672A\u8986\u76D6\u73B0\u6709\u503C\u3002\u8BF7\u653E\u5F03\u8349\u7A3F\u5E76\u91CD\u65B0\u8BFB\u53D6\u540E\u518D\u8BD5\u3002" : "\u5F53\u524D\u8BBE\u7F6E\u7531\u542F\u52A8\u914D\u7F6E\u56FA\u5B9A\uFF0C\u4E0D\u80FD\u5728\u6B64\u4FDD\u5B58\u3002"
+          save: state.writable ? "\u8BBE\u7F6E\u5DF2\u88AB\u5176\u4ED6\u7A97\u53E3\u4FEE\u6539\uFF0C\u672A\u8986\u76D6\u73B0\u6709\u503C\u3002\u8BF7\u653E\u5F03\u8349\u7A3F\u540E\u91CD\u65B0\u8BFB\u53D6\u3002" : "\u5F53\u524D\u8BBE\u7F6E\u7531\u542F\u52A8\u914D\u7F6E\u56FA\u5B9A\uFF0C\u65E0\u6CD5\u4FDD\u5B58\u3002"
         });
     } catch {
-      setErrors({ save: "\u4FDD\u5B58\u5931\u8D25\uFF0C\u8BF7\u68C0\u67E5\u5BBF\u4E3B\u8FDE\u63A5\u540E\u91CD\u8BD5\uFF1B\u5F53\u524D\u8349\u7A3F\u4ECD\u4FDD\u7559\u3002" });
+      setErrors({ save: "\u4FDD\u5B58\u5931\u8D25\uFF0C\u8349\u7A3F\u4ECD\u4FDD\u7559\uFF0C\u8BF7\u68C0\u67E5\u5BBF\u4E3B\u8FDE\u63A5\u3002" });
     } finally {
       setSaving(false);
+    }
+  };
+  const action = async (fn) => {
+    if (!fn) return;
+    setProbing(true);
+    try {
+      setNotice(await fn());
+      await refresh();
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "\u8BF7\u6C42\u5931\u8D25");
+    } finally {
+      setProbing(false);
+    }
+  };
+  const checkConnection = async (id) => {
+    setChecking(true);
+    try {
+      const response = await fetch("/test-preview-settings/connection", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id })
+      });
+      const result2 = await response.json();
+      setNotice(result2.message ?? "\u5DF2\u8BFB\u53D6\u5BBF\u4E3B\u8FDE\u63A5\u72B6\u6001");
+      await refresh();
+    } catch {
+      setNotice("\u65E0\u6CD5\u8BFB\u53D6\u5BBF\u4E3B\u8FDE\u63A5\u72B6\u6001\uFF0C\u8BF7\u68C0\u67E5 DSH \u8FDE\u63A5\u3002");
+    } finally {
+      setChecking(false);
     }
   };
   if (state.status === "loading")
@@ -1152,162 +1164,217 @@ function BrowserSettings({
       ref: formRef,
       noValidate: true,
       "data-test-browser-connection": true,
-      onSubmit: (e) => {
-        e.preventDefault();
+      onSubmit: (event) => {
+        event.preventDefault();
         void save();
       },
       children: [
-        /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("p", { className: "dsh-test-config-state", role: "status", children: [
-          dirty ? "\u6709\u672A\u4FDD\u5B58\u4FEE\u6539\uFF1B\u5173\u95ED\u8BBE\u7F6E\u540E\u8349\u7A3F\u4ECD\u4FDD\u7559\uFF0C\u8BF7\u4FDD\u5B58\u6216\u653E\u5F03\u3002" : "\u5F53\u524D\u914D\u7F6E\u5DF2\u4FDD\u5B58",
-          " ",
-          "\xB7 \u5DF2\u4FDD\u5B58\u7684\u6D4F\u89C8\u5668\u4F4D\u7F6E\uFF1A",
-          sourceLabels[base.browser.backend]
-        ] }),
-        info.activeBrowser && /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("p", { className: "dsh-test-setting-hint", children: [
-          "\u6253\u5F00\u8BBE\u7F6E\u65F6\uFF0C\u8FD0\u884C\u4E2D\u7684\u6D4B\u8BD5\u7ED1\u5B9A\uFF1A",
-          sourceLabels[info.activeBrowser],
-          "\u3002\u4FDD\u5B58\u4E0D\u4F1A\u5207\u6362\u8BE5\u6D4B\u8BD5\u3002"
-        ] }),
-        !writable && /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("p", { role: "alert", children: [
-          "\u5F53\u524D\u8FDE\u63A5\u4E3A\u53EA\u8BFB\u6216\u914D\u7F6E\u7531\u542F\u52A8 patch \u56FA\u5B9A\u3002\u8BF7\u5728\u53EF\u7F16\u8F91\u7684 DSH profile \u4E2D\u8C03\u6574\uFF0C\u4E0D\u80FD\u901A\u8FC7\u6B64\u9875\u8986\u76D6\u542F\u52A8\u914D\u7F6E\u3002",
-          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
-            "a",
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { className: "dsh-test-config-state", role: "status", children: sectionDirty ? "\u5F53\u524D\u9875\u6709\u672A\u4FDD\u5B58\u4FEE\u6539\uFF1B\u5207\u6362\u9875\u7B7E\u6216\u5173\u95ED\u8BBE\u7F6E\u4F1A\u4FDD\u7559\u8349\u7A3F\u3002" : "\u5F53\u524D\u9875\u914D\u7F6E\u5DF2\u4FDD\u5B58" }),
+        !writable && /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { role: "alert", children: "\u5F53\u524D\u914D\u7F6E\u53EA\u8BFB\uFF0C\u8BF7\u5728\u53EF\u7F16\u8F91\u7684 DSH profile \u4E2D\u8C03\u6574\u3002" }),
+        !!Object.keys(errors).length && /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("div", { role: "alert", children: Object.entries(errors).map(([key, message]) => /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("p", { children: [
+          message,
+          key !== "save" && /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+            "button",
             {
-              href: browser.backend === "runbridge" ? remoteGuide : localGuide,
-              target: "_blank",
-              rel: "noreferrer",
-              children: "\u67E5\u770B\u914D\u7F6E\u8BF4\u660E"
+              type: "button",
+              className: "dsh-test-inline-action",
+              onClick: () => focusError(key),
+              children: "\u5B9A\u4F4D\u5B57\u6BB5"
             }
           )
-        ] }),
-        !!Object.keys(errors).length && /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { role: "alert", className: "dsh-test-command-check", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("strong", { children: "\u8BBE\u7F6E\u5C1A\u672A\u4FDD\u5B58" }),
-          Object.entries(errors).map(([key, message]) => /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("p", { children: [
-            message,
-            key !== "save" && /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
-              "button",
-              {
-                type: "button",
-                className: "dsh-test-inline-action",
-                onClick: () => focusError(key),
-                children: "\u5B9A\u4F4D\u5B57\u6BB5"
-              }
-            )
-          ] }, key))
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("fieldset", { disabled: saving || !writable, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("label", { htmlFor: "dsh-test-browser-backend", children: "\u6D4F\u89C8\u5668\u4F4D\u7F6E" }),
-          /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)(
-            "select",
-            {
-              id: "dsh-test-browser-backend",
-              value: browser.backend,
-              disabled: !writable,
-              onChange: (e) => edit({
-                browser: {
-                  ...browser,
-                  backend: e.target.value
+        ] }, key)) }),
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("fieldset", { disabled: saving || !writable, children: view === "connections" ? /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)(import_jsx_runtime5.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { className: "dsh-test-setting-hint", children: "\u8FDE\u63A5\u767B\u8BB0\u4E0D\u9650\u5B9A\u8FD0\u884C\u5DE5\u5177\u3002Agent \u6309\u5F53\u524D\u5BF9\u8BDD\u6743\u9650\u548C\u7528\u4F8B\u76EE\u6807\u9009\u62E9\uFF0C\u591A\u4E2A\u6765\u6E90\u53EF\u4EE5\u534F\u4F5C\u3002" }),
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "dsh-test-connections", children: [
+            !!info.nativeTools?.length && /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "dsh-test-connection", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { children: [
+                /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("strong", { children: "\u5176\u4ED6\u5BBF\u4E3B\u5DE5\u5177" }),
+                /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("span", { className: "dsh-test-setting-hint", children: [
+                  info.nativeTools.length,
+                  " \u4E2A\u5DE5\u5177"
+                ] })
+              ] }),
+              /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("p", { className: "dsh-test-setting-hint", children: [
+                info.agentVisible ? "\u6309\u5F53\u524D\u5BF9\u8BDD\u6743\u9650\u53EF\u89C1" : "\u8FD0\u884C\u65F6\u786E\u8BA4\u5BF9\u8BDD\u6743\u9650",
+                "\uFF0C\u4E0E MCP \u5DE5\u5177\u4E00\u8D77\u53C2\u4E0E\u89C4\u5212\u3002"
+              ] }),
+              /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("details", { children: [
+                /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("summary", { children: "\u67E5\u770B\u5DE5\u5177" }),
+                /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("ul", { children: info.nativeTools.map((name2) => /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("code", { children: name2 }) }, name2)) })
+              ] })
+            ] }),
+            info.mcpInstances.map((source) => /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "dsh-test-connection", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { children: [
+                /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("strong", { children: source.label }),
+                /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "dsh-test-setting-hint", children: source.enabled === false ? "\u672A\u542F\u7528" : source.tools?.length ? "\u5DE5\u5177\u5DF2\u52A0\u8F7D" : "\u5DF2\u767B\u8BB0" })
+              ] }),
+              /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("p", { className: "dsh-test-setting-hint", children: [
+                source.tools?.length ?? 0,
+                " \u4E2A\u5DF2\u52A0\u8F7D\u5DE5\u5177 \xB7",
+                " ",
+                source.visible === void 0 ? "\u8FD0\u884C\u65F6\u786E\u8BA4\u5BF9\u8BDD\u6743\u9650" : source.visible ? "\u5F53\u524D\u5BF9\u8BDD\u53EF\u89C1" : "\u5F53\u524D\u5BF9\u8BDD\u4E0D\u53EF\u89C1",
+                " ",
+                "\xB7",
+                " ",
+                source.compatible ? "\u53EF\u4E3B\u52A8\u63A5\u5165\u753B\u9762" : "\u53EF\u8BA9 Agent \u5C1D\u8BD5\u753B\u9762"
+              ] }),
+              /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "dsh-test-setting-actions", children: [
+                /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+                  "button",
+                  {
+                    type: "button",
+                    disabled: checking,
+                    onClick: () => void checkConnection(source.id),
+                    children: "\u68C0\u6D4B\u8FDE\u63A5"
+                  }
+                ),
+                /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("details", { children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("summary", { children: "\u67E5\u770B\u5DE5\u5177" }),
+                  source.tools?.length ? /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("ul", { children: source.tools.map((name2) => /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("code", { children: name2 }) }, name2)) }) : /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { className: "dsh-test-setting-hint", children: "\u5C1A\u65E0\u53EF\u89C1\u5DE5\u5177\uFF0C\u8BF7\u5728 DSH \u4E2D\u542F\u7528\u8FDE\u63A5\u5E76\u68C0\u67E5\u5F53\u524D\u5BF9\u8BDD\u6743\u9650\u3002" })
+                ] })
+              ] })
+            ] }, source.id)),
+            /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "dsh-test-connection", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { children: [
+                /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("strong", { children: "RunBridge" }),
+                /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "dsh-test-setting-hint", children: runbridgeEnabled(browser) ? "\u5DF2\u767B\u8BB0\u8FDE\u63A5" : "\u672A\u767B\u8BB0" })
+              ] }),
+              /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { className: "dsh-test-setting-hint", children: "\u53EA\u8BFB\u68C0\u6D4B\u4E0D\u9886\u53D6\u8BBE\u5907\uFF0C\u5B9E\u9645\u4F7F\u7528\u65F6\u7BA1\u7406\u539F\u79DF\u7EA6\u3002" }),
+              /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+                "button",
+                {
+                  type: "button",
+                  className: "dsh-test-inline-action",
+                  onClick: () => setDetails((current) => !current),
+                  children: details ? "\u6536\u8D77\u8FDE\u63A5\u8BE6\u60C5" : "\u914D\u7F6E\u8FDE\u63A5"
                 }
-              }),
-              children: [
-                /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("option", { value: "auto", children: "\u81EA\u52A8\u4F7F\u7528\u5F53\u524D\u53EF\u7528\u5DE5\u5177" }),
-                /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("option", { value: "mcp", children: "\u6307\u5B9A\u4E3B\u8981 MCP \u5B9E\u4F8B" }),
-                /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("option", { value: "playwright", children: "\u672C\u673A Playwright MCP\uFF08\u7BA1\u7406\u6D4B\u8BD5\u4E0A\u4E0B\u6587\uFF09" }),
-                /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("option", { value: "runbridge", children: "\u8FDC\u7A0B RunBridge MCP" })
-              ]
-            }
-          ),
-          browser.backend === "auto" && /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { className: "dsh-test-setting-hint", children: "\u4F7F\u7528\u5F53\u524D\u5BF9\u8BDD\u5DF2\u542F\u7528\u7684\u4E1A\u52A1\u5DE5\u5177\uFF0C\u652F\u6301\u81EA\u5B9A\u4E49 Selenium \u7B49 MCP\uFF1B\u4E0A\u4E0B\u6587\u9ED8\u8BA4\u7531\u670D\u52A1\u7BA1\u7406\uFF0C\u539F\u751F\u6743\u9650\u4E0E\u5BA1\u6279\u7EE7\u7EED\u751F\u6548\u3002" }),
-          browser.backend === "mcp" && /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)(import_jsx_runtime5.Fragment, { children: [
-            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("label", { htmlFor: "dsh-test-execution-mcp", children: "\u4E3B\u8981 MCP \u5B9E\u4F8B" }),
-            /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)(
-              "select",
-              {
-                id: "dsh-test-execution-mcp",
-                value: browser.mcpId ?? "",
-                "aria-invalid": !!errors.executionMcpId,
-                onChange: (e) => edit({
-                  browser: { ...browser, mcpId: e.target.value },
-                  preview: { ...draft.preview, mcpId: e.target.value }
-                }),
-                children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("option", { value: "", children: "\u8BF7\u9009\u62E9 MCP \u5B9E\u4F8B" }),
-                  info.mcpInstances.map((m) => /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("option", { value: m.id, children: m.label }, m.id))
-                ]
-              }
-            ),
-            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { className: "dsh-test-setting-hint", children: "\u4F18\u5148\u4F7F\u7528\u8BE5\u5B9E\u4F8B\u7684\u539F\u6709\u5DE5\u5177\uFF1B\u5A92\u4F53\u80FD\u529B\u72EC\u7ACB\u68C0\u6D4B\uFF0C\u5176\u4ED6\u5DF2\u6388\u6743\u4E1A\u52A1\u5DE5\u5177\u4ECD\u53EF\u534F\u4F5C\u3002" })
+              )
+            ] })
           ] }),
-          browser.backend === "runbridge" && /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
-            RunBridgeConnection,
-            {
-              value: browser,
-              edit: (v) => edit({ browser: { ...browser, ...v } }),
-              result,
-              checking,
-              read: (connect) => void inspect(connect),
-              cancel: () => {
-                cancel();
-                setNotice("\u68C0\u6D4B\u5DF2\u53D6\u6D88\uFF0C\u672A\u4FDD\u5B58\u8BBE\u7F6E\u3002");
-              },
-              errors
-            }
-          ),
-          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("h3", { children: "\u753B\u9762\u4E0E\u5F55\u50CF" }),
-          browser.backend === "runbridge" ? /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)(import_jsx_runtime5.Fragment, { children: [
+          details && /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("section", { className: "dsh-test-connection-detail", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("h3", { children: "RunBridge \u8FDE\u63A5\u8BE6\u60C5" }),
             /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("label", { className: "dsh-test-setting-switch", children: [
               /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
                 "input",
                 {
                   type: "checkbox",
-                  checked: browser.previewEnabled,
-                  disabled: !writable,
-                  onChange: (e) => edit({
-                    browser: { ...browser, previewEnabled: e.target.checked }
+                  checked: runbridgeEnabled(browser),
+                  onChange: (event) => edit({
+                    browser: {
+                      ...browser,
+                      runbridgeEnabled: event.target.checked
+                    }
                   })
                 }
               ),
-              "\u663E\u793A\u5B9E\u65F6\u753B\u9762"
+              "\u767B\u8BB0\u6B64\u8FDE\u63A5\u4F9B Agent \u4F7F\u7528"
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { className: "dsh-test-setting-hint", children: "RunBridge \u63D0\u4F9B\u540C\u4E00\u8FDC\u7A0B\u9875\u9762\u7684\u753B\u9762\uFF0C\u65E0\u9700\u672C\u673A Browscreen\uFF1B\u8FDC\u7A0B\u5F55\u50CF\u6682\u4E0D\u652F\u6301\u3002" })
-          ] }) : browser.backend === "mcp" && !info.mcpInstances.some(
-            (m) => m.id === browser.mcpId && m.compatible
-          ) ? /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { className: "dsh-test-setting-hint", children: "\u5F53\u524D\u4E3B\u8981 MCP \u672A\u63D0\u4F9B\u81EA\u52A8\u753B\u9762\u6216\u5F55\u50CF\u63A5\u5165\uFF0C\u6D4B\u8BD5\u4E0E\u62A5\u544A\u4ECD\u53EF\u4F7F\u7528\u3002\u5DF2\u6709\u5A92\u4F53\u504F\u597D\u4F1A\u4FDD\u7559\u3002" }) : /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+              RunBridgeConnection,
+              {
+                value: browser,
+                edit: (next) => edit({ browser: { ...browser, ...next } }),
+                result,
+                checking,
+                read: (connect) => void inspect(connect),
+                cancel: () => {
+                  request.current?.abort();
+                  setChecking(false);
+                  setNotice("\u68C0\u6D4B\u5DF2\u53D6\u6D88");
+                },
+                errors
+              }
+            )
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("details", { className: "dsh-test-command-advanced", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("summary", { children: "\u6DFB\u52A0\u5176\u4ED6\u5DE5\u5177\u8FDE\u63A5" }),
+            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { children: "\u5728 DSH \u8BBE\u7F6E\u7684\u201C\u5185\u7F6E\u63D2\u4EF6\u201D\u4E2D\u6DFB\u52A0 MCP \u5BA2\u6237\u7AEF\uFF0C\u586B\u5199\u670D\u52A1\u63D0\u4F9B\u7684 stdio \u542F\u52A8\u547D\u4EE4\u6216 HTTP \u5730\u5740\uFF1B\u5728\u5F53\u524D Agent \u4E2D\u542F\u7528\u76F8\u5E94\u5DE5\u5177\u3002" }),
+            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { children: "Playwright MCP \u4E5F\u4F7F\u7528\u540C\u4E00\u5165\u53E3\uFF0C\u8FDE\u63A5\u540D\u79F0\u53EF\u81EA\u5B9A\u4E49\u3002\u4EE5\u4E0B\u542F\u52A8\u53C2\u6570\u4EC5\u5E2E\u52A9\u914D\u7F6E\uFF0C\u6267\u884C\u65F6\u4E0E\u5176\u4ED6\u5DE5\u5177\u5E73\u7B49\u3002" }),
+            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("pre", { children: 'transport: stdio\nserverName: web-browser\ncommand: npx\nargs: ["-y", "@playwright/mcp@0.0.68", "--isolated"]' }),
+            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { className: "dsh-test-setting-hint", children: "\u6CE8\u518C\u540E\u70B9\u51FB\u201C\u5237\u65B0\u8FDE\u63A5\u5217\u8868\u201D\uFF1BRunBridge \u7684\u79C1\u6709\u6587\u4EF6\u5728\u4E0A\u65B9\u8FDE\u63A5\u8BE6\u60C5\u914D\u7F6E\u3002" })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+            "button",
+            {
+              type: "button",
+              className: "dsh-test-inline-action",
+              onClick: () => void refresh(),
+              children: "\u5237\u65B0\u8FDE\u63A5\u5217\u8868"
+            }
+          )
+        ] }) : /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)(import_jsx_runtime5.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { className: "dsh-test-setting-hint", children: "\u6765\u6E90\uFF1A\u8DDF\u968F\u6D4B\u8BD5\u5B9E\u9645\u64CD\u4F5C\u7684\u9875\u9762\u3002\u5148\u5C1D\u8BD5\u5DF2\u6709\u753B\u9762\u9002\u914D\uFF0C\u518D\u7531 Agent \u5C1D\u8BD5\u5F53\u524D\u5DE5\u5177\u7684\u80FD\u529B\u3002" }),
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
             LocalPreviewSettings,
             {
               value: draft.preview,
-              edit: (v) => edit({ preview: { ...draft.preview, ...v } }),
+              edit: (next) => edit({ preview: { ...draft.preview, ...next } }),
               info,
               refresh,
               errors
             }
-          )
-        ] }),
+          ),
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "dsh-test-command-check", role: "status", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("strong", { children: info.activeMedia?.reason ?? "\u7B49\u5F85\u6D4B\u8BD5\u6253\u5F00\u5B9E\u9645\u9875\u9762" }),
+            info.activeMedia?.source && /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("p", { className: "dsh-test-setting-hint", children: [
+              "\u5F53\u524D\u6765\u6E90\uFF1A",
+              info.mcpInstances.find(
+                (source) => source.id === info.activeMedia.source
+              )?.label ?? info.activeMedia.source,
+              " ",
+              info.activeMedia.frames > 0 ? ` \xB7 \u5DF2\u9A8C\u8BC1 ${info.activeMedia.frames} \u5E27` : ""
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { className: "dsh-test-setting-hint", children: "\u6301\u7EED\u753B\u9762\u3001\u5B9A\u65F6\u622A\u56FE\u548C\u5355\u6B21\u622A\u56FE\u5206\u522B\u9A8C\u8BC1\uFF1B\u753B\u9762\u7F3A\u5931\u4ECD\u53EF\u6267\u884C\u7528\u4F8B\u5E76\u8F93\u51FA\u62A5\u544A\u3002" }),
+            /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "dsh-test-setting-actions", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+                "button",
+                {
+                  type: "button",
+                  disabled: probing || !tryPreview,
+                  onClick: () => void action(tryPreview),
+                  children: probing ? "\u6B63\u5728\u63D0\u4EA4\u2026" : "\u8BA9 Agent \u5C1D\u8BD5\u63A5\u5165"
+                }
+              ),
+              /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+                "button",
+                {
+                  type: "button",
+                  disabled: probing || !stopPreview,
+                  onClick: () => void action(stopPreview),
+                  children: "\u505C\u6B62\u5C1D\u8BD5"
+                }
+              )
+            ] })
+          ] })
+        ] }) }),
         /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "dsh-test-settings-save dsh-test-setting-actions", children: [
           /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
             "button",
             {
               type: "submit",
-              disabled: !writable || !dirty || saving || checking,
-              children: saving ? "\u6B63\u5728\u4FDD\u5B58\u2026" : "\u4FDD\u5B58\u6D4F\u89C8\u5668\u8BBE\u7F6E"
+              disabled: !writable || !sectionDirty || saving || checking,
+              children: saving ? "\u6B63\u5728\u4FDD\u5B58\u2026" : view === "connections" ? "\u4FDD\u5B58\u8FDE\u63A5" : "\u4FDD\u5B58\u753B\u9762\u504F\u597D"
             }
           ),
           /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
             "button",
             {
               type: "button",
-              disabled: !dirty || saving,
+              disabled: !sectionDirty || saving,
               onClick: () => {
-                cancel();
-                const current = values(state.value, info);
-                setDraft(current);
-                setBase(current);
+                request.current?.abort();
+                const next = values(state.value, info);
+                setDraft(
+                  (current) => view === "connections" ? { ...current, browser: next.browser } : { ...current, preview: next.preview }
+                );
+                setBase(
+                  (current) => view === "connections" ? { ...current, browser: next.browser } : { ...current, preview: next.preview }
+                );
                 setRevision(state.revision);
                 setErrors({});
-                setNotice("\u5DF2\u653E\u5F03\u4FEE\u6539\uFF0C\u6062\u590D\u5F53\u524D\u5DF2\u4FDD\u5B58\u7684\u6D4F\u89C8\u5668\u8BBE\u7F6E\u3002");
-                drafts.delete(form);
+                setNotice("\u5DF2\u653E\u5F03\u5F53\u524D\u9875\u4FEE\u6539\uFF0C\u6062\u590D\u5DF2\u4FDD\u5B58\u914D\u7F6E\u3002");
               },
-              children: "\u653E\u5F03\u4FEE\u6539"
+              children: "\u653E\u5F03\u5F53\u524D\u9875\u4FEE\u6539"
             }
           )
         ] }),
@@ -1323,20 +1390,32 @@ function PreviewSettingsPage({
   forms,
   rebuildReport,
   describeReport,
+  tryPreview,
+  stopPreview,
+  currentSession,
   ...recovery
 }) {
+  const [tab, setTab] = (0, import_react6.useState)(
+    "connections"
+  );
   const [info, setInfo] = (0, import_react6.useState)();
   const [error, setError] = (0, import_react6.useState)("");
-  const refresh = (0, import_react6.useCallback)(async (signal) => {
-    const response = await fetch("/test-preview-settings", {
-      signal,
-      cache: "no-store"
-    });
-    if (!response.ok)
-      throw new Error("\u65E0\u6CD5\u8BFB\u53D6\u8BBE\u7F6E\uFF0C\u8BF7\u786E\u8BA4\u5DF2\u767B\u5F55\u4E14\u6D4B\u8BD5\u63D2\u4EF6\u6B63\u5E38\u52A0\u8F7D\u3002");
-    setInfo(await response.json());
-    setError("");
-  }, []);
+  const refresh = (0, import_react6.useCallback)(
+    async (signal) => {
+      const response = await fetch(
+        "/test-preview-settings" + (currentSession?.() ? "?session_id=" + encodeURIComponent(currentSession()) : ""),
+        {
+          signal,
+          cache: "no-store"
+        }
+      );
+      if (!response.ok)
+        throw new Error("\u65E0\u6CD5\u8BFB\u53D6\u8BBE\u7F6E\uFF0C\u8BF7\u786E\u8BA4\u5DF2\u767B\u5F55\u4E14\u6D4B\u8BD5\u63D2\u4EF6\u6B63\u5E38\u52A0\u8F7D\u3002");
+      setInfo(await response.json());
+      setError("");
+    },
+    [currentSession]
+  );
   (0, import_react6.useEffect)(() => {
     const c = new AbortController();
     void refresh(c.signal).catch((e) => {
@@ -1344,27 +1423,116 @@ function PreviewSettingsPage({
     });
     return () => c.abort();
   }, [refresh]);
-  return /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("section", { className: "dsh-test-settings", "data-test-preview-settings": true, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h2", { children: "\u6D4F\u89C8\u5668\u8BBE\u7F6E" }),
-    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { className: "dsh-test-setting-hint", children: "\u9ED8\u8BA4\u4F7F\u7528\u5F53\u524D\u5BF9\u8BDD\u53EF\u7528\u7684\u5DE5\u5177\uFF0C\u4E5F\u53EF\u6307\u5B9A\u4E3B\u8981 MCP \u6216\u9009\u62E9\u53D7\u7BA1\u7406\u6D4F\u89C8\u5668\u3002\u753B\u9762\u4E0E\u5F55\u50CF\u6309\u8FDE\u63A5\u80FD\u529B\u63D0\u4F9B\u3002" }),
-    error && /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { role: "alert", children: error }),
-    info ? /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(
-      BrowserSettings,
-      {
-        form: forms.get(info.namespace),
-        info,
-        refresh
+  (0, import_react6.useEffect)(() => {
+    if (tab !== "media") return;
+    const controller = new AbortController();
+    let timer;
+    const poll = async () => {
+      try {
+        await refresh(controller.signal);
+      } catch {
+        if (!controller.signal.aborted)
+          setError("\u753B\u9762\u72B6\u6001\u8BFB\u53D6\u5931\u8D25\uFF0C\u8BF7\u68C0\u67E5\u5BBF\u4E3B\u8FDE\u63A5\u3002");
       }
-    ) : !error && /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { role: "status", children: "\u6B63\u5728\u8BFB\u53D6\u8BBE\u7F6E\u2026" }),
-    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(RecoveryPanel, { ...recovery }),
-    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(
-      ReportSettings,
-      {
-        rebuildReport,
-        describeReport
-      }
-    )
-  ] });
+      if (!controller.signal.aborted) timer = setTimeout(poll, 2e3);
+    };
+    timer = setTimeout(poll, 2e3);
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [tab, refresh]);
+  return /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)(
+    "section",
+    {
+      className: "dsh-test-settings",
+      "data-test-preview-settings": true,
+      "data-settings-tab": tab,
+      children: [
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h2", { children: "\u5DE5\u5177\u4E0E\u5B9E\u65F6\u753B\u9762" }),
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { className: "dsh-test-setting-hint", children: "Agent \u6309\u7528\u4F8B\u9009\u62E9\u5F53\u524D\u5BF9\u8BDD\u53EF\u7528\u7684\u5DE5\u5177\uFF1B\u6B64\u5904\u7BA1\u7406\u8FDE\u63A5\u3001\u753B\u9762\u4E0E\u6D4B\u8BD5\u73AF\u5883\u3002" }),
+        error && /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { role: "alert", children: error }),
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(
+          "div",
+          {
+            className: "dsh-test-settings-tabs",
+            role: "tablist",
+            "aria-label": "\u6D4B\u8BD5\u63D2\u4EF6\u8BBE\u7F6E",
+            children: [
+              ["connections", "\u5DE5\u5177\u63A5\u5165"],
+              ["media", "\u5B9E\u65F6\u753B\u9762"],
+              ["environment", "\u73AF\u5883\u4E0E\u62A5\u544A"]
+            ].map(([id, label], index) => /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(
+              "button",
+              {
+                type: "button",
+                id: "dsh-test-tab-" + id,
+                role: "tab",
+                "aria-selected": tab === id,
+                "aria-controls": "dsh-test-panel-" + id,
+                tabIndex: tab === id ? 0 : -1,
+                onClick: () => setTab(id),
+                onKeyDown: (event) => {
+                  const ids = ["connections", "media", "environment"];
+                  const next = event.key === "ArrowRight" ? ids[(index + 1) % 3] : event.key === "ArrowLeft" ? ids[(index + 2) % 3] : event.key === "Home" ? ids[0] : event.key === "End" ? ids[2] : void 0;
+                  if (next) {
+                    event.preventDefault();
+                    setTab(next);
+                    document.getElementById("dsh-test-tab-" + next)?.focus();
+                  }
+                },
+                children: label
+              },
+              id
+            ))
+          }
+        ),
+        tab !== "environment" && info ? /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(
+          "div",
+          {
+            role: "tabpanel",
+            id: "dsh-test-panel-" + tab,
+            "aria-labelledby": "dsh-test-tab-" + tab,
+            children: /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(
+              BrowserSettings,
+              {
+                form: forms.get(info.namespace),
+                info,
+                refresh,
+                view: tab,
+                tryPreview,
+                stopPreview
+              }
+            )
+          }
+        ) : !info && !error && /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { role: "status", children: "\u6B63\u5728\u8BFB\u53D6\u8BBE\u7F6E\u2026" }),
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(
+          RecoveryPanel,
+          {
+            ...recovery,
+            compact: tab !== "environment",
+            onOpen: () => setTab("environment")
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(
+          "div",
+          {
+            hidden: tab !== "environment",
+            role: "tabpanel",
+            id: "dsh-test-panel-environment",
+            "aria-labelledby": "dsh-test-tab-environment",
+            children: /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(
+              ReportSettings,
+              {
+                rebuildReport,
+                describeReport
+              }
+            )
+          }
+        )
+      ]
+    }
+  );
 }
 
 // src/client/components.tsx
@@ -2151,6 +2319,10 @@ var progressStyle = `
 .dsh-test-settings{color:var(--dsw-alias-label-primary,#253041);font:inherit;font-size:13px;line-height:1.6;max-width:650px}.dsh-test-settings h2{font-size:18px;font-weight:600;margin:0 0 12px}.dsh-test-settings p{margin:8px 0 16px}.dsh-test-settings fieldset{border:0;padding:0;margin:20px 0}.dsh-test-settings fieldset>label{display:block;font-weight:500;margin:18px 0 7px}.dsh-test-settings input:not([type=checkbox]),.dsh-test-settings select{box-sizing:border-box;width:100%;padding:9px 10px;border:1px solid var(--dsw-alias-border-l1,#d6dde7);border-radius:6px;background:var(--dsw-specific-menu,#f6f8fb);color:inherit;font:inherit}.dsh-test-settings input:focus,.dsh-test-settings select:focus{outline:2px solid var(--dsw-alias-link,#3873cf);outline-offset:2px}.dsh-test-setting-switch{display:flex;align-items:center;gap:9px;font-weight:500}.dsh-test-setting-switch input{accent-color:var(--dsw-alias-link,#3873cf)}.dsh-test-settings .dsh-test-setting-hint{color:var(--dsw-alias-label-secondary,#64748b);font-size:12px;margin-top:6px}.dsh-test-setting-actions{display:flex;gap:10px}.dsh-test-setting-actions button{font:inherit;padding:8px 14px;border:1px solid var(--dsw-alias-border-l1,#d6dde7);border-radius:6px;background:transparent;color:inherit;cursor:pointer}.dsh-test-setting-actions button[type=submit]{background:var(--dsw-alias-link,#3873cf);color:white;border-color:transparent}.dsh-test-setting-actions button:disabled{opacity:.5;cursor:default}.dsh-test-settings [role=alert]{color:var(--dsw-alias-state-error-primary,#be3b45)}
 .dsh-test-command-advanced{margin:18px 0}.dsh-test-command-advanced summary{cursor:pointer;font-weight:500}.dsh-test-command-advanced label{display:block;margin:12px 0 7px}.dsh-test-command-check{margin:12px 0;padding:10px 12px;border:1px solid var(--dsw-alias-border-l1,#d6dde7);border-radius:6px;overflow-wrap:anywhere}.dsh-test-command-check p{margin:4px 0}.dsh-test-command-check code{font-size:12px}.dsh-test-preview-note{font-size:12px;line-height:1.6;overflow-wrap:anywhere;margin:10px 0 0;padding:8px 10px;border-top:1px solid var(--dsh-test-line);color:var(--dsw-alias-label-secondary,#64748b)}.dsh-test-preview-note span{display:block}
 .dsh-test-settings{display:flex;flex-direction:column;min-width:0}.dsh-test-settings form{order:1}.dsh-test-settings .dsh-test-recovery{order:2}.dsh-test-settings .dsh-test-recovery[data-state=blocked]{order:-1}.dsh-test-settings .dsh-test-recovery[data-state=ready]{border:0;padding:0;font-size:12px;color:var(--dsw-alias-label-secondary,#64748b)}.dsh-test-settings .dsh-test-report-maintenance{order:3;border-top:1px solid var(--dsw-alias-border-l1,#d6dde7);padding-top:16px;margin-top:16px}.dsh-test-settings h3{font-size:15px;font-weight:600;margin:26px 0 10px}.dsh-test-settings label{display:block;font-weight:500;margin:16px 0 7px}.dsh-test-settings .dsh-test-setting-switch{display:flex;align-items:center;gap:9px}.dsh-test-settings input[type=checkbox]{flex:none}.dsh-test-settings .dsh-test-config-state{font-size:12px;margin:0 0 12px;color:var(--dsw-alias-label-secondary,#64748b)}.dsh-test-settings .dsh-test-setting-actions{flex-wrap:wrap;align-items:center}.dsh-test-settings .dsh-test-setting-actions a{color:var(--dsw-alias-link,#3873cf);font-size:12px}.dsh-test-settings button:focus-visible,.dsh-test-settings a:focus-visible,.dsh-test-settings summary:focus-visible{outline:2px solid var(--dsw-alias-link,#3873cf);outline-offset:3px}.dsh-test-settings .dsh-test-settings-save{background:var(--dsw-specific-menu,#fff);border-top:1px solid var(--dsw-alias-border-l1,#d6dde7);padding:12px 0;margin-top:16px}.dsh-test-settings pre{font-size:12px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere;padding:12px;background:var(--dsw-specific-menu,#f6f8fb);border:1px solid var(--dsw-alias-border-l1,#d6dde7);border-radius:6px}.dsh-test-settings dl{display:grid;grid-template-columns:minmax(80px,120px) minmax(0,1fr);gap:6px 12px;font-size:12px;min-width:0;margin:16px 0}.dsh-test-settings dt{color:var(--dsw-alias-label-secondary,#64748b)}.dsh-test-settings dd{margin:0;min-width:0;overflow-wrap:anywhere}.dsh-test-settings .dsh-test-inline-action{border:0;background:transparent;color:var(--dsw-alias-link,#3873cf);font:inherit;margin-left:8px;cursor:pointer}
+
+.dsh-test-settings-tabs{display:flex;gap:4px;border-bottom:1px solid var(--dsw-alias-border-l1,#d6dde7);margin:8px 0 18px}.dsh-test-settings-tabs button{font:inherit;color:var(--dsw-alias-label-secondary,#64748b);background:transparent;border:0;border-bottom:2px solid transparent;padding:10px 13px;cursor:pointer}.dsh-test-settings-tabs [aria-selected=true]{color:var(--dsw-alias-link,#3873cf);border-bottom-color:var(--dsw-alias-link,#3873cf);font-weight:600}.dsh-test-settings [role=tabpanel]{min-width:0}.dsh-test-settings .dsh-test-connections{border-top:1px solid var(--dsw-alias-border-l1,#d6dde7)}.dsh-test-connection{padding:14px 0;border-bottom:1px solid var(--dsw-alias-border-l1,#d6dde7);overflow-wrap:anywhere}.dsh-test-connection>div:first-child{display:flex;gap:14px;justify-content:space-between;align-items:baseline}.dsh-test-settings .dsh-test-connection p{margin:5px 0 10px}.dsh-test-connection .dsh-test-setting-actions{align-items:center}.dsh-test-connection details{min-width:0;max-width:100%}.dsh-test-connection details[open]{flex-basis:100%}.dsh-test-connection summary{cursor:pointer;color:var(--dsw-alias-link,#3873cf)}.dsh-test-connection code{font-size:11px;overflow-wrap:anywhere}.dsh-test-settings .dsh-test-settings-save{position:sticky;bottom:-16px;z-index:1;padding:12px 0 16px}.dsh-test-settings fieldset{margin:8px 0 16px}.dsh-test-connection-detail{padding:0 14px 14px;border-left:2px solid var(--dsw-alias-border-l1,#d6dde7)}.dsh-test-settings[data-settings-tab]:not([data-settings-tab=environment]) .dsh-test-recovery:not([data-state=blocked]){display:none}.dsh-test-settings [hidden]{display:none!important}
+
+.dsh-test-settings>[role=tabpanel]{order:1}.dsh-test-settings[data-settings-tab=environment]>.dsh-test-recovery{order:1}.dsh-test-settings>#dsh-test-panel-environment{order:2}
 `;
 
 // src/client/index.ts
@@ -2225,6 +2397,9 @@ function apply(ctx) {
           label: () => "\u6D4B\u8BD5\u63D2\u4EF6",
           inject: () => ({
             forms: settings.configForms,
+            currentSession,
+            tryPreview: () => post("preview", { session_id: currentSession() }),
+            stopPreview: () => post("preview-stop", { session_id: currentSession() }),
             ...recovery,
             rebuildReport: (runId) => post("report", {
               session_id: currentSession(),

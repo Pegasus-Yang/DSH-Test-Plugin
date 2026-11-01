@@ -1,5 +1,44 @@
 /** 核对真实操作顺序，拒绝用取消后的额外导航补出返回列表的通过结果。 */
 import assert from "node:assert/strict";
+import { extractToolResult } from "../../dist/tool-results.js";
+
+/** 同一用例内的原始 DOM 调用与冻结提取必须能复现断言操作数。 */
+function domObservation(observation, record, caseId) {
+  if (observation.producer.adapter === "playwright-dom-v1") return true;
+  if (observation.producer.adapter !== "tool-result-v1") return false;
+  const call = record.calls?.find(
+    (item) => item.call_id === observation.producer.call_id,
+  );
+  if (
+    !call ||
+    call.binding?.case_run_id !== caseId ||
+    call.isError ||
+    !call.finished_at ||
+    !/evaluate$|run_code$/.test(call.name)
+  )
+    return false;
+  const script =
+    call.args_redacted?.function ??
+    call.args_redacted?.script ??
+    call.args_redacted?.code;
+  if (
+    typeof script !== "string" ||
+    !/document\.(querySelector|querySelectorAll)|page\.(locator|getByRole)/.test(
+      script,
+    ) ||
+    !/dialog|form/i.test(script)
+  )
+    return false;
+  try {
+    assert.deepEqual(
+      extractToolResult(call.result, JSON.parse(observation.producer.field)),
+      observation.value,
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export function assertDraftCancellation(document, listUrl, run) {
   const draft = document.cases.at(-1);
@@ -73,7 +112,7 @@ export function assertDraftCancellation(document, listUrl, run) {
                     observation.observation_id ===
                       step.assertion.operand_snapshot?.actual_observation_id &&
                     observation.binding.case_run_id === draft.case_run_id &&
-                    observation.producer.adapter === "playwright-dom-v1" &&
+                    domObservation(observation, record, draft.case_run_id) &&
                     observation.value === step.assertion.actual,
                 ),
               ),

@@ -1,18 +1,20 @@
-/** 一份草稿原子保存连接与画面偏好；不保存凭据内容。 */
+/** 连接与画面分别保存，草稿跨设置页保留；凭据内容不进入客户端。 */
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { ConfigForm } from "@deepseek-ai/dsh-client-ui-settings/client";
 import {
   browserPreferenceDefaults,
+  runbridgeEnabled,
   type BrowserPreferences,
 } from "../browser-preferences.js";
 import {
   previewPreferenceDefaults,
+  effectivePreviewPreferences,
   type PreviewPreferences,
   type PreviewSettingsInfo,
 } from "../preview-preferences.js";
 import type { RunBridgeSettingsResult } from "../runbridge-settings.js";
-import { RunBridgeConnection, remoteGuide } from "./runbridge-connection.js";
-import { LocalPreviewSettings, localGuide } from "./local-preview-settings.js";
+import { RunBridgeConnection } from "./runbridge-connection.js";
+import { LocalPreviewSettings } from "./local-preview-settings.js";
 export interface BrowserSettingsFields {
   browser?: BrowserPreferences;
   browserConnection?: BrowserPreferences;
@@ -22,36 +24,44 @@ interface Draft {
   browser: BrowserPreferences;
   preview: PreviewPreferences;
 }
-// 宿主未提供离开拦截 API，按表单保留草稿；成功保存或明确放弃后清除。
 const drafts = new WeakMap<
   ConfigForm<BrowserSettingsFields>,
   { draft: Draft; base: Draft; revision?: number }
 >();
-const sourceLabels: Record<BrowserPreferences["backend"], string> = {
-  auto: "自动使用可用工具",
-  mcp: "指定主要 MCP",
-  playwright: "本机 Playwright",
-  runbridge: "远程 RunBridge",
-};
+const same = (a: unknown, b: unknown) =>
+  JSON.stringify(a) === JSON.stringify(b);
 const values = (
   v: BrowserSettingsFields | undefined,
   info: PreviewSettingsInfo,
-): Draft => ({
-  browser: {
-    ...browserPreferenceDefaults,
-    ...(v?.browserConnection ?? v?.browser ?? info.browserConnection),
-  },
-  preview: { ...previewPreferenceDefaults, ...v?.browserPreview },
-});
-const same = (a: Draft, b: Draft) => JSON.stringify(a) === JSON.stringify(b);
+): Draft => {
+  const old = v?.browserConnection ?? v?.browser ?? info.browserConnection;
+  return {
+    browser: {
+      ...browserPreferenceDefaults,
+      ...old,
+      backend: "auto",
+      runbridgeEnabled: runbridgeEnabled(old),
+    },
+    preview: {
+      ...previewPreferenceDefaults,
+      ...effectivePreviewPreferences(old, v?.browserPreview),
+    },
+  };
+};
 export function BrowserSettings({
   form,
   info,
   refresh,
+  view = "connections",
+  tryPreview,
+  stopPreview,
 }: {
   form: ConfigForm<BrowserSettingsFields>;
   info: PreviewSettingsInfo;
   refresh: () => Promise<void>;
+  view?: "connections" | "media";
+  tryPreview?: () => Promise<string>;
+  stopPreview?: () => Promise<string>;
 }) {
   const state = useSyncExternalStore(
     form.subscribe.bind(form),
@@ -66,37 +76,30 @@ export function BrowserSettings({
   );
   const [revision, setRevision] = useState(cached?.revision ?? state.revision);
   const [notice, setNotice] = useState(
-    cached ? "上次未保存的修改已保留。请保存或放弃修改。" : "",
+    cached ? "上次未保存的修改已保留。" : "",
   );
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<RunBridgeSettingsResult>();
   const [checking, setChecking] = useState(false);
-  const request = useRef<{ controller: AbortController; key: string }>();
+  const [details, setDetails] = useState(false);
+  const [probing, setProbing] = useState(false);
+  const request = useRef<AbortController>();
   const formRef = useRef<HTMLFormElement>(null);
   const dirty = !same(base, draft);
+  const sectionDirty =
+    view === "connections"
+      ? !same(base.browser, draft.browser)
+      : !same(base.preview, draft.preview);
   const browser = draft.browser;
-  const hubSource = browser.connectionSource === "hub";
-  const activeFile = hubSource ? (browser.hubFile ?? "") : browser.accessFile;
-  const requestKey = JSON.stringify([
-    browser.backend,
-    browser.accessFile.trim(),
-    browser.connectionSource,
-    browser.hubFile?.trim(),
-    browser.nodeId?.trim(),
-    browser.nodeLeaseSeconds,
-    browser.resourceId,
-    browser.leaseSeconds,
-  ]);
-  const latestKey = useRef(requestKey);
-  latestKey.current = requestKey;
-  const resultRef = useRef(result);
-  resultRef.current = result;
+  const connectionKey = JSON.stringify(browser);
+  const keyRef = useRef(connectionKey);
+  keyRef.current = connectionKey;
   useEffect(() => {
     if (!dirty && state.status === "ready") {
-      const current = values(state.value, info);
-      setBase(current);
-      setDraft(current);
+      const next = values(state.value, info);
+      setBase(next);
+      setDraft(next);
       setRevision(state.revision);
     }
   }, [state.value, state.revision, state.status, dirty, info]);
@@ -105,113 +108,64 @@ export function BrowserSettings({
     else drafts.delete(form);
   }, [draft, base, revision, dirty, form]);
   useEffect(() => {
-    const warn = (e: BeforeUnloadEvent) => {
+    const warn = (event: BeforeUnloadEvent) => {
       if (dirty) {
-        e.preventDefault();
-        e.returnValue = "";
+        event.preventDefault();
+        event.returnValue = "";
       }
     };
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
   }, [dirty]);
-  const cancel = () => {
-    request.current?.controller.abort();
-    request.current = undefined;
+  useEffect(() => {
+    request.current?.abort();
+    setResult(undefined);
     setChecking(false);
+    return () => request.current?.abort();
+  }, [connectionKey]);
+  const edit = (part: Partial<Draft>) => {
+    if (!dirty) setRevision(state.revision);
+    setDraft((current) => ({ ...current, ...part }));
+    setErrors({});
+    setNotice("");
   };
   const inspect = async (
     connect: boolean,
-    quiet = false,
   ): Promise<RunBridgeSettingsResult | undefined> => {
-    if (request.current && quiet) return;
-    cancel();
-    const current = { controller: new AbortController(), key: requestKey };
-    request.current = current;
-    if (!quiet) setChecking(true);
+    request.current?.abort();
+    const controller = new AbortController();
+    request.current = controller;
+    const key = connectionKey;
+    setChecking(true);
     try {
       const response = await fetch("/test-preview-settings/runbridge", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: connect ? "connect" : "read",
-          accessFile: browser.accessFile.trim(),
           connectionSource: browser.connectionSource ?? "access-file",
+          accessFile: browser.accessFile.trim(),
           hubFile: browser.hubFile?.trim(),
           nodeId: browser.nodeId?.trim(),
           resourceId: browser.resourceId.trim(),
         }),
-        signal: current.controller.signal,
+        signal: controller.signal,
       });
       const next = (await response.json()) as RunBridgeSettingsResult;
-      if (
-        current.controller.signal.aborted ||
-        latestKey.current !== current.key
-      )
-        return;
-      if (!response.ok) throw new Error();
-      const previous = resultRef.current;
-      setResult(
-        !connect &&
-          previous?.checked_at &&
-          next.file?.revision === previous.file?.revision
-          ? { ...previous, file: next.file }
-          : next,
-      );
-      return next;
+      if (!controller.signal.aborted && keyRef.current === key) {
+        setResult(next);
+        return next;
+      }
     } catch {
-      if (
-        !current.controller.signal.aborted &&
-        latestKey.current === current.key
-      ) {
-        const failed = {
+      if (!controller.signal.aborted)
+        setResult({
           ok: false,
-          code: "SETTINGS_UNAVAILABLE",
-          message: "无法读取连接设置，请核对宿主连接后重试。",
-        };
-        setResult(failed);
-        return failed;
-      }
+          code: "CHECK_FAILED",
+          message: "检测失败，请核对私有文件与宿主连接。",
+        });
     } finally {
-      if (request.current === current) {
-        request.current = undefined;
-        setChecking(false);
-      }
+      if (request.current === controller) setChecking(false);
     }
-  };
-  useEffect(() => {
-    cancel();
-    setResult(undefined);
-    if (
-      browser.backend !== "runbridge" ||
-      !activeFile.trim() ||
-      (hubSource &&
-        !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(browser.nodeId ?? "")) ||
-      !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(browser.resourceId)
-    )
-      return;
-    const timer = setTimeout(() => void inspect(false), 450);
-    return () => {
-      clearTimeout(timer);
-      request.current?.controller.abort();
-    };
-  }, [browser.backend, requestKey]);
-  useEffect(() => {
-    if (browser.backend !== "runbridge" || !result?.file) return;
-    const check = () => {
-      if (document.visibilityState === "visible") void inspect(false, true);
-    };
-    const timer = setInterval(check, 15000);
-    window.addEventListener("focus", check);
-    return () => {
-      clearInterval(timer);
-      window.removeEventListener("focus", check);
-    };
-  }, [browser.backend, requestKey, result?.file?.revision]);
-  const edit = (next: Partial<Draft>) => {
-    if (!dirty) setRevision(state.revision);
-    setDraft((v) => ({ ...v, ...next }));
-    setErrors({});
-    setNotice("");
   };
   const focusError = (key: string) => {
     const ids: Record<string, string> = {
@@ -221,62 +175,46 @@ export function BrowserSettings({
       nodeLeaseSeconds: "dsh-test-runbridge-node-lease",
       resourceId: "dsh-test-runbridge-resource",
       leaseSeconds: "dsh-test-runbridge-lease",
-      mcpId: "dsh-test-preview-mcp",
-      executionMcpId: "dsh-test-execution-mcp",
       port: "dsh-test-browscreen-port",
       browscreenExecutable: "dsh-test-browscreen-executable",
     };
-    const element = formRef.current?.querySelector<HTMLElement>("#" + ids[key]);
-    const details = element?.closest("details");
-    if (details) details.open = true;
-    element?.focus();
+    const el = formRef.current?.querySelector<HTMLElement>("#" + ids[key]);
+    for (let parent = el?.parentElement; parent; parent = parent.parentElement)
+      if (parent instanceof HTMLDetailsElement) parent.open = true;
+    el?.focus();
   };
   const save = async () => {
     const invalid: Record<string, string> = {};
-    if (
-      browser.backend === "mcp" &&
-      !info.mcpInstances.some((m) => m.id === browser.mcpId)
-    )
-      invalid.executionMcpId = "请选择已配置的主要 MCP 实例。";
-    if (browser.backend === "runbridge") {
-      if (!activeFile.trim())
-        invalid[hubSource ? "hubFile" : "accessFile"] =
+    if (view === "connections" && runbridgeEnabled(browser)) {
+      const hub = browser.connectionSource === "hub";
+      if (!(hub ? browser.hubFile : browser.accessFile)?.trim())
+        invalid[hub ? "hubFile" : "accessFile"] =
           "请填写 DSH 运行机器上的私有 YAML 或 JSON 文件路径。";
       if (
-        hubSource &&
+        hub &&
         !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(browser.nodeId?.trim() ?? "")
       )
-        invalid.nodeId = "请填写有效的目标 Node ID。";
+        invalid.nodeId = "请填写有效的 Node ID。";
       if (
-        hubSource &&
+        hub &&
         browser.nodeLeaseSeconds !== undefined &&
         (!Number.isInteger(browser.nodeLeaseSeconds) ||
           browser.nodeLeaseSeconds < 1)
       )
-        invalid.nodeLeaseSeconds =
-          "Node 租期须为正整数秒，或留空使用 Hub 默认值。";
+        invalid.nodeLeaseSeconds = "Node 租期须为正整数秒，或留空。";
       if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(browser.resourceId.trim()))
-        invalid.resourceId = "请填写有效的受管理浏览器资源 ID。";
+        invalid.resourceId = "请填写有效的浏览器资源 ID。";
       if (
         !Number.isInteger(browser.leaseSeconds) ||
         browser.leaseSeconds < 1 ||
         browser.leaseSeconds > 3600
       )
         invalid.leaseSeconds = "会话租期须为 1～3600 秒的整数。";
-    } else if (
-      (draft.preview.enabled || draft.preview.recordingEnabled) &&
-      (browser.backend === "playwright" ||
-        info.mcpInstances.some(
-          (m) => m.id === draft.preview.mcpId && m.compatible,
-        ))
+    }
+    if (
+      view === "media" &&
+      (draft.preview.enabled || draft.preview.recordingEnabled)
     ) {
-      if (
-        !draft.preview.mcpId ||
-        !info.mcpInstances.some(
-          (m) => m.id === draft.preview.mcpId && m.compatible,
-        )
-      )
-        invalid.mcpId = "请先选择可用的测试专用 Playwright MCP。";
       if (
         !Number.isInteger(draft.preview.port) ||
         draft.preview.port < 1 ||
@@ -290,101 +228,111 @@ export function BrowserSettings({
         !/^(\/|[a-zA-Z]:[\\/]|\\\\)/.test(command)
       )
         invalid.browscreenExecutable =
-          "请填写 browscreen 或完整可执行文件路径，不填写额外参数。";
+          "请填写 browscreen 或完整命令路径，不填写额外参数。";
     }
     if (Object.keys(invalid).length) {
       setErrors(invalid);
-      focusError(Object.keys(invalid)[0]!);
+      setDetails(true);
+      requestAnimationFrame(() => focusError(Object.keys(invalid)[0]!));
       return;
     }
     setSaving(true);
     setNotice("");
     try {
-      if (browser.backend === "runbridge") {
-        const file = await inspect(false);
-        if (!file?.ok) {
-          setErrors({
-            [hubSource ? "hubFile" : "accessFile"]:
-              file?.message ?? "读取配置未完成，请重新检查文件。",
-          });
-          focusError(hubSource ? "hubFile" : "accessFile");
-          return;
-        }
+      if (
+        view === "connections" &&
+        runbridgeEnabled(browser) &&
+        !(await inspect(false))?.ok
+      ) {
+        setErrors({ save: "私有配置尚未读取成功，请先核对连接详情。" });
+        setDetails(true);
+        return;
       }
-      const normalized: Draft = {
-        browser: {
-          ...browser,
-          mcpId: browser.mcpId?.trim(),
-          accessFile: browser.accessFile.trim(),
-          hubFile: browser.hubFile?.trim(),
-          nodeId: browser.nodeId?.trim(),
-          nodeLeaseSeconds:
-            (browser.backend !== "runbridge" || !hubSource) &&
-            browser.nodeLeaseSeconds !== undefined &&
-            (!Number.isInteger(browser.nodeLeaseSeconds) ||
-              browser.nodeLeaseSeconds < 1)
-              ? base.browser.nodeLeaseSeconds
-              : browser.nodeLeaseSeconds,
-          resourceId: browser.resourceId.trim(),
-          leaseSeconds:
-            browser.backend !== "runbridge" &&
-            (!Number.isInteger(browser.leaseSeconds) ||
-              browser.leaseSeconds < 1 ||
-              browser.leaseSeconds > 3600)
-              ? base.browser.leaseSeconds
-              : browser.leaseSeconds,
-        },
-        preview: {
-          ...draft.preview,
-          browscreenExecutable:
-            draft.preview.browscreenExecutable.trim() || "browscreen",
-          port:
-            (browser.backend === "runbridge" ||
-              !info.mcpInstances.some(
-                (m) => m.id === draft.preview.mcpId && m.compatible,
-              ) ||
-              (!draft.preview.enabled && !draft.preview.recordingEnabled)) &&
-            (!Number.isInteger(draft.preview.port) ||
-              draft.preview.port < 1 ||
-              draft.preview.port > 65535)
-              ? base.preview.port
-              : draft.preview.port,
-        },
-      };
-      // 隐藏的历史选项原样保留，不因切换后端覆盖另一种后端的偏好。
+      const normalized =
+        view === "connections"
+          ? {
+              ...browser,
+              backend: "auto" as const,
+              previewEnabled: base.preview.enabled,
+              accessFile: browser.accessFile.trim(),
+              hubFile: browser.hubFile?.trim(),
+              nodeId: browser.nodeId?.trim(),
+              resourceId: browser.resourceId.trim(),
+            }
+          : {
+              ...draft.preview,
+              schemaVersion: 2,
+              browscreenExecutable:
+                draft.preview.browscreenExecutable.trim() || "browscreen",
+            };
+      const path =
+        view === "connections" ? "browserConnection" : "browserPreview";
       if (
         await form.mutate(
           [
             {
               op: "set",
-              path: ["browserConnection"],
-              value: JSON.parse(JSON.stringify(normalized.browser)),
-            },
-            {
-              op: "set",
-              path: ["browserPreview"],
-              value: { ...normalized.preview },
+              path: [path],
+              value: JSON.parse(JSON.stringify(normalized)),
             },
           ],
           revision,
         )
       ) {
-        setDraft(normalized);
-        setBase(normalized);
-        drafts.delete(form);
-        setNotice(
-          "已保存，下次测试生效；当前测试继续使用原连接。连接检测结果见上方，保存本身不代表连接已验证。",
+        const next =
+          view === "connections"
+            ? { ...draft, browser: normalized as BrowserPreferences }
+            : { ...draft, preview: normalized as PreviewPreferences };
+        setDraft(next);
+        setBase((current) =>
+          view === "connections"
+            ? { ...current, browser: next.browser }
+            : { ...current, preview: next.preview },
         );
+        setRevision(form.getSnapshot().revision);
+        setNotice(
+          "已保存，下次测试生效；当前测试继续使用原连接。保存不代表连接已验证。",
+        );
+        await refresh();
       } else
         setErrors({
           save: state.writable
-            ? "设置已被其他窗口修改或受启动配置覆盖，未覆盖现有值。请放弃草稿并重新读取后再试。"
-            : "当前设置由启动配置固定，不能在此保存。",
+            ? "设置已被其他窗口修改，未覆盖现有值。请放弃草稿后重新读取。"
+            : "当前设置由启动配置固定，无法保存。",
         });
     } catch {
-      setErrors({ save: "保存失败，请检查宿主连接后重试；当前草稿仍保留。" });
+      setErrors({ save: "保存失败，草稿仍保留，请检查宿主连接。" });
     } finally {
       setSaving(false);
+    }
+  };
+  const action = async (fn?: () => Promise<string>) => {
+    if (!fn) return;
+    setProbing(true);
+    try {
+      setNotice(await fn());
+      await refresh();
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "请求失败");
+    } finally {
+      setProbing(false);
+    }
+  };
+  const checkConnection = async (id: string) => {
+    setChecking(true);
+    try {
+      const response = await fetch("/test-preview-settings/connection", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      const result = await response.json();
+      setNotice(result.message ?? "已读取宿主连接状态");
+      await refresh();
+    } catch {
+      setNotice("无法读取宿主连接状态，请检查 DSH 连接。");
+    } finally {
+      setChecking(false);
     }
   };
   if (state.status === "loading")
@@ -395,41 +343,21 @@ export function BrowserSettings({
       ref={formRef}
       noValidate
       data-test-browser-connection
-      onSubmit={(e) => {
-        e.preventDefault();
+      onSubmit={(event) => {
+        event.preventDefault();
         void save();
       }}
     >
       <p className="dsh-test-config-state" role="status">
-        {dirty
-          ? "有未保存修改；关闭设置后草稿仍保留，请保存或放弃。"
-          : "当前配置已保存"}{" "}
-        · 已保存的浏览器位置：
-        {sourceLabels[base.browser.backend]}
+        {sectionDirty
+          ? "当前页有未保存修改；切换页签或关闭设置会保留草稿。"
+          : "当前页配置已保存"}
       </p>
-      {info.activeBrowser && (
-        <p className="dsh-test-setting-hint">
-          打开设置时，运行中的测试绑定：
-          {sourceLabels[info.activeBrowser]}
-          。保存不会切换该测试。
-        </p>
-      )}
       {!writable && (
-        <p role="alert">
-          当前连接为只读或配置由启动 patch 固定。请在可编辑的 DSH profile
-          中调整，不能通过此页覆盖启动配置。
-          <a
-            href={browser.backend === "runbridge" ? remoteGuide : localGuide}
-            target="_blank"
-            rel="noreferrer"
-          >
-            查看配置说明
-          </a>
-        </p>
+        <p role="alert">当前配置只读，请在可编辑的 DSH profile 中调整。</p>
       )}
       {!!Object.keys(errors).length && (
-        <div role="alert" className="dsh-test-command-check">
-          <strong>设置尚未保存</strong>
+        <div role="alert">
           {Object.entries(errors).map(([key, message]) => (
             <p key={key}>
               {message}
@@ -447,134 +375,254 @@ export function BrowserSettings({
         </div>
       )}
       <fieldset disabled={saving || !writable}>
-        <label htmlFor="dsh-test-browser-backend">浏览器位置</label>
-        <select
-          id="dsh-test-browser-backend"
-          value={browser.backend}
-          disabled={!writable}
-          onChange={(e) =>
-            edit({
-              browser: {
-                ...browser,
-                backend: e.target.value as BrowserPreferences["backend"],
-              },
-            })
-          }
-        >
-          <option value="auto">自动使用当前可用工具</option>
-          <option value="mcp">指定主要 MCP 实例</option>
-          <option value="playwright">
-            本机 Playwright MCP（管理测试上下文）
-          </option>
-          <option value="runbridge">远程 RunBridge MCP</option>
-        </select>
-        {browser.backend === "auto" && (
-          <p className="dsh-test-setting-hint">
-            使用当前对话已启用的业务工具，支持自定义 Selenium 等
-            MCP；上下文默认由服务管理，原生权限与审批继续生效。
-          </p>
-        )}
-        {browser.backend === "mcp" && (
+        {view === "connections" ? (
           <>
-            <label htmlFor="dsh-test-execution-mcp">主要 MCP 实例</label>
-            <select
-              id="dsh-test-execution-mcp"
-              value={browser.mcpId ?? ""}
-              aria-invalid={!!errors.executionMcpId}
-              onChange={(e) =>
-                edit({
-                  browser: { ...browser, mcpId: e.target.value },
-                  preview: { ...draft.preview, mcpId: e.target.value },
-                })
-              }
-            >
-              <option value="">请选择 MCP 实例</option>
-              {info.mcpInstances.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.label}
-                </option>
+            <p className="dsh-test-setting-hint">
+              连接登记不限定运行工具。Agent
+              按当前对话权限和用例目标选择，多个来源可以协作。
+            </p>
+            <div className="dsh-test-connections">
+              {!!info.nativeTools?.length && (
+                <div className="dsh-test-connection">
+                  <div>
+                    <strong>其他宿主工具</strong>
+                    <span className="dsh-test-setting-hint">
+                      {info.nativeTools.length} 个工具
+                    </span>
+                  </div>
+                  <p className="dsh-test-setting-hint">
+                    {info.agentVisible
+                      ? "按当前对话权限可见"
+                      : "运行时确认对话权限"}
+                    ，与 MCP 工具一起参与规划。
+                  </p>
+                  <details>
+                    <summary>查看工具</summary>
+                    <ul>
+                      {info.nativeTools.map((name) => (
+                        <li key={name}>
+                          <code>{name}</code>
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                </div>
+              )}
+              {info.mcpInstances.map((source) => (
+                <div className="dsh-test-connection" key={source.id}>
+                  <div>
+                    <strong>{source.label}</strong>
+                    <span className="dsh-test-setting-hint">
+                      {source.enabled === false
+                        ? "未启用"
+                        : source.tools?.length
+                          ? "工具已加载"
+                          : "已登记"}
+                    </span>
+                  </div>
+                  <p className="dsh-test-setting-hint">
+                    {source.tools?.length ?? 0} 个已加载工具 ·{" "}
+                    {source.visible === undefined
+                      ? "运行时确认对话权限"
+                      : source.visible
+                        ? "当前对话可见"
+                        : "当前对话不可见"}{" "}
+                    ·{" "}
+                    {source.compatible
+                      ? "可主动接入画面"
+                      : "可让 Agent 尝试画面"}
+                  </p>
+                  <div className="dsh-test-setting-actions">
+                    <button
+                      type="button"
+                      disabled={checking}
+                      onClick={() => void checkConnection(source.id)}
+                    >
+                      检测连接
+                    </button>
+                    <details>
+                      <summary>查看工具</summary>
+                      {source.tools?.length ? (
+                        <ul>
+                          {source.tools.map((name) => (
+                            <li key={name}>
+                              <code>{name}</code>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="dsh-test-setting-hint">
+                          尚无可见工具，请在 DSH 中启用连接并检查当前对话权限。
+                        </p>
+                      )}
+                    </details>
+                  </div>
+                </div>
               ))}
-            </select>
-            <p className="dsh-test-setting-hint">
-              优先使用该实例的原有工具；媒体能力独立检测，其他已授权业务工具仍可协作。
-            </p>
-          </>
-        )}
-        {browser.backend === "runbridge" && (
-          <RunBridgeConnection
-            value={browser}
-            edit={(v) => edit({ browser: { ...browser, ...v } })}
-            result={result}
-            checking={checking}
-            read={(connect) => void inspect(connect)}
-            cancel={() => {
-              cancel();
-              setNotice("检测已取消，未保存设置。");
-            }}
-            errors={errors}
-          />
-        )}
-        <h3>画面与录像</h3>
-        {browser.backend === "runbridge" ? (
-          <>
-            <label className="dsh-test-setting-switch">
-              <input
-                type="checkbox"
-                checked={browser.previewEnabled}
-                disabled={!writable}
-                onChange={(e) =>
-                  edit({
-                    browser: { ...browser, previewEnabled: e.target.checked },
-                  })
+              <div className="dsh-test-connection">
+                <div>
+                  <strong>RunBridge</strong>
+                  <span className="dsh-test-setting-hint">
+                    {runbridgeEnabled(browser) ? "已登记连接" : "未登记"}
+                  </span>
+                </div>
+                <p className="dsh-test-setting-hint">
+                  只读检测不领取设备，实际使用时管理原租约。
+                </p>
+                <button
+                  type="button"
+                  className="dsh-test-inline-action"
+                  onClick={() => setDetails((current) => !current)}
+                >
+                  {details ? "收起连接详情" : "配置连接"}
+                </button>
+              </div>
+            </div>
+            {details && (
+              <section className="dsh-test-connection-detail">
+                <h3>RunBridge 连接详情</h3>
+                <label className="dsh-test-setting-switch">
+                  <input
+                    type="checkbox"
+                    checked={runbridgeEnabled(browser)}
+                    onChange={(event) =>
+                      edit({
+                        browser: {
+                          ...browser,
+                          runbridgeEnabled: event.target.checked,
+                        },
+                      })
+                    }
+                  />
+                  登记此连接供 Agent 使用
+                </label>
+                <RunBridgeConnection
+                  value={browser}
+                  edit={(next) => edit({ browser: { ...browser, ...next } })}
+                  result={result}
+                  checking={checking}
+                  read={(connect) => void inspect(connect)}
+                  cancel={() => {
+                    request.current?.abort();
+                    setChecking(false);
+                    setNotice("检测已取消");
+                  }}
+                  errors={errors}
+                />
+              </section>
+            )}
+            <details className="dsh-test-command-advanced">
+              <summary>添加其他工具连接</summary>
+              <p>
+                在 DSH 设置的“内置插件”中添加 MCP 客户端，填写服务提供的 stdio
+                启动命令或 HTTP 地址；在当前 Agent 中启用相应工具。
+              </p>
+              <p>
+                Playwright MCP
+                也使用同一入口，连接名称可自定义。以下启动参数仅帮助配置，执行时与其他工具平等。
+              </p>
+              <pre>
+                {
+                  'transport: stdio\nserverName: web-browser\ncommand: npx\nargs: ["-y", "@playwright/mcp@0.0.68", "--isolated"]'
                 }
-              />
-              显示实时画面
-            </label>
-            <p className="dsh-test-setting-hint">
-              RunBridge 提供同一远程页面的画面，无需本机
-              Browscreen；远程录像暂不支持。
-            </p>
+              </pre>
+              <p className="dsh-test-setting-hint">
+                注册后点击“刷新连接列表”；RunBridge
+                的私有文件在上方连接详情配置。
+              </p>
+            </details>
+            <button
+              type="button"
+              className="dsh-test-inline-action"
+              onClick={() => void refresh()}
+            >
+              刷新连接列表
+            </button>
           </>
-        ) : browser.backend === "mcp" &&
-          !info.mcpInstances.some(
-            (m) => m.id === browser.mcpId && m.compatible,
-          ) ? (
-          <p className="dsh-test-setting-hint">
-            当前主要 MCP
-            未提供自动画面或录像接入，测试与报告仍可使用。已有媒体偏好会保留。
-          </p>
         ) : (
-          <LocalPreviewSettings
-            value={draft.preview}
-            edit={(v) => edit({ preview: { ...draft.preview, ...v } })}
-            info={info}
-            refresh={refresh}
-            errors={errors}
-          />
+          <>
+            <p className="dsh-test-setting-hint">
+              来源：跟随测试实际操作的页面。先尝试已有画面适配，再由 Agent
+              尝试当前工具的能力。
+            </p>
+            <LocalPreviewSettings
+              value={draft.preview}
+              edit={(next) => edit({ preview: { ...draft.preview, ...next } })}
+              info={info}
+              refresh={refresh}
+              errors={errors}
+            />
+            <div className="dsh-test-command-check" role="status">
+              <strong>
+                {info.activeMedia?.reason ?? "等待测试打开实际页面"}
+              </strong>
+              {info.activeMedia?.source && (
+                <p className="dsh-test-setting-hint">
+                  当前来源：
+                  {info.mcpInstances.find(
+                    (source) => source.id === info.activeMedia!.source,
+                  )?.label ?? info.activeMedia.source}{" "}
+                  {info.activeMedia.frames > 0
+                    ? ` · 已验证 ${info.activeMedia.frames} 帧`
+                    : ""}
+                </p>
+              )}
+              <p className="dsh-test-setting-hint">
+                持续画面、定时截图和单次截图分别验证；画面缺失仍可执行用例并输出报告。
+              </p>
+              <div className="dsh-test-setting-actions">
+                <button
+                  type="button"
+                  disabled={probing || !tryPreview}
+                  onClick={() => void action(tryPreview)}
+                >
+                  {probing ? "正在提交…" : "让 Agent 尝试接入"}
+                </button>
+                <button
+                  type="button"
+                  disabled={probing || !stopPreview}
+                  onClick={() => void action(stopPreview)}
+                >
+                  停止尝试
+                </button>
+              </div>
+            </div>
+          </>
         )}
       </fieldset>
       <div className="dsh-test-settings-save dsh-test-setting-actions">
         <button
           type="submit"
-          disabled={!writable || !dirty || saving || checking}
+          disabled={!writable || !sectionDirty || saving || checking}
         >
-          {saving ? "正在保存…" : "保存浏览器设置"}
+          {saving
+            ? "正在保存…"
+            : view === "connections"
+              ? "保存连接"
+              : "保存画面偏好"}
         </button>
         <button
           type="button"
-          disabled={!dirty || saving}
+          disabled={!sectionDirty || saving}
           onClick={() => {
-            cancel();
-            const current = values(state.value, info);
-            setDraft(current);
-            setBase(current);
+            request.current?.abort();
+            const next = values(state.value, info);
+            setDraft((current) =>
+              view === "connections"
+                ? { ...current, browser: next.browser }
+                : { ...current, preview: next.preview },
+            );
+            setBase((current) =>
+              view === "connections"
+                ? { ...current, browser: next.browser }
+                : { ...current, preview: next.preview },
+            );
             setRevision(state.revision);
             setErrors({});
-            setNotice("已放弃修改，恢复当前已保存的浏览器设置。");
-            drafts.delete(form);
+            setNotice("已放弃当前页修改，恢复已保存配置。");
           }}
         >
-          放弃修改
+          放弃当前页修改
         </button>
       </div>
       {notice && <p role="status">{notice}</p>}

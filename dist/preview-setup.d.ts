@@ -3,6 +3,7 @@ import { type Context } from "@deepseek-ai/cordis";
 import type { PreviewConfig, TestConfig } from "./config.js";
 import type { PreviewPreferences, PreviewSettingsInfo } from "./preview-preferences.js";
 interface McpConfig {
+    command?: string;
     serverName?: string;
     transport?: string;
     args?: string[];
@@ -25,7 +26,7 @@ export declare class PreviewSetup {
     /** 停用或卸载时解除运行配置接入，仍在运行的 MCP 恢复原始配置。 */
     dispose(): Promise<void>;
     describe(): PreviewSettingsInfo;
-    prepare(browser?: import("./browser-preferences.js").BrowserPreferences): Promise<PreviewConfig | undefined>;
+    prepare(): Promise<PreviewConfig | undefined>;
     failed(error: unknown): string;
 }
 export {};

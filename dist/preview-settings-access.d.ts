@@ -5,7 +5,7 @@ export declare class PreviewSettingsAccess {
     private readonly describe;
     private readonly workspace;
     private readonly pending;
-    constructor(describe: () => PreviewSettingsInfo, workspace?: string);
+    constructor(describe: (sessionId?: string) => PreviewSettingsInfo, workspace?: string);
     serve(req: IncomingMessage, res: ServerResponse): Promise<void>;
     dispose(): void;
 }

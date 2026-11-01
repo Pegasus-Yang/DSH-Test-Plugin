@@ -18,6 +18,7 @@ export declare const toolExtractSchema: {
     properties: {
         from: {
             enum: string[];
+            description: string;
         };
         pointer: {
             type: string;
@@ -28,6 +29,7 @@ export declare const toolExtractSchema: {
             minimum: number;
         };
         type: {
+            description: string;
             enum: string[];
         };
         between: {

@@ -75,8 +75,8 @@ export function domFunction(captures, origins) {
 export async function captureStep(host, recorder, suite, step, result, binding, exec) {
     const captures = Object.fromEntries(Object.entries(step.action.capture ?? {}).filter(([name]) => !result.observations.some((o) => o.output_name === name)));
     const previousObservations = result.observations.length;
-    const dom = Object.fromEntries(Object.entries(captures).filter(([, c]) => c.kind === "dom"));
-    const origins = Object.keys(dom).length
+    const dom = Object.fromEntries(Object.entries(captures).filter(([name, c]) => c.kind === "dom" && !host.domBindings?.[name]));
+    const origins = Object.values(captures).some((capture) => capture.kind === "dom")
         ? step.action.allowed_targets.map((t) => new URL(t).origin)
         : [];
     const save = (name, value, callId, adapter, evidenceId, path) => {
@@ -112,10 +112,43 @@ export async function captureStep(host, recorder, suite, step, result, binding, 
         save(name, extractToolResult(response.result, cap.extract), response.callId, "tool-result-v1", evidence.evidence_id, JSON.stringify(cap.extract));
         result.observations.at(-1).evidence_refs.push(...imageRefs);
     }
+    for (const [name, cap] of Object.entries(captures).filter(([name, c]) => c.kind === "dom" && host.domBindings?.[name])) {
+        const binding = host.domBindings[name];
+        host.assertTool?.(binding.tool_name);
+        const args = {
+            ...toolArguments(binding.arguments === undefined && binding.arguments_json === undefined
+                ? { arguments: {} }
+                : binding),
+        };
+        if (cap.kind === "dom" && cap.selector)
+            args[binding.selector_argument] = cap.selector;
+        if (cap.kind === "dom" && cap.attribute)
+            args[binding.attribute_argument] = cap.attribute;
+        if (cap.kind === "dom" && cap.index !== undefined)
+            args[binding.index_argument] = cap.index;
+        const response = await host.call(binding.tool_name, args, exec);
+        if (response.result.isError)
+            throw new Error("原来源的 DOM 工具读取失败");
+        const url = String(extractToolResult(response.result, binding.url));
+        if (!origins.includes(new URL(url).origin))
+            throw new Error("DOM 工具已离开当前冻结目标范围");
+        let value = extractToolResult(response.result, binding.extract);
+        if (cap.kind === "dom" &&
+            cap.field === "pathname" &&
+            (cap.mode === "url" ||
+                (cap.mode === "attribute" && cap.attribute === "href")))
+            value = new URL(String(value), url).pathname;
+        const evidence = recorder.evidence(randomUUID() + ".json", JSON.stringify(redact(response.result), null, 2), "application/json");
+        suite.evidence.push(evidence);
+        save(name, value, response.callId, "tool-dom-v1", evidence.evidence_id, JSON.stringify(binding.extract));
+    }
     if (Object.keys(dom).length) {
-        const response = await host.call(host.browser
+        const evaluate = host.browser
             ? host.browser.prefix + "browser_capture"
-            : "mcp__playwright__browser_evaluate", host.browser
+            : host.legacyTools?.evaluate;
+        if (!evaluate)
+            throw new Error("当前来源没有已绑定的 DOM 读取工具，请使用该来源的通用结果采集；不能回退到另一浏览器");
+        const response = await host.call(evaluate, host.browser
             ? { captures: dom, allowed_origins: origins }
             : { function: domFunction(dom, origins) }, exec);
         if (response.result.isError)
@@ -159,9 +192,12 @@ export async function captureStep(host, recorder, suite, step, result, binding, 
         save(name, true, response.callId, "runbridge-open-v1", evidence.evidence_id, "session.state=ACTIVE");
     }
     for (const [name, cap] of Object.entries(captures).filter(([, c]) => c.kind === "browser_close")) {
-        const response = await host.call(host.browser
+        const close = host.browser
             ? host.browser.prefix + "browser_stop"
-            : "mcp__playwright__browser_close", {}, exec);
+            : host.legacyTools?.close;
+        if (!close)
+            throw new Error("没有原来源的关闭工具，不能默认关闭另一浏览器");
+        const response = await host.call(close, {}, exec);
         if (response.result.isError)
             throw new Error("浏览器释放失败");
         if (host.browser) {
@@ -177,10 +213,12 @@ export async function captureStep(host, recorder, suite, step, result, binding, 
                 : "request.state=FAILED,session_id=null,execution_outcome=NOT_STARTED"
             : "isError=false");
     }
-    if (step.action.capability === "browser" && Object.keys(dom).length) {
+    if (step.action.capability === "browser" &&
+        Object.keys(dom).length &&
+        (host.browser || host.legacyTools?.screenshot)) {
         const shot = await host.call(host.browser
             ? host.browser.prefix + "browser_screenshot"
-            : "mcp__playwright__browser_take_screenshot", host.browser ? { full_page: true } : { type: "png", fullPage: true }, exec);
+            : host.legacyTools.screenshot, host.browser ? { full_page: true } : { type: "png", fullPage: true }, exec);
         if (!shot.result.isError) {
             const refs = archiveToolImages(recorder, suite, shot.result);
             for (const observation of result.observations.slice(previousObservations))

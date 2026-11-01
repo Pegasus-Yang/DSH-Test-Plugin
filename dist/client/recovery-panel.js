@@ -10,7 +10,7 @@ function elapsed(milliseconds) {
         return `${minutes} 分 ${seconds % 60} 秒`;
     return `${Math.floor(minutes / 60)} 小时 ${minutes % 60} 分`;
 }
-export function RecoveryPanel({ readRecovery, recover, releaseEvidence, }) {
+export function RecoveryPanel({ readRecovery, recover, releaseEvidence, compact, onOpen, }) {
     const [state, setState] = useState();
     const [failed, setFailed] = useState(false);
     const [confirmation, setConfirmation] = useState();
@@ -107,6 +107,8 @@ export function RecoveryPanel({ readRecovery, recover, releaseEvidence, }) {
             setPending(false);
         }
     };
+    if (compact)
+        return quarantine || failed ? (_jsxs("section", { className: "dsh-test-recovery dsh-test-command-check", "data-state": "blocked", role: "alert", children: [_jsx("strong", { children: failed ? "环境状态读取失败" : "有待处理的测试资源" }), _jsx("p", { children: quarantine?.reason ?? "请检查宿主连接" }), _jsx("button", { type: "button", className: "dsh-test-inline-action", onClick: onOpen, children: "\u67E5\u770B\u5E76\u5904\u7406" })] })) : null;
     return (_jsxs("section", { className: "dsh-test-recovery", "data-test-recovery": true, "data-state": quarantine || failed ? "blocked" : "ready", "aria-label": "\u6D4B\u8BD5\u73AF\u5883\u5904\u7F6E", children: [!state && !failed && _jsx("p", { children: "\u6B63\u5728\u8BFB\u53D6\u6D4B\u8BD5\u73AF\u5883\u72B6\u6001\u2026" }), state && !quarantine && !failed && !message && (_jsx("p", { role: "status", children: "\u65E0\u5F85\u5904\u7406\u8D44\u6E90\u3002\u6B64\u72B6\u6001\u4E0D\u8868\u793A Hub \u6216\u6D4F\u89C8\u5668\u8FDE\u63A5\u5DF2\u9A8C\u8BC1\u3002" })), failed && _jsx("p", { role: "alert", children: "\u65E0\u6CD5\u8BFB\u53D6\u6D4B\u8BD5\u73AF\u5883\u72B6\u6001\uFF0C\u8BF7\u68C0\u67E5\u8FDE\u63A5\u540E\u91CD\u8BD5\u3002" }), quarantine && (_jsxs(_Fragment, { children: [_jsxs("div", { role: "alert", children: [_jsx("strong", { children: quarantine.overdue ? "测试环境可能异常卡住" : "测试环境需要处理" }), _jsx("p", { children: quarantine.reason }), _jsxs("p", { children: [quarantine.elapsed_ms === undefined
                                         ? "隔离开始时间无法确认。"
                                         : `隔离已持续 ${elapsed(quarantine.elapsed_ms)}；清理超时阈值为 ${elapsed(quarantine.timeout_ms)}。`, quarantine.overdue && " 已超过阈值，请确认是否处理并释放。"] })] }), quarantine.run_id && (_jsxs("details", { children: [_jsx("summary", { children: "\u67E5\u770B\u9057\u7559\u6D4B\u8BD5" }), _jsx("code", { children: quarantine.run_id })] })), quarantine.unavailable_reason && (_jsx("p", { children: quarantine.unavailable_reason })), state?.last_error && !message && (_jsx("p", { role: "alert", children: state.last_error })), confirmation === quarantine.token ? (_jsxs("div", { className: "dsh-test-recovery-confirm", role: "group", "aria-label": "\u91CA\u653E\u9694\u79BB\u786E\u8BA4", children: [_jsx("strong", { children: quarantine.browser_backend === "runbridge"

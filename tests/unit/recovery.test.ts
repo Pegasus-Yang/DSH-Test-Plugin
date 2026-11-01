@@ -12,6 +12,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { RecoveryManager } from "../../src/recovery.js";
 import type { SuiteRun } from "../../src/contracts.js";
+import { TestToolCatalog, toolConnections } from "../../src/tool-runtime.js";
 
 const roots: string[] = [];
 beforeEach(() => {
@@ -47,19 +48,73 @@ function setup(timeout = 1000) {
   let active = false;
   const close = vi.fn(async (_input: unknown) => ({
     isError: false,
-    value: null,
+    value: { released: true },
     content: [],
   }));
   const preview = vi.fn(async () => {});
+  const definition = {
+    name: "mcp__custom__close_context",
+    description: "关闭原资源",
+    parameters: { type: "object" },
+  };
+  const connection = { serverName: "custom" };
   const agent = {
     id: "origin",
     status: "idle",
-    ctx: { tools: { get: vi.fn(() => ({})), execute: close } },
+    ctx: {
+      get: () => ({
+        entries: () => [
+          {
+            options: {
+              id: "original-custom",
+              name: "@deepseek-ai/dsh-mcp-client",
+              config: connection,
+            },
+          },
+        ],
+      }),
+      tools: {
+        schemas: () => [definition],
+        get: vi.fn(() => definition),
+        execute: close,
+      },
+    },
   };
   const manager = new RecoveryManager(root, timeout, () => active, preview);
+  const entry = new TestToolCatalog(
+    agent.ctx.tools as any,
+    [],
+    toolConnections(agent.ctx as any),
+  ).snapshot()[0]!;
   const run = {
     suite_run_id: "run-old",
-    instances: [{ resources: { browser_context: { state: "exists" } } }],
+    instances: [
+      {
+        resources: {
+          browser_context: {
+            id: "original-context",
+            state: "exists",
+            ownership: "run",
+            tool: {
+              identity: "original-context",
+              close_digest: entry.digest,
+              connection: entry.connection,
+              config: {
+                scope: "resource",
+                start: {
+                  tool_name: "mcp__custom__create_context",
+                  arguments: {},
+                },
+                close: { tool_name: definition.name, arguments: {} },
+                identity: { from: "value", pointer: "/id" },
+                identity_argument: "context_id",
+                released: { from: "value", pointer: "/released" },
+              },
+            },
+          },
+        },
+      },
+    ],
   } as unknown as SuiteRun;
   mkdirSync(join(root, run.suite_run_id));
   const original = JSON.stringify(run);
@@ -112,9 +167,9 @@ it("确认恢复经原生关闭工具和预览收尾后留存审计，旧结果�
   expect(await t.recover()).toContain("已释放");
   expect(t.close).toHaveBeenCalledWith(
     expect.objectContaining({
-      name: "mcp__playwright__browser_close",
+      name: "mcp__custom__close_context",
       agent: t.agent,
-      arguments: {},
+      arguments: { context_id: "original-context" },
     }),
   );
   expect(t.preview).toHaveBeenCalledTimes(1);
@@ -128,7 +183,7 @@ it("确认恢复经原生关闭工具和预览收尾后留存审计，旧结果�
   expect(JSON.parse(readFileSync(join(t.root, audit), "utf8"))).toMatchObject({
     quarantine: { details: { run_id: "run-old" } },
     proof: {
-      evidence: { method: "confirmed-browser-recovery", preview_stopped: true },
+      evidence: { method: "confirmed-tool-recovery", preview_stopped: true },
     },
   });
 });
@@ -154,7 +209,7 @@ it("关闭期间隔离被替换时不能释放新的隔离", async () => {
   );
   const operation = t.recover();
   t.manager.mark({ ...t.run, suite_run_id: "run-new" }, "新隔离");
-  finish({ isError: false, value: null, content: [] });
+  finish({ isError: false, value: { released: true }, content: [] });
   await expect(operation).rejects.toThrow("已变化");
   expect(t.manager.status().quarantine!.run_id).toBe("run-new");
   expect(
@@ -188,7 +243,7 @@ it("释放超时立即回报，但在途操作未结算前继续互斥，迟到�
   await rejected;
   expect(t.manager.busy).toBe(true);
   await expect(t.recover()).rejects.toThrow("释放操作尚未结束");
-  finish({ isError: false, value: null, content: [] });
+  finish({ isError: false, value: { released: true }, content: [] });
   await vi.waitFor(() => expect(t.manager.busy).toBe(false));
   expect(t.preview).not.toHaveBeenCalled();
   expect(existsSync(join(t.root, "quarantine.json"))).toBe(true);
@@ -219,14 +274,14 @@ it("插件停止时取消在途恢复，不能由已卸载实例的迟到成功�
   t.manager.cancel();
   await expect(pending).rejects.toThrow("已取消");
   expect(t.manager.busy).toBe(true);
-  finish({ isError: false, value: null, content: [] });
+  finish({ isError: false, value: { released: true }, content: [] });
   await vi.waitFor(() => expect(t.manager.busy).toBe(false));
   expect(existsSync(join(t.root, "quarantine.json"))).toBe(true);
 });
 it("缺少浏览器、时间或可用关闭工具时提示实际处置，保留原手动释放合同", async () => {
   const t = setup();
   t.agent.ctx.tools.get.mockReturnValue(undefined as never);
-  await expect(t.recover()).rejects.toThrow("没有可用");
+  await expect(t.recover()).rejects.toThrow("工具或连接配置已改变");
   writeFileSync(
     join(t.root, "quarantine.json"),
     JSON.stringify({ created_at: "invalid", details: { run_id: "run-old" } }),

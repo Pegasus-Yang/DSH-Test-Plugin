@@ -1,10 +1,10 @@
 # DSH多版本验证
 
-[安装与运维](安装与运维.md) · [方案](../design/DSH多版本兼容方案.md) · [0.18.0 验收](../project/0.18.0版本发布验收.md)
+[安装与运维](安装与运维.md) · [方案](../design/DSH多版本兼容方案.md) · [0.19.0-alpha.1 验收](../project/0.19.0-alpha.1版本发布验收.md)
 
-插件 0.18.0 的同一个包声明支持 DSH `0.2.1-alpha.1`～`0.2.1-alpha.5`、`0.2.1-rc.1`～`0.2.1-rc.5`，共 10 个精确版本。开发与构建 SDK 固定 alpha.3。Node.js 最低 22.19，Web、native 工具模式、单批并发 1；集合外的版本（包括 0.2.2 alpha）不自动纳入。
+插件 0.19.0-alpha.1 的同一个包声明支持 DSH `0.2.1-alpha.1`～`0.2.1-alpha.5`、`0.2.1-rc.1`～`0.2.1-rc.5`，共 10 个精确版本。开发与构建 SDK 固定 alpha.3。Node.js 最低 22.19，Web、native 工具模式、单批并发 1；集合外的版本（包括 0.2.2 alpha）不自动纳入。
 
-实际交付和各层验证结果见[验收记录](../project/0.18.0版本发布验收.md)。正式附注标签在必要门禁全部通过后创建，再由用户审核推送。
+实际交付和各层验证结果见[验收记录](../project/0.19.0-alpha.1版本发布验收.md)。正式交付完成必要门禁后创建本地附注标签，再由用户审核推送；用户已选择本次尝试版明确保留未通过的模型场景，详见验收记录。
 
 ## 维护支持集合
 
@@ -35,13 +35,13 @@ Action 自身的 JavaScript 运行时与项目脚本的 Node.js 版本分别维�
 
 工作流保留原有 pnpm 缓存和同一候选包的上传／下载方式。运行中的作业继续使用触发时的提交；环境调整在后续推送触发的工作流中验证。
 
-## 确定性宿主矩阵
+## 最旧与最新宿主矩阵
 
-`.github/workflows/ci.yml` 在干净公开依赖下完成冻结安装、类型、回归、重建 `dist` 一致性及真实入口导入，只打包一次。宿主作业从策略自动生成当前 10 版矩阵，下载同一候选文件及 SHA-256；最终汇总门禁要求构建和全部宿主成功。
+`.github/workflows/ci.yml` 在干净公开依赖下完成冻结安装、类型、回归、重建 `dist` 一致性及真实入口导入，只打包一次。宿主作业从完整支持集合按版本语义选取最旧、最新两个版本（当前为 alpha.1、rc.5），下载同一候选文件及 SHA-256；最终汇总门禁要求构建和这两个宿主成功。中间版本继续保留全部安装支持声明，不逐版运行验证。仅有一个支持版本时运行一次；用户明确要求其他版本时再补对应验证。
 
 版本标签的 `push` 在汇总门禁通过后执行 `release` 作业：重新核对候选包摘要、标签名、源码与包内版本，再将原候选包以带版本号的文件名上传 GitHub Release，同时附校验文件。发布作业不重新构建或打包；分支和 PR 不进入发布。规则与失败处理见[版本发布与Git标签](版本发布与Git标签.md#版本标签自动发布)。
 
-本机复用同一驱动。准备官方源码仓库及支持集合内各版对应的 `dsh-v<宿主版本>` 标签；驱动只用 `git show` 读取发布清单，不构建或链接宿主源码。先安装验证脚本与 MCP 各自匹配的 Chromium：
+本机复用同一驱动。准备官方源码仓库及两个验证宿主对应的 `dsh-v<宿主版本>` 标签；驱动只用 `git show` 读取发布清单，不构建或链接宿主源码。先安装验证脚本与 MCP 各自匹配的 Chromium：
 
 ```sh
 pnpm install --frozen-lockfile
@@ -50,7 +50,7 @@ node --test tests/browser/compat-browser.test.mjs
 pnpm build
 pnpm pack --out artifacts/package/dsh-test-plugin.tgz
 export DSH_CANDIDATE_SHA256=$(shasum -a 256 artifacts/package/dsh-test-plugin.tgz | cut -d ' ' -f 1)
-for host in $(node -p "require('./dsh-compatibility.json').supportedHosts.join(' ')"); do
+for host in $(node --input-type=module -e "import {verificationHosts,readCompatibility} from './scripts/dsh-compatibility.mjs'; console.log(verificationHosts(readCompatibility().policy).join(' '))"); do
   pnpm compat:host "$host" artifacts/package/dsh-test-plugin.tgz /绝对路径/deepseek-harness "/绝对路径/新目录/$host" || exit 1
 done
 ```
@@ -70,12 +70,12 @@ done
 
 ## 受控真实模型与 GitLab
 
-扩展支持集合和正式交付前，给全部支持宿主的同一命令提供本机配置。模型 patch 只读取 `llm-pi-ai`、`agent-default-model`；凭据文件按需复制到独立 home，也可由提供方的 `apiKeyEnv` 从进程环境读取，均不进入包和 Git：
+扩展支持集合和正式交付前，给最旧、最新两个验证宿主的同一命令提供本机配置。模型 patch 只读取 `llm-pi-ai`、`agent-default-model`；凭据文件按需复制到独立 home，也可由提供方的 `apiKeyEnv` 从进程环境读取，均不进入包和 Git：
 
 ```sh
 export DSH_MODEL_PATCH=/绝对路径/不提交的模型配置.yml
 export DSH_MODEL_CREDENTIALS=/绝对路径/不提交的.credentials.yaml
-# 使用上面的同一 tgz 和摘要，各版输出到独立的新目录。
+# 使用上面的同一 tgz 和摘要，两个验证宿主各自输出到独立的新目录。
 ```
 
 使用环境变量凭据时不设置 `DSH_MODEL_CREDENTIALS`，必须先设置 patch 中各提供方引用的 `apiKeyEnv`。例如 OpenAI 兼容服务可在不提交的 patch 中设置 `api: openai-completions`、`apiKeyEnv: OPENCODE_API_KEY`，由本机脚本读取 `OPENCODE_API_HOST` 生成实际 `baseURL`，模型 ID 使用服务端接受的精确值。不要把密钥写入 patch；先用低输出的流式工具调用探针确认路径和模型可用。缺少两类凭据来源时驱动失败。
@@ -92,10 +92,10 @@ GitLab 正式回归继续使用[既有流程](../user-guide/GitLab复杂用例.m
 
 ## 旧宿主用户
 
-alpha.1～5、rc.1～5 使用同一个 `v0.18.0` 包、安装地址及配置。维护者审核并手动推送本地标签后：
+alpha.1～5、rc.1～5 使用同一个 `v0.19.0-alpha.1` 包、安装地址及配置。维护者审核并手动推送本地标签后：
 
 ```sh
-dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.18.0
+dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.19.0-alpha.1
 ```
 
 推送前使用本地 tgz；更换来源前正常停服、移除旧依赖后添加，保留工作区、输出和偏好。重启同一 profile 并刷新浏览器，核对实际版本。不需要版本豁免或专门的 alpha.1／alpha.2 插件变体。

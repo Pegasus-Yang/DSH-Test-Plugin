@@ -43,7 +43,9 @@ export interface ProgressCase {
 }
 export interface PreviewState {
   ready: boolean;
+  mode?: "continuous" | "poll" | "once";
   failed?: boolean;
+  paused?: boolean;
   reason?: string;
   frame_id?: string;
   captured_at?: string;

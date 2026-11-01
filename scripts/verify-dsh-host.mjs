@@ -130,7 +130,7 @@ async function withRegressionLock(action) {
       handle = await open(file, "wx");
     } catch (error) {
       if (error.code !== "EEXIST") throw error;
-      assert(Date.now() - began < 900000, "等待本机 SDK 回归锁超时");
+      assert(Date.now() - began < 1800000, "等待本机 SDK 回归锁超时");
       await delay(200);
     }
   }
@@ -499,8 +499,8 @@ try {
     {
       id: "harness-test",
       config: {
-        // 多版本正式场景验证已有受管理浏览器；通用模式由原生Selenium专项覆盖。
-        browser: { backend: "playwright" },
+        // 各版本均通过统一工具目录运行；Selenium 与资源租约另有专项。
+        browser: { backend: "auto" },
         workspace: join(cohort.root, "workspace"),
         outputRoot: join(cohort.root, "runs"),
         stepTimeoutMs: 600000,

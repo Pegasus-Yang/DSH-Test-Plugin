@@ -34,6 +34,36 @@ export function assertSupportedHost(policy, version) {
   assert(policy.supportedHosts.includes(version), `未声明支持 DSH ${version}`);
 }
 
+/** 按版本语义选择最旧和最新宿主，保留完整安装支持集合。 */
+export function verificationHosts(policy) {
+  validatePolicy(policy);
+  const compare = (left, right) => {
+    const [a, ap] = left.split(/-(.*)/, 2);
+    const [b, bp] = right.split(/-(.*)/, 2);
+    const ac = a.split(".").map(BigInt),
+      bc = b.split(".").map(BigInt);
+    for (let i = 0; i < 3; i++)
+      if (ac[i] !== bc[i]) return ac[i] < bc[i] ? -1 : 1;
+    if (ap === undefined || bp === undefined)
+      return ap === bp ? 0 : ap === undefined ? 1 : -1;
+    const ai = ap.split("."),
+      bi = bp.split(".");
+    for (let i = 0; i < Math.max(ai.length, bi.length); i++) {
+      if (ai[i] === bi[i]) continue;
+      if (ai[i] === undefined) return -1;
+      if (bi[i] === undefined) return 1;
+      const an = /^\d+$/.test(ai[i]),
+        bn = /^\d+$/.test(bi[i]);
+      if (an && bn) return BigInt(ai[i]) < BigInt(bi[i]) ? -1 : 1;
+      if (an !== bn) return an ? -1 : 1;
+      return ai[i] < bi[i] ? -1 : 1;
+    }
+    return 0;
+  };
+  const sorted = [...policy.supportedHosts].sort(compare);
+  return [...new Set([sorted[0], sorted.at(-1)])];
+}
+
 export function checkCompatibility(pkg, policy) {
   const range = validatePolicy(policy);
   const peers = Object.entries(pkg.peerDependencies ?? {}).filter(([name]) =>
@@ -86,7 +116,7 @@ if (
   const result = checkCompatibility(pkg, policy);
   console.log(
     mode === "matrix"
-      ? JSON.stringify({ host: policy.supportedHosts })
+      ? JSON.stringify({ host: verificationHosts(policy) })
       : `DSH ${result.peers} 个 peer：${result.range}；构建 SDK ${policy.buildSdk}`,
   );
 }

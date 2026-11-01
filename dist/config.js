@@ -12,6 +12,7 @@ export const defaults = {
     maxRevisions: 10,
 };
 const BrowserSchema = z.object({
+    runbridgeEnabled: z.boolean(),
     backend: z
         .union([
         z.const("auto"),
@@ -49,6 +50,7 @@ const PreviewSchema = z.object({
     recordingEnabled: z.boolean().default(false),
 });
 const PreferencesSchema = z.object({
+    schemaVersion: z.number().step(1).min(2).max(2),
     enabled: z.boolean().default(false),
     recordingEnabled: z.boolean().default(false),
     browscreenExecutable: z

@@ -1,6 +1,8 @@
 /** 浏览器连接来源在每次运行前冻结，凭据只从服务端私有文件读取。 */
 export interface BrowserPreferences {
+  /** 只用于读取旧配置，执行不再选择后端。 */
   backend: "auto" | "mcp" | "playwright" | "runbridge";
+  runbridgeEnabled?: boolean;
   mcpId?: string;
   resourceLifecycle?: import("./tool-resource.js").ToolResourceConfig;
   accessFile: string;
@@ -11,6 +13,10 @@ export interface BrowserPreferences {
   resourceId: string;
   leaseSeconds: number;
   previewEnabled: boolean;
+}
+/** 旧 RunBridge 模式迁移为一项已登记连接，不限制其他工具。 */
+export function runbridgeEnabled(preferences?: BrowserPreferences): boolean {
+  return preferences?.runbridgeEnabled ?? preferences?.backend === "runbridge";
 }
 export const browserPreferenceDefaults: BrowserPreferences = {
   backend: "auto",

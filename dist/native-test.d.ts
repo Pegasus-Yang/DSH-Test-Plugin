@@ -1,7 +1,6 @@
 /** 当前Agent的测试增强：宿主驱动对话，插件提供约束、可信采集和确定性结果。 */
 import type { Context } from "@deepseek-ai/cordis";
 import type { Agent } from "@deepseek-ai/dsh-agent";
-import { ToolCallId } from "@deepseek-ai/dsh-llm/brand";
 import type { ToolExecutionResult, ToolRunContext } from "@deepseek-ai/dsh-tools";
 import { type Phase, type Step, type SuiteRun, type Json } from "./contracts.js";
 import { Recorder } from "./recorder.js";
@@ -50,9 +49,17 @@ export declare class NativeTest {
     readonly browser?: RunBridge;
     closed: boolean;
     private planned;
-    private legacyPlanBrowser;
+    private selectedTool?;
+    private selectedInstance?;
+    private connectionReady;
+    private readonly media;
+    private readonly mediaCalls;
+    private readonly previewPolls;
+    private readonly mediaPrompted;
+    private readonly dispatchedCalls;
     private toolCatalog;
     private readonly captureLocks;
+    private readonly domBindings;
     private readonly resourceConfig?;
     private resourcePhase?;
     private reportReady;
@@ -86,15 +93,35 @@ export declare class NativeTest {
     private announcement?;
     constructor(owner: NativeTests, agent: Agent, task: string, review?: boolean, input?: TextInput | undefined);
     preparePlanning(): Promise<void>;
-    get managedBrowser(): boolean;
     assertTool(name: string): void;
     private get closeTool();
+    private get captureBrowser();
+    private get legacyTools();
+    private captureHost;
+    private domBindingKey;
+    private get mediaEnabled();
+    mediaState(): {
+        mode: "once" | "poll" | "waiting" | "trying" | "unverified" | "unavailable" | "continuous";
+        reason: string;
+        known_adapter: boolean;
+        source: string | undefined;
+        context_call_id: string | undefined;
+        tool: string | undefined;
+        frames: number;
+        attempts: number;
+        generation: number;
+        candidates: string[];
+        enabled: boolean;
+    };
+    private playwrightMediaTool;
+    requestPreview(): string;
+    stopPreview(): string;
+    private pollPreview;
     private scheduleToolCleanup;
+    private scheduleConnectionCleanup;
     private genericGuidance;
     private lockToolCaptures;
     private prepareOperationObservations;
-    private guidance;
-    private initialStep;
     get id(): string;
     enterPlanMode(): Promise<void>;
     private setPlanMode;
@@ -132,6 +159,19 @@ export declare class NativeTest {
         plan_summary?: string | undefined;
         announcement_required?: string | undefined;
         review_markdown?: string | undefined;
+        media: {
+            mode: "once" | "poll" | "waiting" | "trying" | "unverified" | "unavailable" | "continuous";
+            reason: string;
+            known_adapter: boolean;
+            source: string | undefined;
+            context_call_id: string | undefined;
+            tool: string | undefined;
+            frames: number;
+            attempts: number;
+            generation: number;
+            candidates: string[];
+            enabled: boolean;
+        };
         phase: string;
         planning_input?: TextInput | undefined;
         remote_browser?: {
@@ -160,8 +200,8 @@ export declare class NativeTest {
     private bind;
     private isTrusted;
     private settle;
-    call(name: string, args: unknown, parent: ToolRunContext, explanation?: Pick<ActualOperation, "description" | "description_source" | "purpose">): Promise<{
-        callId: ToolCallId;
+    call(name: string, args: unknown, parent: ToolRunContext, explanation?: Pick<ActualOperation, "description" | "description_source" | "purpose">, media?: boolean): Promise<{
+        callId: string;
         result: ToolExecutionResult;
     }>;
     stop(reason?: string): void;

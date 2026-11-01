@@ -56,6 +56,7 @@ async function browser() {
     const capabilities = await driver.getCapabilities();
     identity = {
       session_id: (await driver.getSession()).getId(),
+      page_id: await driver.getWindowHandle(),
       browser: capabilities.get("browserName"),
       browser_version: capabilities.get("browserVersion"),
     };
@@ -98,7 +99,10 @@ async function pageState() {
 }
 
 function response(value, state, image) {
-  const data = value && typeof value === "object" ? value : { value };
+  const data = {
+    ...(value && typeof value === "object" ? value : { value }),
+    ...(identity ? { identity } : {}),
+  };
   const snapshot = state
     ? `${state.title}\n${state.text}\n${state.elements.map((el) => `- ${el.tag} "${el.name}" [ref=${el.ref}]`).join("\n")}`
     : "";
@@ -250,7 +254,7 @@ serveStdio(() => {
     );
   tool(
     "browser_take_screenshot",
-    "使用 Selenium 获取真实浏览器 PNG 截图。",
+    "使用 Selenium 在已打开的当前页面获取真实 PNG 截图；只读且可重复调用，每次实际采集图片，保持原 session/page，不另建浏览器。structuredContent.identity.page_id 与原动作返回相同，可连续读取验证定时截图能力。",
     z.object({
       type: z.literal("png").optional(),
       fullPage: z.boolean().optional(),

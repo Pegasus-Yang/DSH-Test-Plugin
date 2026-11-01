@@ -11,7 +11,10 @@ export interface ToolConnection {
 /** 连接配置只保存摘要；地址、启动环境及凭据均不复制到目录。 */
 export function toolConnections(ctx: Context): ToolConnection[] {
   return (ctx.get?.("configEditor")?.entries() ?? [])
-    .filter((entry) => entry.options.name === "@deepseek-ai/dsh-mcp-client")
+    .filter(
+      (entry) =>
+        entry.options.name === "@deepseek-ai/dsh-mcp-client" && !entry.disabled,
+    )
     .map((entry) => {
       const config = entry.options.config as { serverName?: string };
       return {
@@ -32,6 +35,9 @@ const controls = new Set([
   "test_api_get",
   "test_bind_check",
   "test_capture",
+  "test_bind_capture",
+  "test_connect_preview",
+  "test_preview_poll",
   "test_current",
   "test_define_step",
   "test_execute_operation",
@@ -60,7 +66,6 @@ export class TestToolCatalog {
     private readonly tools: ToolRuntime,
     reserved: string[] = [],
     private readonly connections: ToolConnection[] = [],
-    private readonly preferred?: string,
     private readonly scope?: Parameters<ToolRuntime["schemas"]>[0],
   ) {
     for (const schema of tools.schemas(scope)) {
@@ -75,13 +80,7 @@ export class TestToolCatalog {
     }
   }
   names(): string[] {
-    return this.snapshot()
-      .sort(
-        (a, b) =>
-          Number(b.connection?.id === this.preferred) -
-          Number(a.connection?.id === this.preferred),
-      )
-      .map((e) => e.name);
+    return this.snapshot().map((entry) => entry.name);
   }
   snapshot() {
     return [...this.entries].map(([name, entry]) => ({

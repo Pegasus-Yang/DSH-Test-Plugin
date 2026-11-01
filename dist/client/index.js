@@ -70,6 +70,9 @@ export function apply(ctx) {
             label: () => "测试插件",
             inject: () => ({
                 forms: settings.configForms,
+                currentSession,
+                tryPreview: () => post("preview", { session_id: currentSession() }),
+                stopPreview: () => post("preview-stop", { session_id: currentSession() }),
                 ...recovery,
                 rebuildReport: (runId) => post("report", {
                     session_id: currentSession(),

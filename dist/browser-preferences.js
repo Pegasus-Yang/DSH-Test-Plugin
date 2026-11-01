@@ -1,3 +1,7 @@
+/** 旧 RunBridge 模式迁移为一项已登记连接，不限制其他工具。 */
+export function runbridgeEnabled(preferences) {
+    return preferences?.runbridgeEnabled ?? preferences?.backend === "runbridge";
+}
 export const browserPreferenceDefaults = {
     backend: "auto",
     accessFile: "",

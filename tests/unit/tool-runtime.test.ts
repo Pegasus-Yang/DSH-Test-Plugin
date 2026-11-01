@@ -54,7 +54,7 @@ it("目录和后续校验使用同一 Agent 视图，包含作用域工具并排
     get: (name: string, viewer: unknown) =>
       viewer === scope && active && name === own.name ? own : undefined,
   } as unknown as ToolRuntime;
-  const catalog = new TestToolCatalog(runtime, [], [], undefined, scope);
+  const catalog = new TestToolCatalog(runtime, [], [], scope);
   expect(catalog.names()).toEqual([own.name]);
   catalog.assert(own.name);
   expect(catalog.has(global.name)).toBe(false);

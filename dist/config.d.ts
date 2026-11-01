@@ -3,6 +3,8 @@ import z from "@deepseek-ai/schemastery";
 import { type PreviewPreferences } from "./preview-preferences.js";
 import { type BrowserPreferences } from "./browser-preferences.js";
 export interface PreviewConfig {
+    connectionId?: string;
+    connectionDigest?: string;
     workDir: string;
     browscreenUrl: string;
     browscreenExecutable?: string;

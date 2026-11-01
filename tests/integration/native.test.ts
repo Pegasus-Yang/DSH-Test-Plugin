@@ -53,7 +53,9 @@ function setup(
                 },
               ],
             }
-          : {},
+          : name.endsWith("browser_close")
+            ? true
+            : {},
     });
   // 替换definitions中的处理器模拟同一服务响应；注册身份和Schema由门面保留。
   const registered = new Map<string, any>();
@@ -225,6 +227,7 @@ function setup(
   };
   const effects = new Set<Function>();
   const ctx: any = {
+    logger: { warn: vi.fn() },
     commands: {
       find: () => ({}),
       execute: async (agent: any, line: string) => {
@@ -245,7 +248,27 @@ function setup(
     {
       outputRoot: root,
       cancelGraceMs: 25,
-      browser: { ...browserPreferenceDefaults, backend },
+      // 旧收尾回归显式声明托管合同；普通工具不因品牌配置自动托管。
+      browser: {
+        ...browserPreferenceDefaults,
+        backend,
+        ...(backend === "playwright"
+          ? {
+              resourceLifecycle: {
+                scope: "connection" as const,
+                start: {
+                  tool_name: "mcp__playwright__browser_close",
+                  arguments: {},
+                },
+                close: {
+                  tool_name: "mcp__playwright__browser_close",
+                  arguments: {},
+                },
+                released: { from: "value" as const },
+              },
+            }
+          : {}),
+      },
     },
     preparePreview,
   );
@@ -276,7 +299,11 @@ function setup(
       },
     );
   const step = async () => {
-    expect((await call("test_capture")).isError).toBe(false);
+    const captured = await call("test_capture");
+    expect(
+      captured.isError,
+      JSON.stringify({ captured, warnings: ctx.logger.warn.mock.calls }),
+    ).toBe(false);
     expect((await call("test_finish_step")).isError).toBe(false);
   };
   return {
@@ -854,7 +881,8 @@ it("固定采集与清理接受空capture而不允许覆盖冻结定义", async 
   expect((await t.call("test_finish")).value.statistics.PASS).toBe(1);
   expect(run.run.plan).toEqual(plan);
   expect(
-    run.run.instances[0].steps.find((s) => s.step_id === "__close")?.status,
+    run.run.instances[0].steps.find((s) => s.step_id === "__resource_close")
+      ?.status,
   ).toBe("SUCCEEDED");
 });
 
@@ -868,7 +896,9 @@ it.each(["setup", "pass-close", "fail-close"])(
       await t.step();
     }
     const run = t.manager.sessions.get("origin")!;
-    expect(run.state().next).toContain("浏览器释放阶段");
+    expect(run.state().next).toContain(
+      phase === "setup" ? "资源初始化" : "浏览器释放阶段",
+    );
     const before = t.dispatched.length;
     for (const name of [
       "mcp__playwright__browser_click",
@@ -1061,9 +1091,16 @@ it("停止后保留自定义冻结清理，不把清理改成业务或跳过", a
   await t.end(true);
   expect(run.state().current?.step.step_id).toBe("custom_cleanup");
   expect(run.state().current?.phase).toBe("cleanup");
-  expect((await t.call("mcp__playwright__browser_snapshot")).isError).toBe(
-    false,
-  );
+  expect(
+    (
+      await t.call("test_execute_operation", {
+        description: "只读检查原页面",
+        tool_name: "mcp__playwright__browser_snapshot",
+        arguments: {},
+        purpose: "cleanup",
+      })
+    ).isError,
+  ).toBe(false);
   await t.step();
   await t.step();
   await t.call("test_finish");
@@ -1306,8 +1343,11 @@ it("JSON运行时采集可修正定位且不改预期", async () => {
   ).toBe(false);
   expect(
     (
-      await t.call("mcp__playwright__browser_evaluate", {
-        function: "() => document.title",
+      await t.call("test_execute_operation", {
+        description: "读取原页面标题",
+        tool_name: "mcp__playwright__browser_evaluate",
+        purpose: "observe",
+        arguments: { function: "() => document.title" },
       })
     ).isError,
   ).toBe(false);
@@ -2074,6 +2114,7 @@ it("纯接口文字步骤运行时确定响应结构，下一步只核对已采�
   }
 });
 
+// 多实例反复落盘，runner 预算独立于被测步骤和取消预算。
 it("文件与CSV四实例只在完整原生审核后执行，参数、证据和失败状态相互隔离", async () => {
   const { createTextInput, parseCases } = await import(
     "../../src/case-input.js"
@@ -2208,7 +2249,7 @@ it("文件与CSV四实例只在完整原生审核后执行，参数、证据和�
   } finally {
     fetchSpy.mockRestore();
   }
-});
+}, 15000);
 
 it("两个文字浏览器实例分别初始化清理，第一例失败不污染下一例的断言", async () => {
   const { createTextInput, parseCases } = await import(
@@ -2264,7 +2305,7 @@ it("两个文字浏览器实例分别初始化清理，第一例失败不污染�
       ).isError,
     ).toBe(false);
     await t.call("test_finish_step");
-    expect(run.state().current!.step.step_id).toBe("__close");
+    expect(run.state().current!.step.step_id).toBe("__resource_close");
     await t.step();
   }
   expect((await t.call("test_finish")).value.statistics).toMatchObject({
@@ -2276,9 +2317,7 @@ it("两个文字浏览器实例分别初始化清理，第一例失败不污染�
     t.dispatched.filter((name) => name.endsWith("browser_close")),
   ).toHaveLength(4);
   expect(
-    run.run.instances.every(
-      (i) => i.resources.browser_context.state === "absent",
-    ),
+    run.run.instances.every((i) => i.resources.tool_context.state === "absent"),
   ).toBe(true);
 });
 
@@ -2400,6 +2439,30 @@ it("预览接入准备也保持互斥，不能在准备过程中启动第二条�
   await first;
   expect(t.manager.sessions.size).toBe(1);
 });
+
+// 旧资源收尾回归显式声明前置创建；正式运行不因登记连接自动初始化。
+function remotePlan(): any {
+  const plan: any = sample();
+  plan.cases[0].preconditions = [
+    {
+      step_id: "owned_connection",
+      kind: "action",
+      description: "按用例要求创建独立资源",
+      required: true,
+      depends_on: [],
+      action: {
+        goal: "创建本轮资源",
+        capability: "browser",
+        allowed_targets: ["https://example.test"],
+        inputs: {},
+        outputs: { initialized: { type: "boolean" } },
+        completion_requirements: ["initialized"],
+        capture: { initialized: { kind: "browser_open" } },
+      },
+    },
+  ];
+  return plan;
+}
 
 async function remoteSetup(hub = false) {
   const { RunBridge } = await import("../../src/runbridge.js");
@@ -2570,7 +2633,7 @@ async function remoteSetup(hub = false) {
 
 it("远程后端在可信初始化中申请资源，旧 MCP 和直接生命周期调用被拒绝，原生操作绑定本会话", async () => {
   const t = await remoteSetup();
-  await t.manager.start(t.agent, "读取并检查点赞", sample());
+  await t.manager.start(t.agent, "读取并检查点赞", remotePlan());
   const test = t.manager.sessions.get("origin")!;
   expect(t.wire).not.toHaveBeenCalled();
   expect((await t.call("mcp__playwright__browser_click")).isError).toBe(true);
@@ -2586,6 +2649,7 @@ it("远程后端在可信初始化中申请资源，旧 MCP 和直接生命周�
     arguments: { target: { by: "css", value: "#button" } },
   });
   expect(op.isError).toBe(false);
+  expect(t.manager.ctx.logger.warn).not.toHaveBeenCalled();
   expect(t.wire.mock.calls.at(-1)![0].arguments).toMatchObject({
     session_id: "session_own",
     page_id: "page_own",
@@ -2632,7 +2696,7 @@ it.each(["FAILED", "NOT_FOUND"])(
   "远程初始化响应丢失后原请求为 %s，原生收尾仅凭确定未分配证据释放",
   async (state) => {
     const t = await remoteSetup();
-    await t.manager.start(t.agent, "读取并检查点赞", sample());
+    await t.manager.start(t.agent, "读取并检查点赞", remotePlan());
     const test = t.manager.sessions.get("origin")!;
     t.wire.mockRejectedValueOnce(new Error("lost start response"));
     expect((await t.call("test_capture")).isError).toBe(true);
@@ -2704,7 +2768,7 @@ it.each(["FAILED", "NOT_FOUND"])(
 
 it("远程写响应丢失记录 UNKNOWN；清理 UNKNOWN 不得解除隔离或伪造 PASS", async () => {
   const t = await remoteSetup();
-  await t.manager.start(t.agent, "点击后核对", sample());
+  await t.manager.start(t.agent, "点击后核对", remotePlan());
   await t.step();
   const test = t.manager.sessions.get("origin")!;
   t.wire.mockRejectedValueOnce(new Error("network"));
@@ -2787,7 +2851,7 @@ it("Hub 模式的纯接口计划不领取、不续租、不释放 Node，也不�
 });
 it("Hub 整批两实例只领取一次，逐用例关闭浏览器，报告前才归还 Node", async () => {
   const t = await remoteSetup(true),
-    plan = sample();
+    plan = remotePlan();
   plan.cases[0].datasets.push({
     data_id: "b",
     inputs: {},
@@ -2830,10 +2894,10 @@ it("Hub 整批两实例只领取一次，逐用例关闭浏览器，报告前才
   expect((await rebuild(run.recorder.directory)).node_lease).toEqual(
     run.run.node_lease,
   );
-});
+}, 15000);
 it("报告封存和下一批启动都等待异步 Node 释放，不把浏览器 COMPLETE 当作整 Node 归还", async () => {
   const t = await remoteSetup(true);
-  await t.manager.start(t.agent, "等待归还", sample());
+  await t.manager.start(t.agent, "等待归还", remotePlan());
   const run = t.manager.sessions.get("origin")!;
   for (let i = 0; i < 3; i++) await t.step();
   let release!: (response: Response) => void;
@@ -2864,7 +2928,7 @@ it("报告封存和下一批启动都等待异步 Node 释放，不把浏览器 
 });
 it("节点清理 UNKNOWN 时仍保留原业务断言并隔离，恢复令牌不删除", async () => {
   const t = await remoteSetup(true);
-  await t.manager.start(t.agent, "业务成功但设备待核查", sample());
+  await t.manager.start(t.agent, "业务成功但设备待核查", remotePlan());
   const run = t.manager.sessions.get("origin")!;
   for (let i = 0; i < 3; i++) await t.step();
   t.setReleaseHandler(
@@ -2896,7 +2960,7 @@ it("节点清理 UNKNOWN 时仍保留原业务断言并隔离，恢复令牌不�
 });
 it("领取响应丢失先保留原请求记录，不重放领取，报告与恢复保持未知隔离", async () => {
   const t = await remoteSetup(true);
-  await t.manager.start(t.agent, "响应丢失", sample());
+  await t.manager.start(t.agent, "响应丢失", remotePlan());
   const run = t.manager.sessions.get("origin")!;
   t.setClaimHandler(async () => {
     expect(
@@ -2923,7 +2987,7 @@ it("领取响应丢失先保留原请求记录，不重放领取，报告与恢�
 
 it("旧浏览器 UNKNOWN 隔离在 Node 已归还后仍保留恢复凭据，用户确认原租约后才回收", async () => {
   const t = await remoteSetup(true);
-  await t.manager.start(t.agent, "保留原隔离", sample());
+  await t.manager.start(t.agent, "保留原隔离", remotePlan());
   const run = t.manager.sessions.get("origin")!;
   await t.step();
   await t.step();
@@ -3400,4 +3464,568 @@ it("自动模式取消后即使原生调用已返回，外部结果未知仍隔�
     "外部结果未知",
   );
   await expect(t.manager.start(t.agent, "下一轮")).rejects.toThrow("已隔离");
+});
+
+async function bindDone(t: ReturnType<typeof setup>) {
+  const step = t.manager.sessions.get("origin")!.state().current!.step.step_id;
+  expect(
+    (
+      await t.call("test_bind_check", {
+        check_index: 0,
+        assertion: {
+          observation_ref: step + ".done",
+          operator: "eq",
+          expected_value: "true",
+        },
+      })
+    ).isError,
+  ).toBe(false);
+}
+
+it.each(["auto", "mcp", "playwright", "runbridge"] as const)(
+  "旧配置 %s 只作为连接线索，不限制普通工具，也不自动 reset 或 close",
+  async (backend) => {
+    const t = setup(3, undefined, "auto");
+    t.manager.config.browser = {
+      ...browserPreferenceDefaults,
+      backend,
+      mcpId: "已删除的旧偏好",
+      runbridgeEnabled: false,
+    };
+    t.definitions.clear();
+    t.definitions.set("mcp__custom__go", {
+      name: "mcp__custom__go",
+      description: "打开真实对象",
+      parameters: { type: "object" },
+      execute: () => ({ structuredContent: { done: true } }),
+    });
+    await t.manager.start(t.agent, "打开目标对象");
+    const submitted = await t.call("test_submit_plan", {
+      name: "通用执行",
+      steps: [{ description: "打开目标对象", checks: ["操作成功状态为true"] }],
+    });
+    await t.announce(submitted.value.plan_summary);
+    expect(
+      (
+        await t.call("test_define_step", {
+          capability: "tool",
+          allowed_targets: ["当前测试对象"],
+          reason: "按当前工具操作",
+        })
+      ).isError,
+    ).toBe(false);
+    expect(
+      (
+        await t.call("test_execute_operation", {
+          description: "打开目标对象",
+          tool_name: "mcp__custom__go",
+          arguments: {},
+          observations: {
+            done: { from: "structured", pointer: "/done", type: "boolean" },
+          },
+        })
+      ).isError,
+    ).toBe(false);
+    await bindDone(t);
+    expect((await t.call("test_finish_step")).isError).toBe(false);
+    expect((await t.call("test_finish")).value.statistics.PASS).toBe(1);
+    expect(
+      t.dispatched.filter((name) => /browser_(close|start|stop)/.test(name)),
+    ).toEqual([]);
+  },
+);
+
+it("已登记但不可连接的 RunBridge 不阻断其他工具的用例运行", async () => {
+  const t = setup(3, undefined, "auto");
+  t.manager.config.browser = {
+    ...browserPreferenceDefaults,
+    runbridgeEnabled: true,
+    accessFile: join(t.root, "不存在的私有配置.yaml"),
+  };
+  t.definitions.set("mcp__native__read", {
+    execute: () => ({ structuredContent: { done: true } }),
+  });
+  await t.manager.start(t.agent, "读取当前对象");
+  const submitted = await t.call("test_submit_plan", {
+    name: "独立工具",
+    steps: [{ description: "读取当前对象", checks: ["操作成功状态为true"] }],
+  });
+  await t.announce(submitted.value.plan_summary);
+  await t.call("test_define_step", {
+    capability: "tool",
+    allowed_targets: ["当前测试对象"],
+    reason: "使用当前授权工具",
+  });
+  expect(
+    (
+      await t.call("test_execute_operation", {
+        description: "读取当前对象",
+        tool_name: "mcp__native__read",
+        arguments: {},
+        observations: {
+          done: { from: "structured", pointer: "/done", type: "boolean" },
+        },
+        purpose: "observe",
+      })
+    ).isError,
+  ).toBe(false);
+  await bindDone(t);
+  await t.call("test_finish_step");
+  expect((await t.call("test_finish")).value.statistics.PASS).toBe(1);
+  expect(t.manager.sessions.get("origin")!.run.node_lease).toBeUndefined();
+});
+
+it("同一批平等使用 Playwright、RunBridge 与自定义工具，只在实际使用 RunBridge 时领取原租约", async () => {
+  const t = await remoteSetup(true);
+  Object.assign(t.manager.config.browser!, {
+    backend: "auto",
+    runbridgeEnabled: true,
+  });
+  t.definitions.set("mcp__custom__inspect", {
+    execute: () => ({ structuredContent: { done: true } }),
+  });
+  await t.manager.start(t.agent, "依次使用三个来源");
+  const submitted = await t.call("test_submit_plan", {
+    name: "多来源协作",
+    steps: [
+      { description: "使用本机页面" },
+      { description: "使用远程页面" },
+      { description: "读取其他对象", checks: ["操作成功状态为true"] },
+    ],
+  });
+  await t.announce(submitted.value.plan_summary);
+  for (const [index, name, args] of [
+    [0, "mcp__playwright__browser_click", { ref: "button" }],
+    [
+      1,
+      "mcp__runbridge__browser_click",
+      { target: { by: "css", value: "#button" } },
+    ],
+    [2, "mcp__custom__inspect", {}],
+  ] as const) {
+    await t.call("test_define_step", {
+      capability: "tool",
+      allowed_targets: ["https://example.test"],
+      reason: "当前来源的真实工具",
+    });
+    expect(
+      (
+        await t.call("test_execute_operation", {
+          description: "操作当前对象",
+          tool_name: name,
+          arguments: args,
+          ...(index === 2
+            ? {
+                observations: {
+                  done: {
+                    from: "structured",
+                    pointer: "/done",
+                    type: "boolean",
+                  },
+                },
+              }
+            : {}),
+        })
+      ).isError,
+    ).toBe(false);
+    if (index === 0)
+      expect(
+        t.leaseHttp.mock.calls.filter(([url]) =>
+          String(url).endsWith("/nodes/node_own/grants"),
+        ),
+      ).toHaveLength(0);
+    if (index === 2) await bindDone(t);
+    await t.call("test_finish_step");
+  }
+  expect(t.manager.sessions.get("origin")!.state().phase).toBe("cleanup");
+  await t.step();
+  expect((await t.call("test_finish")).value.statistics.PASS).toBe(1);
+  expect(
+    t.wire.mock.calls.filter(([request]) => request.name === "browser_start"),
+  ).toHaveLength(1);
+  expect(
+    t.wire.mock.calls.filter(([request]) => request.name === "browser_stop"),
+  ).toHaveLength(1);
+  expect(t.manager.sessions.get("origin")!.run.node_lease?.state).toBe(
+    "RELEASED",
+  );
+});
+
+it("未知 MCP 通过原生 Agent 调用验证截图并复用轮询，媒体记录不混入业务动作或手工用例", async () => {
+  const t = setup(3, undefined, "auto");
+  t.definitions.clear();
+  const png =
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a3ioAAAAASUVORK5CYII=";
+  t.definitions.set("mcp__custom__go", {
+    name: "mcp__custom__go",
+    description: "打开页面，返回id",
+    parameters: { type: "object" },
+    execute: () => ({ structuredContent: { id: "original-page", done: true } }),
+  });
+  t.definitions.set("mcp__custom__photo", {
+    name: "mcp__custom__photo",
+    description: "读取原页面截图，返回id",
+    parameters: { type: "object" },
+    execute: () => ({
+      structuredContent: { id: "original-page" },
+      content: [{ type: "image", mimeType: "image/png", data: png }],
+    }),
+  });
+  await t.manager.preview.configure({
+    workDir: join(t.root, "media"),
+    browscreenUrl: "http://127.0.0.1:13390",
+    previewEnabled: true,
+  });
+  await t.manager.start(t.agent, "打开页面并查看画面");
+  const submitted = await t.call("test_submit_plan", {
+    name: "未知工具画面",
+    steps: [{ description: "打开页面", checks: ["操作成功状态为true"] }],
+  });
+  await t.announce(submitted.value.plan_summary);
+  await t.call("test_define_step", {
+    capability: "tool",
+    allowed_targets: ["当前测试对象"],
+    reason: "当前页面",
+  });
+  await t.call("test_execute_operation", {
+    description: "打开目标页面",
+    tool_name: "mcp__custom__go",
+    arguments: {},
+    observations: {
+      done: { from: "structured", pointer: "/done", type: "boolean" },
+    },
+  });
+  const test = t.manager.sessions.get("origin")!;
+  const connected = await t.call("test_connect_preview", {
+    tool_name: "mcp__custom__photo",
+    arguments: {},
+    mode: "poll",
+    context: { from: "structured", pointer: "/id" },
+    frame_context: { from: "structured", pointer: "/id" },
+  });
+  expect(connected.isError).toBe(false);
+  expect(connected.value.mode).toBe("once");
+  expect(
+    (await t.manager.preview.screenshot(test.run.suite_run_id))!.bytes,
+  ).toEqual(Buffer.from(png, "base64"));
+  expect((await t.call("test_preview_poll")).isError).toBe(true);
+  await vi.waitFor(() => expect(test.mediaState().frames).toBeGreaterThan(1), {
+    timeout: 3500,
+  });
+  expect(test.mediaState().mode).toBe("poll");
+  expect(
+    test.run.instances[0].steps.flatMap((step) => step.actual_operations ?? []),
+  ).toHaveLength(1);
+  expect(
+    test.run.instances[0].steps
+      .flatMap((step) => step.calls)
+      .some((call) => call.name === "mcp__custom__photo"),
+  ).toBe(false);
+  expect(
+    readFileSync(join(test.recorder.directory, "events.jsonl"), "utf8"),
+  ).toContain("media_tool_finished");
+  await bindDone(t);
+  await t.call("test_finish_step");
+  await t.call("test_finish");
+  const manual = readFileSync(
+    join(test.recorder.directory, "manual-cases.md"),
+    "utf8",
+  );
+  expect(manual).not.toContain("photo");
+  expect(test.run.evidence.some((e) => e.media_type === "image/png")).toBe(
+    true,
+  );
+  expect((await t.manager.preview.state(test.run.suite_run_id)).ready).toBe(
+    false,
+  );
+});
+
+it("旧 DOM 计划可绑定未知 MCP 读取工具，原选择器及业务预期保持冻结", async () => {
+  const t = setup(3, undefined, "auto");
+  t.definitions.clear();
+  const read = vi.fn(() => ({
+    structuredContent: { text: "3", url: "https://example.test/" },
+  }));
+  t.definitions.set("mcp__selenium__read_css", {
+    description: "读取原页面CSS内容",
+    parameters: { type: "object", properties: { css: { type: "string" } } },
+    execute: read,
+  });
+  const plan = sample();
+  await t.manager.start(t.agent, "读取点赞", plan);
+  const before = structuredClone(t.manager.sessions.get("origin")!.run.plan);
+  const binding = {
+    output: "likes",
+    tool_name: "mcp__selenium__read_css",
+    arguments: { css: "#wrong" },
+    selector_argument: "css",
+    extract: { from: "structured", pointer: "/text", type: "number" },
+    url: { from: "structured", pointer: "/url" },
+    reason: "读取原计划中冻结的选择器",
+  };
+  expect((await t.call("test_bind_capture", binding)).isError).toBe(false);
+  expect(
+    (
+      await t.call("test_bind_capture", {
+        ...binding,
+        extract: { from: "structured", pointer: "/other" },
+      })
+    ).isError,
+  ).toBe(true);
+  expect((await t.call("test_capture")).isError).toBe(false);
+  expect(read).toHaveBeenCalledWith({ css: "#likes" }, expect.anything());
+  expect(t.manager.sessions.get("origin")!.run.plan).toEqual(before);
+  await t.call("test_finish_step");
+  expect((await t.call("test_finish")).value.statistics.PASS).toBe(1);
+  expect(t.dispatched.some((n) => n.includes("playwright"))).toBe(false);
+});
+
+it("更名 Playwright 通过只读原页面适配取得画面，不重启或关闭共享连接", async () => {
+  const t = setup(3, undefined, "auto");
+  t.definitions.clear();
+  const png =
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a3ioAAAAASUVORK5CYII=";
+  (t.manager.ctx as any).get = (name: string) =>
+    name === "configEditor"
+      ? {
+          entries: () => [
+            {
+              options: {
+                id: "renamed-browser",
+                name: "@deepseek-ai/dsh-mcp-client",
+                config: {
+                  serverName: "custom",
+                  command: "npx",
+                  args: ["@playwright/mcp@0.0.68"],
+                },
+              },
+            },
+          ],
+        }
+      : undefined;
+  const code = vi.fn((args: any) => ({
+    content: [
+      {
+        type: "text",
+        text:
+          "### Result\n" +
+          JSON.stringify({
+            page_id: "real-page",
+            ...(args.code.includes("page.screenshot")
+              ? { image: { mimeType: "image/png", data: png } }
+              : {}),
+          }),
+      },
+    ],
+  }));
+  t.definitions.set("mcp__custom__browser_run_code", {
+    description: "只读当前页面脚本",
+    parameters: { type: "object", properties: { code: { type: "string" } } },
+    execute: code,
+  });
+  t.definitions.set("mcp__custom__browser_navigate", {
+    execute: () => ({ structuredContent: { done: true } }),
+  });
+  await t.manager.preview.configure({
+    workDir: join(t.root, "media"),
+    browscreenUrl: "http://127.0.0.1:13390",
+    previewEnabled: true,
+  });
+  await t.manager.start(t.agent, "打开页面");
+  const p = await t.call("test_submit_plan", {
+    name: "已知画面",
+    steps: [{ description: "打开页面", checks: ["操作成功状态为true"] }],
+  });
+  expect(p.isError, JSON.stringify(p)).toBe(false);
+  await t.announce(p.value.plan_summary);
+  await t.call("test_define_step", {
+    capability: "tool",
+    allowed_targets: ["当前测试对象"],
+    reason: "已有连接",
+  });
+  await t.call("test_execute_operation", {
+    description: "打开页面",
+    tool_name: "mcp__custom__browser_navigate",
+    arguments: {},
+    observations: {
+      done: { from: "structured", pointer: "/done", type: "boolean" },
+    },
+  });
+  expect((await t.call("test_current")).value.media.known_adapter).toBe(true);
+  const media = await t.call("test_connect_preview", {
+    auto: true,
+    mode: "once",
+  });
+  expect(media.isError).toBe(false);
+  expect(media.value.mode).toBe("once");
+  expect(code).toHaveBeenCalledTimes(2);
+  expect(
+    t.dispatched.filter((n) => /browser_(start|stop|close)/.test(n)),
+  ).toEqual([]);
+  await bindDone(t);
+  await t.call("test_finish_step");
+  expect((await t.call("test_finish")).value.statistics.PASS).toBe(1);
+});
+
+it("连接配置在本轮中改变时拒绝同名同Schema工具，不转发到新连接", async () => {
+  const t = setup(3, undefined, "auto");
+  t.definitions.clear();
+  const config = {
+    serverName: "custom",
+    command: "old-service",
+    transport: "stdio",
+  };
+  (t.manager.ctx as any).get = (name: string) =>
+    name === "configEditor"
+      ? {
+          entries: () => [
+            {
+              options: {
+                id: "source",
+                name: "@deepseek-ai/dsh-mcp-client",
+                config,
+              },
+            },
+          ],
+        }
+      : undefined;
+  t.definitions.set("mcp__custom__go", {
+    execute: () => ({ structuredContent: { done: true } }),
+  });
+  await t.manager.start(t.agent, "打开目标");
+  const p = await t.call("test_submit_plan", {
+    name: "冻结连接",
+    steps: [{ description: "打开目标", checks: ["操作成功状态为true"] }],
+  });
+  await t.announce(p.value.plan_summary);
+  await t.call("test_define_step", {
+    capability: "tool",
+    allowed_targets: ["当前测试对象"],
+    reason: "原连接",
+  });
+  const args = {
+    description: "打开目标",
+    tool_name: "mcp__custom__go",
+    arguments: {},
+    observations: {
+      done: { from: "structured", pointer: "/done", type: "boolean" },
+    },
+  };
+  expect((await t.call("test_execute_operation", args)).isError).toBe(false);
+  config.command = "new-service";
+  const changed = await t.call("test_execute_operation", args);
+  expect(changed.isError).toBe(true);
+  expect(changed.error.message).toContain("连接配置已改变");
+  expect(t.dispatched.filter((n) => n === "mcp__custom__go")).toHaveLength(1);
+  await bindDone(t);
+  await t.call("test_finish_step");
+  expect((await t.call("test_finish")).value.statistics.PASS).toBe(1);
+});
+
+it("通用采集误把定义放在字典顶层时给出可执行修正提示，且不派发或改写预期", async () => {
+  const t = setup(3, undefined, "auto");
+  t.definitions.clear();
+  t.definitions.set("mcp__custom__read", {
+    execute: () => ({ structuredContent: { counter: 1 } }),
+  });
+  await t.manager.start(t.agent, "读取计数并检查等于1");
+  const plan = await t.call("test_submit_plan", {
+    name: "读取计数",
+    steps: [{ description: "读取当前计数", checks: ["计数等于1"] }],
+  });
+  await t.announce(plan.value.plan_summary);
+  await t.call("test_define_step", {
+    capability: "tool",
+    allowed_targets: ["当前测试对象"],
+    reason: "读取计数",
+  });
+  const capture = {
+    kind: "tool",
+    tool_name: "mcp__custom__read",
+    arguments: {},
+    extract: { from: "structured", pointer: "/counter", type: "number" },
+  };
+  const wrong = await t.call("test_capture", {
+    capture,
+    reason: "读取当前计数",
+  });
+  expect(wrong.isError).toBe(true);
+  expect(wrong.error.message).toContain("按输出名组织");
+  expect(t.dispatched).not.toContain("mcp__custom__read");
+  expect(
+    (
+      await t.call("test_capture", {
+        capture: { counter: capture },
+        reason: "读取当前计数",
+      })
+    ).isError,
+  ).toBe(false);
+  const step = t.manager.sessions.get("origin")!.state().current!.step.step_id;
+  await t.call("test_bind_check", {
+    check_index: 0,
+    assertion: {
+      observation_ref: step + ".counter",
+      operator: "eq",
+      expected_value: "1",
+    },
+  });
+  await t.call("test_finish_step");
+  expect((await t.call("test_finish")).value.statistics.PASS).toBe(1);
+});
+
+it("自动工具模式取消内置只读 GET 后不建立未知外部操作隔离，且不执行后续请求", async () => {
+  const t = setup(3, undefined, "auto"),
+    controller = new AbortController();
+  let started = false;
+  const http = vi
+    .spyOn(globalThis, "fetch")
+    .mockImplementation(async (_url, init) => {
+      started = true;
+      return new Promise((_resolve, reject) =>
+        init!.signal!.addEventListener(
+          "abort",
+          () => reject(init!.signal!.reason),
+          { once: true },
+        ),
+      );
+    });
+  cleanups.push(() => http.mockRestore());
+  await t.manager.start(t.agent, "依次读取接口，检查值为1");
+  const p = await t.call("test_submit_plan", {
+    name: "接口在途取消",
+    steps: [
+      { description: "读取慢接口", checks: ["值等于1"] },
+      { description: "读取后续接口" },
+    ],
+  });
+  await t.announce(p.value.plan_summary);
+  await t.call("test_define_step", {
+    capability: "api",
+    allowed_targets: ["https://api.test"],
+    reason: "只读GET",
+  });
+  const work = t.execute({
+    name: "test_capture",
+    arguments: {
+      capture: { response: { kind: "http", url: "https://api.test/slow" } },
+      reason: "读取原接口",
+    },
+    signal: controller.signal,
+  });
+  await vi.waitFor(() => expect(started).toBe(true));
+  controller.abort({ kind: "user" });
+  await work;
+  const test = t.manager.sessions.get("origin")!;
+  test.stop();
+  await t.end(true);
+  expect(http).toHaveBeenCalledTimes(1);
+  expect(test.run.resource_quarantined).toBe(false);
+  expect(t.manager.recovery.status().quarantine).toBeNull();
+  const operations = test.run.instances
+    .flatMap((i) => i.steps)
+    .flatMap((s) => s.actual_operations ?? []);
+  expect(operations).toHaveLength(1);
+  expect(operations[0].state).toBe("ERROR");
+  expect(test.run.instances.every((i) => i.status !== "PASS")).toBe(true);
+  await t.manager.start(t.agent, "下一轮读取接口");
 });

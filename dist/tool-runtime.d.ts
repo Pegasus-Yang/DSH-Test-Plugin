@@ -11,10 +11,9 @@ export declare function businessTool(name: string): boolean;
 export declare class TestToolCatalog {
     private readonly tools;
     private readonly connections;
-    private readonly preferred?;
     private readonly scope?;
     private readonly entries;
-    constructor(tools: ToolRuntime, reserved?: string[], connections?: ToolConnection[], preferred?: string | undefined, scope?: Parameters<ToolRuntime["schemas"]>[0]);
+    constructor(tools: ToolRuntime, reserved?: string[], connections?: ToolConnection[], scope?: Parameters<ToolRuntime["schemas"]>[0]);
     names(): string[];
     snapshot(): {
         connection?: ToolConnection | undefined;

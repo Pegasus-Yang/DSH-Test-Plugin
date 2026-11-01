@@ -52,7 +52,9 @@ export default async function publishPage({ page, }) {
             return;
         const current = await readOwner(directory);
         if (current.run_id !== owner.run_id ||
-            current.case_run_id !== owner.case_run_id)
+            current.case_run_id !== owner.case_run_id ||
+            current.connection_id !== owner.connection_id ||
+            current.connection_digest !== owner.connection_digest)
             return;
         const metadata = {
             ...owner,

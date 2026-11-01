@@ -7,8 +7,11 @@ import { randomUUID } from "node:crypto";
 export interface PreviewOwner {
   run_id: string;
   case_run_id: string;
+  connection_id?: string;
+  connection_digest?: string;
 }
 export interface PublishedCdp extends PreviewOwner {
+  verified_by?: string;
   target_id: string;
   endpoint: string;
   browser_endpoint: string;
@@ -70,7 +73,9 @@ export default async function publishPage({
     const current = await readOwner(directory);
     if (
       current.run_id !== owner.run_id ||
-      current.case_run_id !== owner.case_run_id
+      current.case_run_id !== owner.case_run_id ||
+      current.connection_id !== owner.connection_id ||
+      current.connection_digest !== owner.connection_digest
     )
       return;
     const metadata: PublishedCdp = {

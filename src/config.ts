@@ -11,6 +11,8 @@ import {
   type BrowserPreferences,
 } from "./browser-preferences.js";
 export interface PreviewConfig {
+  connectionId?: string;
+  connectionDigest?: string;
   workDir: string;
   browscreenUrl: string;
   browscreenExecutable?: string;
@@ -41,6 +43,7 @@ export interface PluginConfig extends Partial<TestConfig> {
   browserConnection?: Volatile<BrowserPreferences | undefined>;
 }
 const BrowserSchema = z.object({
+  runbridgeEnabled: z.boolean(),
   backend: z
     .union([
       z.const("auto"),
@@ -78,6 +81,7 @@ const PreviewSchema = z.object({
   recordingEnabled: z.boolean().default(false),
 });
 const PreferencesSchema = z.object({
+  schemaVersion: z.number().step(1).min(2).max(2),
   enabled: z.boolean().default(false),
   recordingEnabled: z.boolean().default(false),
   browscreenExecutable: z

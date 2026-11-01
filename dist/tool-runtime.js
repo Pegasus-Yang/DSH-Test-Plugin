@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 /** 连接配置只保存摘要；地址、启动环境及凭据均不复制到目录。 */
 export function toolConnections(ctx) {
     return (ctx.get?.("configEditor")?.entries() ?? [])
-        .filter((entry) => entry.options.name === "@deepseek-ai/dsh-mcp-client")
+        .filter((entry) => entry.options.name === "@deepseek-ai/dsh-mcp-client" && !entry.disabled)
         .map((entry) => {
         const config = entry.options.config;
         return {
@@ -23,6 +23,9 @@ const controls = new Set([
     "test_api_get",
     "test_bind_check",
     "test_capture",
+    "test_bind_capture",
+    "test_connect_preview",
+    "test_preview_poll",
     "test_current",
     "test_define_step",
     "test_execute_operation",
@@ -43,13 +46,11 @@ function digest(tool) {
 export class TestToolCatalog {
     tools;
     connections;
-    preferred;
     scope;
     entries = new Map();
-    constructor(tools, reserved = [], connections = [], preferred, scope) {
+    constructor(tools, reserved = [], connections = [], scope) {
         this.tools = tools;
         this.connections = connections;
-        this.preferred = preferred;
         this.scope = scope;
         for (const schema of tools.schemas(scope)) {
             if (!businessTool(schema.name) || reserved.includes(schema.name))
@@ -63,10 +64,7 @@ export class TestToolCatalog {
         }
     }
     names() {
-        return this.snapshot()
-            .sort((a, b) => Number(b.connection?.id === this.preferred) -
-            Number(a.connection?.id === this.preferred))
-            .map((e) => e.name);
+        return this.snapshot().map((entry) => entry.name);
     }
     snapshot() {
         return [...this.entries].map(([name, entry]) => ({

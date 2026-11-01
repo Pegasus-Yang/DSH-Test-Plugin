@@ -180,7 +180,7 @@ it("新会话没有运行记录时也能读取隔离；启动错误明确说明�
   expect(JSON.parse(body).quarantine).toMatchObject({
     run_id: "run-old",
     overdue: true,
-    can_recover: true,
+    can_recover: false,
   });
   expect(
     await t.execute("test", "访问页面并断言点赞不为0", {

@@ -37,6 +37,7 @@ async function request(access: ProgressAccess, url: string, method = "GET") {
 }
 function access(ready = false) {
   const preview = {
+    summary: vi.fn(() => ({ ready, mode: "poll" })),
     state: vi.fn(async () => ({ ready })),
     screenshot: vi.fn(async () => ({
       bytes: Buffer.from("frame"),
@@ -85,6 +86,7 @@ it("首帧就绪才返回同源iframe地址，图片保留帧号、时间和no-s
   expect(frame.headers).toMatchObject({
     "Content-Type": "image/png",
     "X-Frame-Id": "2",
+    "X-Preview-Mode": "poll",
     "Cache-Control": "no-store",
   });
 });

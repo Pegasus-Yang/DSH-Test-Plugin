@@ -490,6 +490,7 @@ export declare const planSchema: {
                                                         properties: {
                                                             from: {
                                                                 enum: string[];
+                                                                description: string;
                                                             };
                                                             pointer: {
                                                                 type: string;
@@ -500,6 +501,7 @@ export declare const planSchema: {
                                                                 minimum: number;
                                                             };
                                                             type: {
+                                                                description: string;
                                                                 enum: string[];
                                                             };
                                                             between: {
@@ -722,6 +724,7 @@ export declare const planSchema: {
                                                         properties: {
                                                             from: {
                                                                 enum: string[];
+                                                                description: string;
                                                             };
                                                             pointer: {
                                                                 type: string;
@@ -732,6 +735,7 @@ export declare const planSchema: {
                                                                 minimum: number;
                                                             };
                                                             type: {
+                                                                description: string;
                                                                 enum: string[];
                                                             };
                                                             between: {
@@ -932,6 +936,7 @@ export declare const planSchema: {
                                                         properties: {
                                                             from: {
                                                                 enum: string[];
+                                                                description: string;
                                                             };
                                                             pointer: {
                                                                 type: string;
@@ -942,6 +947,7 @@ export declare const planSchema: {
                                                                 minimum: number;
                                                             };
                                                             type: {
+                                                                description: string;
                                                                 enum: string[];
                                                             };
                                                             between: {
@@ -1101,6 +1107,7 @@ export declare const actionSchema: {
                         properties: {
                             from: {
                                 enum: string[];
+                                description: string;
                             };
                             pointer: {
                                 type: string;
@@ -1111,6 +1118,7 @@ export declare const actionSchema: {
                                 minimum: number;
                             };
                             type: {
+                                description: string;
                                 enum: string[];
                             };
                             between: {
@@ -1221,6 +1229,7 @@ export declare const captureSchema: {
                 properties: {
                     from: {
                         enum: string[];
+                        description: string;
                     };
                     pointer: {
                         type: string;
@@ -1231,6 +1240,7 @@ export declare const captureSchema: {
                         minimum: number;
                     };
                     type: {
+                        description: string;
                         enum: string[];
                     };
                     between: {

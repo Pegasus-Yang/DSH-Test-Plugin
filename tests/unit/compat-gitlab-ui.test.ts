@@ -87,6 +87,41 @@ it("原生新建弹窗取消后直接核对表单关闭和原列表路径", () =
       assertDraftCancellation(single.document, list, single.run),
     ).not.toThrow();
   }
+  const generic = fixture();
+  const observation = generic.run.instances[0].steps[0].observations[0];
+  Object.assign(observation.producer, {
+    adapter: "tool-result-v1",
+    call_id: "dom-read",
+    field: JSON.stringify({ from: "playwright-result", pointer: "/open" }),
+  });
+  const call = {
+    call_id: "dom-read",
+    binding: { case_run_id: "draft" },
+    name: "mcp__renamed__browser_evaluate",
+    args_redacted: {
+      function: "() => ({open: !!document.querySelector('[role=\"dialog\"]')})",
+    },
+    finished_at: "2026-11-01T00:00:00Z",
+    isError: false,
+    result: {
+      isError: false,
+      content: [{ type: "text", text: '### Result\n{"open":false}' }],
+    },
+  };
+  Object.assign(generic.run.instances[0].steps[0], { calls: [call] });
+  expect(() =>
+    assertDraftCancellation(generic.document, list, generic.run),
+  ).not.toThrow();
+  call.args_redacted.function = "() => false";
+  expect(() =>
+    assertDraftCancellation(generic.document, list, generic.run),
+  ).toThrow("表单已关闭");
+  call.args_redacted.function =
+    "() => document.querySelector('[role=\"dialog\"]')";
+  call.result.content[0].text = '### Result\n{"open":true}';
+  expect(() =>
+    assertDraftCancellation(generic.document, list, generic.run),
+  ).toThrow("表单已关闭");
 });
 
 it("即使路径断言为 PASS，取消后的额外导航仍拒绝验收", () => {

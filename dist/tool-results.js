@@ -8,10 +8,12 @@ export const toolExtractSchema = {
     properties: {
         from: {
             enum: ["structured", "value", "json", "text", "playwright-result"],
+            description: "structured读取MCP structuredContent；value读取未解析原工具value（MCP通常是整个包，不是content文本内的值）；json/text读取content[block]；playwright-result解析实际### Result段中的JSON。格式不确定先用observe只读查看，再固定提取规则。",
         },
         pointer: { type: "string", pattern: "^(?:|/.*)$" },
         block: { type: "integer", minimum: 0 },
         type: {
+            description: "需要数值或布尔比较时，在执行前明确声明number/boolean，不把文本值当成数值。",
             enum: [
                 "string",
                 "number",

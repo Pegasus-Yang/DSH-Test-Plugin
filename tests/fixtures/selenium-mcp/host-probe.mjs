@@ -1,3 +1,5 @@
+import { createRequire } from "node:module";
+import { realpathSync } from "node:fs";
 /** 在独立 DSH 中核验原生 Selenium 接入边界及现有协议兼容模式。 */
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
@@ -150,6 +152,22 @@ try {
       output + "/plugin-add.log",
     );
     assert(!existsSync(profile + "/compatibility.json"));
+    assert(
+      createRequire(
+        realpathSync(profile + "/node_modules/dsh-test-plugin/package.json"),
+      )
+        .resolve("@deepseek-ai/dsh-llm")
+        .startsWith(
+          realpathSync(host + "/node_modules/@deepseek-ai/dsh-llm") + "/",
+        ),
+      "插件 SDK 未从当前宿主解析",
+    );
+    if (process.env.SELENIUM_PROBE_CREDENTIALS)
+      await writeFile(
+        home + "/.credentials.yaml",
+        await readFile(process.env.SELENIUM_PROBE_CREDENTIALS),
+        { mode: 0o600 },
+      );
     const patch = [
       { id: "hmr", disabled: true },
       { id: "directory-picker", disabled: true },
@@ -380,53 +398,53 @@ try {
       await enter(settings, { url });
       await openSettings(settings);
       assert.equal(
-        await settings.locator("#dsh-test-browser-backend").inputValue(),
-        "auto",
+        await settings.locator("#dsh-test-browser-backend").count(),
+        0,
       );
+      assert(
+        (await settings
+          .getByRole("tab", { name: "工具接入", exact: true })
+          .getAttribute("aria-selected")) === "true",
+      );
+      await settings
+        .getByText(serverName + "（selenium-mcp）", { exact: true })
+        .waitFor();
       for (const [width, height] of [
         [1440, 900],
         [1920, 1080],
       ]) {
         await settings.setViewportSize({ width, height });
         await settings.screenshot({
-          path: output + `/settings-auto-${width}x${height}.png`,
+          path: output + `/settings-connections-${width}x${height}.png`,
         });
       }
-      if (mode === "native") {
-        await settings.locator("#dsh-test-browser-backend").selectOption("mcp");
+      if (mode !== "minimal") {
         await settings
-          .locator("#dsh-test-execution-mcp")
-          .selectOption("selenium-mcp");
+          .getByRole("tab", { name: "实时画面", exact: true })
+          .click();
         await settings
-          .getByRole("button", { name: "保存浏览器设置", exact: true })
+          .getByRole("checkbox", { name: "显示实时画面", exact: true })
+          .check();
+        await settings
+          .getByRole("button", { name: "保存画面偏好", exact: true })
           .click();
         await settings
           .getByRole("status")
           .filter({ hasText: "已保存" })
           .first()
           .waitFor();
-        const prefs = await until(
-          async () => {
-            const value = await settings.evaluate(async () =>
-              (await fetch("/test-preview-settings")).json(),
-            );
-            return value.browserConnection?.backend === "mcp" &&
-              value.browserConnection?.mcpId === "selenium-mcp"
-              ? value
-              : false;
-          },
-          "设置保存后运行配置未更新",
-          15000,
-        );
-        assert.equal(prefs.browserConnection.backend, "mcp");
-        assert.equal(prefs.browserConnection.mcpId, "selenium-mcp");
+        const prefs = parse(
+          await readFile(profile + "/cordis.patch.yml", "utf8"),
+        ).find((row) => row.id === "harness-test").config.browserPreview;
+        assert.equal(prefs.enabled, true);
+        assert.equal(prefs.mcpId, "");
         for (const [width, height] of [
           [1440, 900],
           [1920, 1080],
         ]) {
           await settings.setViewportSize({ width, height });
           await settings.screenshot({
-            path: output + `/settings-mcp-${width}x${height}.png`,
+            path: output + `/settings-media-${width}x${height}.png`,
           });
         }
       }
@@ -459,6 +477,7 @@ try {
       await composer.press("Enter");
       console.log(JSON.stringify({ mode, stage: "running" }));
       let run, directory;
+      const mediaFrames = new Set();
       await until(
         async () => {
           for (const n of await readdir(runRoot).catch(() => [])) {
@@ -470,6 +489,20 @@ try {
               run = r;
               directory = d;
             }
+          }
+          if (run && mode !== "minimal" && run.lifecycle !== "FINISHED") {
+            const image = await page.request.get(
+              new URL(
+                "/test-progress/" + id + "/" + run.suite_run_id + "/screenshot",
+                url,
+              ).href,
+            );
+            if (image.ok())
+              mediaFrames.add(
+                image.headers()["x-frame-id"] +
+                  "/" +
+                  image.headers()["x-capture-started-at"],
+              );
           }
           const a = await audit();
           if (a.sessions.length)
@@ -580,7 +613,8 @@ try {
       );
       if (mode === "minimal")
         assert(!saved.evidence.some((e) => e.media_type.startsWith("image/")));
-      else assert(saved.evidence.some((e) => e.media_type === "image/png"));
+      else if (expected === 1)
+        assert(saved.evidence.some((e) => e.media_type === "image/png"));
       if (mode === "managed") {
         assert(trace.some((e) => e.event === "session_closed"));
         assert.equal(saved.instances[0].resources.tool_context.state, "absent");
@@ -593,6 +627,11 @@ try {
         resource_management: saved.manifest.resource_management,
         execution_source: saved.manifest.execution_source,
         manual_download_verified: true,
+        sdk_loaded_from_host: true,
+        media_frames_observed: mediaFrames.size,
+        media_events: (await readFile(directory + "/events.jsonl", "utf8"))
+          .split("\n")
+          .filter((line) => line.includes("media_")).length,
         status: "PASS",
         plugin_version: saved.manifest.plugin_version,
         host_version: hostPackage.version,
@@ -640,6 +679,29 @@ try {
       );
     } finally {
       await browser.close();
+    }
+    // 测试夹具先自行退出并确认原 Selenium 会话关闭，再停宿主；不让宿主强制退出抢先截断 quit 回执。
+    const serviceTrace = output + "/service/selenium.jsonl";
+    const beforeStop = (await readFile(serviceTrace, "utf8"))
+      .trim()
+      .split("\n")
+      .map(JSON.parse);
+    if (!beforeStop.some((e) => e.event === "session_closed")) {
+      const servicePid = beforeStop.find(
+        (e) => e.event === "session_opened",
+      )?.pid;
+      assert(Number.isSafeInteger(servicePid));
+      process.kill(servicePid, "SIGTERM");
+      await until(
+        async () =>
+          (await readFile(serviceTrace, "utf8"))
+            .trim()
+            .split("\n")
+            .map(JSON.parse)
+            .some((e) => e.event === "session_closed"),
+        "测试夹具的原 Selenium 会话未关闭",
+        15000,
+      );
     }
     const stopped = await stop();
     results.at(-1).host_stopped = stopped;

@@ -4,15 +4,15 @@ import { isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 import { normalizeBrowscreenExecutable } from "./browscreen-command.js";
+import { isPlaywrightMcp } from "./playwright-preview.js";
 function compatible(config) {
     const browserIndex = config.args?.indexOf("--browser") ?? -1;
     const browser = browserIndex >= 0
         ? config.args?.[browserIndex + 1]
         : config.args?.find((arg) => arg.startsWith("--browser="))?.slice(10);
-    return (config.serverName === "playwright" &&
-        config.transport === "stdio" &&
-        !!config.args?.some((arg) => /@playwright[\/]mcp|@playwright\+mcp|playwright\/mcp\/cli\.js/.test(arg)) &&
-        !config.args.some((arg) => /^(--cdp-endpoint|--extension)(=|$)/.test(arg)) &&
+    return (config.transport === "stdio" &&
+        isPlaywrightMcp(config) &&
+        !config.args?.some((arg) => /^(--cdp-endpoint|--extension)(=|$)/.test(arg)) &&
         !["firefox", "webkit"].includes(browser ?? ""));
 }
 /** 保留用户的 JSON 配置、初始化脚本和 CLI 参数，补充本插件的 CDP 交付。 */
@@ -151,16 +151,35 @@ export class PreviewSetup {
                     id: entry.options.id,
                     label: `${config.serverName ?? entry.options.id}（${entry.options.id}）`,
                     compatible: compatible(config),
+                    enabled: !entry.disabled,
                 };
             }),
             message: this.message,
         };
     }
-    async prepare(browser) {
+    async prepare() {
         const preferences = this.preferences();
         if (!preferences) {
             await this.restore();
-            return this.config.preview;
+            const config = this.config.preview;
+            if (!config)
+                return;
+            const matching = (this.ctx.get("configEditor")?.entries() ?? []).filter((entry) => {
+                const candidate = entry.fiber?.config;
+                return (entry.options.name === "@deepseek-ai/dsh-mcp-client" &&
+                    candidate?.env?.DSH_TEST_PREVIEW_DIR &&
+                    resolve(candidate.env.DSH_TEST_PREVIEW_DIR) ===
+                        resolve(config.workDir));
+            });
+            return matching.length === 1
+                ? {
+                    ...config,
+                    connectionId: matching[0].options.id,
+                    connectionDigest: createHash("sha256")
+                        .update(JSON.stringify(matching[0].options.config))
+                        .digest("hex"),
+                }
+                : config;
         }
         if (!preferences.enabled && !preferences.recordingEnabled) {
             await this.restore();
@@ -168,31 +187,37 @@ export class PreviewSetup {
             return;
         }
         const executable = normalizeBrowscreenExecutable(preferences.browscreenExecutable);
-        if (!existsSync(this.initializer))
-            throw new Error("插件缺少 CDP 初始化文件，请重新构建或安装插件");
-        const editor = this.ctx.get("configEditor");
-        if (!editor)
-            throw new Error("当前宿主没有浏览器配置服务，请使用 Web profile 或手动配置预览");
-        const entry = editor
-            .entries()
-            .find((entry) => entry.options.id === preferences.mcpId);
-        if (browser &&
-            ["auto", "mcp"].includes(browser.backend) &&
-            (!entry ||
-                !compatible(entry.options.config) ||
-                (browser.backend === "mcp" && browser.mcpId !== entry.options.id))) {
+        let workDir = join(resolve(this.config.outputRoot ?? "artifacts/runs"), ".browser-preview", this.ctx.fiber.entry?.options.id ?? "harness-test");
+        const base = {
+            workDir,
+            browscreenUrl: `http://127.0.0.1:${preferences.port}`,
+            browscreenExecutable: executable,
+            previewEnabled: preferences.enabled,
+            recordingEnabled: !!preferences.recordingEnabled,
+        };
+        const candidates = (this.ctx.get("configEditor")?.entries() ?? []).filter((entry) => entry.options.name === "@deepseek-ai/dsh-mcp-client" &&
+            !entry.disabled &&
+            compatible(entry.options.config));
+        const entry = candidates.find((entry) => entry.options.id === preferences.mcpId);
+        if (!entry || !existsSync(this.initializer)) {
+            await this.restore();
+            mkdirSync(workDir, { recursive: true });
+            this.message =
+                "画面跟随实际来源；默认不重载现有 MCP，可让 Agent 尝试当前工具的画面能力。";
+            return base;
+        }
+        workDir = join(workDir, createHash("sha256").update(entry.options.id).digest("hex").slice(0, 12));
+        const current = entry.options.config;
+        let next;
+        try {
+            next = prepareMcpPreview(current, workDir, this.initializer);
+        }
+        catch {
             await this.restore();
             this.message =
-                "当前工具连接没有可用的实时画面或录像接入，测试仍可执行并输出报告。";
-            return;
+                "已知画面增强不适用于该连接，可让 Agent 尝试其原有调试通道或截图能力。";
+            return base;
         }
-        if (!entry ||
-            entry.options.name !== "@deepseek-ai/dsh-mcp-client" ||
-            !compatible(entry.options.config))
-            throw new Error("请选择本机 stdio 的 Playwright MCP（serverName 为 playwright）");
-        const workDir = join(resolve(this.config.outputRoot ?? "artifacts/runs"), ".browser-preview", this.ctx.fiber.entry?.options.id ?? "harness-test");
-        const current = entry.options.config;
-        const next = prepareMcpPreview(current, workDir, this.initializer);
         if (this.target?.entry !== entry)
             await this.restore();
         this.attach();
@@ -208,6 +233,10 @@ export class PreviewSetup {
         this.message =
             "浏览器接入已准备；有当前页面 CDP 后按开关采集，启用预览且有有效画面时自动打开浮窗。";
         return {
+            connectionId: entry.options.id,
+            connectionDigest: createHash("sha256")
+                .update(JSON.stringify(entry.options.config))
+                .digest("hex"),
             workDir,
             browscreenUrl: `http://127.0.0.1:${preferences.port}`,
             browscreenExecutable: executable,

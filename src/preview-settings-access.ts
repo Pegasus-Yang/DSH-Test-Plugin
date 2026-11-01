@@ -27,7 +27,7 @@ function readBody(req: IncomingMessage): Promise<string> {
 export class PreviewSettingsAccess {
   private readonly pending = new Set<AbortController>();
   constructor(
-    private readonly describe: () => PreviewSettingsInfo,
+    private readonly describe: (sessionId?: string) => PreviewSettingsInfo,
     private readonly workspace = process.cwd(),
   ) {}
 
@@ -41,6 +41,7 @@ export class PreviewSettingsAccess {
         : [
               "/test-preview-settings/check",
               "/test-preview-settings/runbridge",
+              "/test-preview-settings/connection",
             ].includes(path ?? "")
           ? "POST"
           : undefined;
@@ -55,7 +56,11 @@ export class PreviewSettingsAccess {
       return;
     }
     if (method === "GET") {
-      res.end(JSON.stringify(this.describe()));
+      const sessionId =
+        new URL(req.url ?? "/", "http://local").searchParams.get(
+          "session_id",
+        ) ?? undefined;
+      res.end(JSON.stringify(this.describe(sessionId)));
       return;
     }
     let executable = "";
@@ -66,6 +71,24 @@ export class PreviewSettingsAccess {
         body = JSON.parse(await readBody(req));
       } catch {
         throw new Error("请提交有效的检测参数 JSON。");
+      }
+      if (path === "/test-preview-settings/connection") {
+        const source = this.describe().mcpInstances.find(
+          (source) => source.id === body.id,
+        );
+        if (!source) throw new Error("连接尚未登记，请先在 DSH 中添加并启用。");
+        res.end(
+          JSON.stringify({
+            ok: source.enabled !== false && !!source.tools?.length,
+            message:
+              source.enabled === false
+                ? "连接未启用，请在 DSH 内置插件中启用。"
+                : source.tools?.length
+                  ? `宿主已加载 ${source.tools.length} 个工具；本次只读核对注册状态，未派发业务工具。`
+                  : "已登记但尚无工具，请检查 DSH 连接状态；未调用浏览器或领取设备。",
+          }),
+        );
+        return;
       }
       if (path === "/test-preview-settings/runbridge") {
         const source = body?.connectionSource ?? "access-file";

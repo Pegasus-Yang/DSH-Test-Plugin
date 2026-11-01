@@ -43,7 +43,7 @@ DSH Test Plugin 是 DeepSeek Harness（DSH）的原生测试插件。描述想�
 ### 1. 准备 DSH 与测试工具
 
 - Node.js **22.19+**，已安装并配置可用模型的 DeepSeek Harness **0.2.1-alpha.1～alpha.5、rc.1～rc.5**。
-- 在 DSH 中使用 **native 工具模式**；默认使用当前可用工具；自定义 Selenium 等 MCP 在 DSH 中正常注册后即可使用。需要管理测试上下文时可选择 Playwright 或 RunBridge。
+- 在 DSH 中使用 **native 工具模式**；默认使用当前可用工具；自定义 Selenium 等 MCP 在 DSH 中正常注册后即可使用。Playwright、RunBridge 和其他工具平等参与运行；连接帮助、资源管理及画面能力分别配置。
 - 仅做接口测试时无需安装浏览器；源码开发需要 pnpm **11.7.0**。
 
 宿主安装按 DSH 自身文档完成，插件和浏览器工具的具体配置见[安装与运维](doc/deployment/安装与运维.md#配置)。
@@ -54,27 +54,29 @@ DSH Test Plugin 是 DeepSeek Harness（DSH）的原生测试插件。描述想�
 
 本地审核时，使用维护者提供的同一个 tgz：
 
+当前尝试版为 `0.19.0-alpha.1`，在独立分支交付；本地验收和远端发布状态见下方记录。
+
 ```sh
-dsh plugin --profile web add /绝对路径/dsh-test-plugin-0.18.0.tgz
+dsh plugin --profile web add /绝对路径/dsh-test-plugin-0.19.0-alpha.1.tgz
 dsh web
 ```
 
 维护者完成验收并推送标签后，可在 DSH 插件管理页填写下面的仓库地址，安装后启用：
 
 ```text
-https://github.com/Pegasus-Yang/DSH-Test-Plugin.git#v0.18.0
+https://github.com/Pegasus-Yang/DSH-Test-Plugin.git#v0.19.0-alpha.1
 ```
 
 也可以使用独立 DSH CLI 安装：
 
 ```sh
-dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.18.0
+dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.19.0-alpha.1
 dsh web
 ```
 
 命令行安装前先正常停止正在运行的 DSH，安装与后续启动使用同一 profile 和 `DSH_HOME`，启动后刷新页面。从 DSH 源码目录运行时，将 `dsh` 替换为 `pnpm dsh`。仓库发行版本包含构建产物，可以直接安装。
 
-这 10 个宿主使用同一个插件包，无需版本豁免。当前开发 SDK 固定 alpha.3；后续插件升级继续保留已支持宿主。[状态与已验证范围](doc/project/0.18.0版本发布验收.md)详见记录，支持集合以 [dsh-compatibility.json](dsh-compatibility.json) 为准。
+这 10 个宿主使用同一个插件包，无需版本豁免。当前开发 SDK 固定 alpha.3；后续插件升级继续保留已支持宿主。[状态与已验证范围](doc/project/0.19.0-alpha.1版本发布验收.md)详见记录，支持集合以 [dsh-compatibility.json](dsh-compatibility.json) 为准。
 
 升级、卸载和本地安装包的操作见[安装与运维](doc/deployment/安装与运维.md)。
 
@@ -92,9 +94,9 @@ dsh web
 
 ### 4. 按需开启画面与录像
 
-安装本机 Browscreen 命令，在 **设置 → 测试插件 → 浏览器预览与录像** 中开启所需的预览或录像、检测安装、选择专用 Playwright MCP，并保存设置。之后使用正常测试命令即可，采集服务由插件按需启动。
+在 **设置 → 测试插件 → 实时画面** 开启所需能力并保存。画面跟随实际测试页面：已知连接主动适配，其他工具由当前 Agent 尝试接入；界面区分持续画面、定时截图与单次截图。需要 CDP 录像时，再按配置指南安装本机 Browscreen 并为测试专用连接准备增强。
 
-实时画面只在当前浏览器的 CDP 连接和有效首帧就绪后显示。录像有独立开关，默认关闭；隐藏浮窗不会停止已启用的录像。接口实例不显示浏览器画面或视频区域。
+实时画面只在原页面归属和有效首帧核对后显示。录像有独立开关，默认关闭；隐藏浮窗不会停止已启用的录像。接口实例不显示浏览器画面或视频区域。
 
 安装要求和操作步骤见[实时预览配置](doc/user-guide/浏览器实时预览一步一步配置.md)与[浏览器录像与报告](doc/user-guide/浏览器录像与报告.md)。
 
@@ -118,7 +120,7 @@ dsh web
 - 通用工具保持原有名称、参数与返回格式；截图、预览、录像和自动回收按实际能力提供。基本执行不要求这些可选能力；用例明确要求的检查或清理缺失时不能算作通过。见[通用工具运行](doc/user-guide/通用工具运行.md)。
 
 - 运行于 DSH native 工具模式，共享测试环境按串行方式执行；多对话独立浏览器并行运行属于[后续优化](doc/design/多对话并行测试优化方案.md)。
-- 接口测试支持 **GET JSON** 采集；自动预览使用本机 Chromium Playwright MCP，当前支持单活动页面。
+- 接口测试支持 **GET JSON** 采集；媒体按实际来源与页面身份验证，截图能力不代表支持录像；无法核对归属时不展示画面。
 - 自然语言和文件用例执行都使用当前对话的模型；报告重建从已保存记录生成，不重新执行用例。
 - 测试结果保留失败、取消和清理状态；证据缺失、工具错误或必要清理失败不会算作通过。报告界面及部分提示以中文为主。
 

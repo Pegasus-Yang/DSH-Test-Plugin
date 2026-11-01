@@ -83,8 +83,9 @@ export function LocalPreviewSettings({
         预览等待首帧后显示；录像与预览独立，关闭浮窗不会停止录像，结束后在报告查看。
       </p>
       {value.enabled || value.recordingEnabled ? (
-        <>
-          <label htmlFor="dsh-test-preview-mcp">Playwright 浏览器</label>
+        <details className="dsh-test-command-advanced">
+          <summary>画面增强与采集依赖（按需配置）</summary>
+          <label htmlFor="dsh-test-preview-mcp">已知画面增强连接（可选）</label>
           <select
             id="dsh-test-preview-mcp"
             value={value.mcpId}
@@ -92,16 +93,20 @@ export function LocalPreviewSettings({
             aria-invalid={!!errors.mcpId}
             onChange={(e) => edit({ mcpId: e.target.value })}
           >
-            <option value="">请选择浏览器</option>
-            {info.mcpInstances.map((m) => (
-              <option key={m.id} value={m.id} disabled={!m.compatible}>
-                {m.label}
-                {m.compatible ? "" : "（暂不支持此接入）"}
-              </option>
-            ))}
+            <option value="">自动识别</option>
+            {info.mcpInstances
+              .filter((m) => m.compatible)
+              .map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.label}
+                  {m.compatible ? "" : "（暂不支持此接入）"}
+                </option>
+              ))}
           </select>
           <p id="dsh-test-mcp-help" className="dsh-test-setting-hint">
-            选择测试专用的本机 Playwright MCP，不与其他对话共享操作。
+            仅用于准备 CDP／录像增强，不决定执行工具。选择后会在下次测试前重载该
+            MCP，请只选择测试专用连接；留空时由 Agent
+            尝试当前页面，保持现有连接。
           </p>
           {errors.mcpId && (
             <p id="dsh-test-mcp-error" role="alert">
@@ -110,7 +115,7 @@ export function LocalPreviewSettings({
           )}
           {!info.mcpInstances.some((m) => m.compatible) && (
             <p role="status">
-              未找到可用的本机 Playwright MCP。
+              尚无可主动增强的连接，可让 Agent 尝试现有工具的画面能力。
               <a href={localGuide} target="_blank" rel="noreferrer">
                 查看配置指南
               </a>
@@ -137,7 +142,7 @@ export function LocalPreviewSettings({
             </button>
           </div>
           <p className="dsh-test-setting-hint">
-            DSH 运行机器需要 Browscreen（Python ≥3.14），支持稳定版{" "}
+            CDP 画面增强使用 Browscreen（Python ≥3.14），支持稳定版{" "}
             {browscreenVersionRange}。无需提前启动采集服务。
             <a href={localGuide} target="_blank" rel="noreferrer">
               查看安装与配置步骤
@@ -217,7 +222,7 @@ export function LocalPreviewSettings({
               </p>
             )}
           </details>
-        </>
+        </details>
       ) : (
         <p className="dsh-test-setting-hint">
           画面与录像均已关闭，不需要配置

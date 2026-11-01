@@ -16,7 +16,7 @@ export class TestUiAccess {
     async serve(req, res) {
         res.setHeader("Content-Type", "application/json; charset=utf-8");
         res.setHeader("Cache-Control", "no-store");
-        const action = /^\/test-ui\/(report|report-target|recover|release)$/.exec(req.url?.split("?")[0] ?? "")?.[1];
+        const action = /^\/test-ui\/(report|report-target|recover|release|preview|preview-stop)$/.exec(req.url?.split("?")[0] ?? "")?.[1];
         if (!action || req.method !== "POST") {
             res.writeHead(action ? 405 : 404);
             res.end();
@@ -56,7 +56,16 @@ export class TestUiAccess {
             if (controller.signal.aborted)
                 throw new Error("操作已取消");
             let value;
-            if (action === "report" || action === "report-target") {
+            if (action === "preview" || action === "preview-stop") {
+                if (typeof body.session_id !== "string")
+                    throw new Error("请先打开需要连接画面的测试对话。");
+                const test = this.tests.sessions.get(body.session_id);
+                if (!test || test.closed)
+                    throw new Error("当前对话没有运行中的测试，等待测试打开实际页面后再尝试。");
+                value =
+                    action === "preview" ? test.requestPreview() : test.stopPreview();
+            }
+            else if (action === "report" || action === "report-target") {
                 if ((body.run_id !== undefined && typeof body.run_id !== "string") ||
                     (body.session_id !== undefined && typeof body.session_id !== "string"))
                     throw new Error("运行ID与会话ID必须是文字。");

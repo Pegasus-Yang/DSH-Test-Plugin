@@ -107,6 +107,11 @@ export class RecoveryManager {
           )
             ? "runbridge"
             : "playwright";
+        if (browser && backend === "playwright") {
+          browser = false;
+          toolUnavailable =
+            "历史记录缺少原连接和资源身份合同，不能默认关闭当前 Playwright；请提交原资源的实际处置证据。";
+        }
         const tool = run.instances
           .flatMap((instance) => Object.values(instance.resources))
           .find(
@@ -139,7 +144,8 @@ export class RecoveryManager {
           : missingLeaseCredentials
             ? "原 Node 领取没有取得可恢复的节点令牌，请由 Hub 维护者核查后提交处置证据。"
             : !browser
-              ? "未能确认浏览器资源归属，请核实外部环境后在设置页提交处置证据。"
+              ? (toolUnavailable ??
+                "未能确认浏览器资源归属，请核实外部环境后在设置页提交处置证据。")
               : toolUnavailable;
     return {
       quarantine: {
@@ -246,7 +252,6 @@ export class RecoveryManager {
         agent.ctx.tools,
         [],
         toolConnections(agent.ctx),
-        undefined,
         agent,
       );
       const close = catalog
@@ -277,7 +282,11 @@ export class RecoveryManager {
       ? toolResource.tool.config.close.tool_name
       : resource
         ? "mcp__runbridge__browser_stop"
-        : "mcp__playwright__browser_close";
+        : undefined;
+    if (!name)
+      throw new Error(
+        "没有原连接的关闭合同，不能默认关闭另一浏览器；请提交原资源的实际处置证据",
+      );
     if (resource) {
       if (!resource.remote?.access_file)
         throw new Error(
@@ -306,7 +315,7 @@ export class RecoveryManager {
     }
     if (!remote && !agent.ctx.tools.get(name, agent))
       throw new Error(
-        "当前没有可用的 Playwright 关闭工具，请恢复 MCP 连接后重试，或在设置页提交实际处置证据",
+        "当前没有原连接的关闭工具，请恢复原连接后重试，或提交实际处置证据",
       );
     this.busy = true;
     this.lastError = undefined;

@@ -46,10 +46,42 @@ try {
     assert.notEqual(response.status(), 200, "设置接口缺少宿主认证");
     await anonymous.close();
     await openSettings(page);
+    const connections = page.getByRole("tab", {
+      name: "工具接入",
+      exact: true,
+    });
+    await connections.click();
+    await connections.press("ArrowRight");
+    assert.equal(
+      await page.evaluate(() => document.activeElement?.id),
+      "dsh-test-tab-media",
+    );
+    assert.equal(
+      await page
+        .getByRole("tab", { name: "实时画面", exact: true })
+        .getAttribute("aria-selected"),
+      "true",
+    );
+    await page.getByRole("tab", { name: "实时画面", exact: true }).press("End");
+    assert.equal(
+      await page
+        .getByRole("tab", { name: "环境与报告", exact: true })
+        .getAttribute("aria-selected"),
+      "true",
+    );
+    await page
+      .getByRole("tab", { name: "环境与报告", exact: true })
+      .press("Home");
+    assert.equal(await connections.getAttribute("aria-selected"), "true");
+    assert.equal(await page.locator("#dsh-test-browser-backend").count(), 0);
+    await page.getByRole("tab", { name: "实时画面", exact: true }).click();
     if (mode === "save") {
       await page
         .getByRole("checkbox", { name: "显示实时画面", exact: true })
         .check();
+      await page
+        .getByText("画面增强与采集依赖（按需配置）", { exact: true })
+        .click();
       await page
         .getByText("高级设置：命令路径与采集端口", { exact: true })
         .click();
@@ -61,15 +93,18 @@ try {
         .getByRole("checkbox", { name: "显示实时画面", exact: true })
         .uncheck();
       await page
-        .getByRole("button", { name: "保存浏览器设置", exact: true })
+        .getByRole("button", { name: "保存画面偏好", exact: true })
         .click();
-      await page.getByRole("status").filter({ hasText: "已保存" }).waitFor();
+      await page.getByRole("status").filter({ hasText: "已保存，下次测试生效" }).waitFor();
     }
     if (["save", "read"].includes(mode)) {
       {
         await page
           .getByRole("checkbox", { name: "显示实时画面", exact: true })
           .check();
+        await page
+          .getByText("画面增强与采集依赖（按需配置）", { exact: true })
+          .click();
         await page
           .getByText("高级设置：命令路径与采集端口", { exact: true })
           .click();

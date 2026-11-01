@@ -19,7 +19,7 @@ const port = Number(process.env.DSH_BROWSCREEN_PORT ?? "13402");
 await mkdir(evidence, { recursive: true });
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage({
-  viewport: { width: 1280, height: 1000 },
+  viewport: { width: 1440, height: 900 },
   locale: "zh-CN",
 });
 const errors = [];
@@ -47,7 +47,8 @@ async function openSettings() {
   if (!(await item.isVisible()))
     await page.getByRole("button", { name: "设置", exact: true }).click();
   await item.click();
-  await page.locator("#dsh-test-browser-backend").waitFor();
+  await page.locator("[data-test-preview-settings]").waitFor();
+  await page.getByRole("tab", { name: "实时画面", exact: true }).click();
 }
 try {
   await page.goto(state.url);
@@ -61,6 +62,9 @@ try {
     exact: true,
   });
   await checkbox.check();
+  await page
+    .getByText("画面增强与采集依赖（按需配置）", { exact: true })
+    .click();
   await page.getByText("高级设置：命令路径与采集端口", { exact: true }).click();
   await page
     .locator("#dsh-test-browscreen-executable")
@@ -103,10 +107,8 @@ try {
   await page
     .locator("#dsh-test-preview-mcp")
     .selectOption("mcp-test-playwright");
-  await page
-    .getByRole("button", { name: "保存浏览器设置", exact: true })
-    .click();
-  await page.getByRole("status").filter({ hasText: "已保存" }).waitFor();
+  await page.getByRole("button", { name: "保存画面偏好", exact: true }).click();
+  await page.getByRole("status").filter({ hasText: "已保存，下次测试生效" }).waitFor();
   const profile = join(state.home, "profiles/web/cordis.patch.yml");
   const rows = parse(await readFile(profile, "utf8"));
   assert.deepEqual(
@@ -127,6 +129,9 @@ try {
   await page.reload();
   await openSettings();
   assert(await checkbox.isChecked());
+  await page
+    .getByText("画面增强与采集依赖（按需配置）", { exact: true })
+    .click();
   await page.getByText("高级设置：命令路径与采集端口", { exact: true }).click();
   assert.equal(
     await page.locator("#dsh-test-browscreen-executable").inputValue(),

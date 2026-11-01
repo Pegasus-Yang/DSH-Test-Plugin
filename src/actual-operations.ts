@@ -46,7 +46,7 @@ const interactions = new Set([
   "browser_evaluate",
   "browser_run_code",
 ]);
-/** 模型在同一份支持名单中选择完整名称，避免省略MCP前缀反复失败。 */
+/** 旧记录的粒度识别及测试夹具兼容名单，不限制当前可调用的工具。 */
 export const operationToolNames = [...interactions, "browser_tabs"].map(
   (name) => prefix + name,
 );

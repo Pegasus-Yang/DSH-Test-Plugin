@@ -11,7 +11,19 @@ import type {
 import type {} from "@deepseek-ai/dsh-system-prompt";
 import type {} from "@deepseek-ai/dsh-plan-mode/types";
 import type {} from "@deepseek-ai/dsh-session-projection";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { runbridgeEnabled } from "./browser-preferences.js";
+import {
+  legacyBrowserTools,
+  toolSource,
+  type DomToolBinding,
+} from "./tool-capabilities.js";
+import { ToolPreview, type ToolPreviewRecipe } from "./tool-preview.js";
+import {
+  isPlaywrightMcp,
+  playwrightPreviewContext,
+  playwrightPreviewFrame,
+} from "./playwright-preview.js";
 import { existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import {
@@ -55,7 +67,7 @@ import {
 } from "./tool-resource.js";
 import { RecoveryManager } from "./recovery.js";
 import { archiveToolImages, captureStep } from "./adapters.js";
-import { RunBridge, runbridgePrefix } from "./runbridge.js";
+import { RunBridge } from "./runbridge.js";
 import { evaluate } from "./assertions.js";
 import { writeReport } from "./report.js";
 import { ReportAccess } from "./report-access.js";
@@ -108,12 +120,12 @@ const output = {
 const guide = `当前对话已启用测试增强，仍由本会话正常推理、工具调用、审批、追问和回复完成任务，不创建其他会话或后台任务。
 规划阶段只根据用户描述分析目标、业务步骤、输入和预期。禁止访问网站、运行命令、调用API或提前验证用例；不能通过预跑寻找选择器。只可使用test_submit_plan、test_current、todo_write和ask_user_question。已给目标、输入和预期时直接形成计划；缺少必要信息时在本会话追问。
 test_submit_plan按工具schema提交：普通任务为{name,rationale:"一两句面向用户的拆分说明",steps:[{description,checks?:string[]}]}；文件/参数化批量模式为{name,rationale,cases:[{instance_id,name,rationale,steps}]}，按planning_input.instances每个id恰好提交一次，使用对应已展开task与参数，不能合并、遗漏或自行改参数。把用户的一段话按常规理解拆成几个业务动作短句，checks只写用户预期的自然语言。不要提供suite_id、执行工具、选择器、能力类型、URL白名单、输出Schema、字段路径或比较器；不要为了未知页面结构追问用户。例如steps:[{description:"访问ceshiren.com"},{description:"搜索agent"},{description:"打开第一条搜索结果"},{description:"查看帖子的点赞数",checks:["点赞数不为0"]}]。用户没有提供的操作细节无需在规划期补齐。rationale简要说明为什么按这些业务动作拆分、怎样核对目标，不展开详细推理。/test提交成功后，必须先在正常对话中用原始任务、拆分思路、步骤清单三个部分通报返回的plan_summary，再执行第一个动作；/test-plan通过原生审核卡片展示这三部分。
-文字计划执行：每次只处理test_current的当前步骤。需要操作目标时先test_define_step({capability:"browser"或"api",allowed_targets:[本步目标网址],reason:"当前步骤依据"})设定操作范围，无需填写outputs。随后使用原生工具观察、操作、调整；了解实际页面后直接test_capture采集。采集时插件按采集方式自动登记输出类型，无需先写输出Schema；已有成功观察不可覆盖，但可补采其他输出。API通常以response保存完整响应。不是在执行开始时编译整份计划，不能配置未来步骤。
-实际操作说明：浏览器访问、点击、输入、按键、选择、拖动、业务等待等必须调用test_execute_operation({description:"面向用户的简短操作说明，说明对象、动作和必要目的",tool_name:"mcp__playwright__browser_click",arguments:{原工具参数}})。tool_name从Schema的完整名称中选择，必须保留mcp__playwright__前缀。先观察真实页面，再提交当前一个动作的说明并执行，不能一次编造后续操作。常规导航、点击、输入和提交必须逐个使用原子动作工具，不得用browser_run_code或browser_evaluate把这些常规交互合并成脚本。只有原子工具无法表达的动作才使用复合脚本，并保留需复核标记。点击搜索按钮与输入关键词分别调用；browser_type不要submit:true，输入后单独browser_press_key提交Enter；多个表单字段优先逐字段填写。说明随同一次调用保存，不需要另一个登记工具或额外模型轮次。原生browser_snapshot、截图及只读browser_evaluate仍可直接用于分析；evaluate仅允许观察，脚本操作必须带说明并标为复合操作，无法证明内部每个动作都完成。API请求继续test_capture，不调用新的浏览器入口或直接test_api_get。操作成功仅表示工具结算，断言仍按可信采集计算。定位失败可调整后产生新记录，保留旧失败；插件自行生成身份、顺序和状态。用户要求的准备与清理遵守当前冻结阶段，自动复位、关闭继续test_capture({})。
+文字计划执行：每次只处理test_current的当前步骤。先test_define_step({capability:"tool",allowed_targets:[当前目标地址或对象],reason:"本步依据"})；GET接口可继续capability:"api"。不配置未来步骤，当前业务工具只从真实目录选择。已有固定计划不能重写。
+实际操作说明：使用test_execute_operation({description:"实际对象、动作与必要业务输入",tool_name:"目录中的完整工具名",arguments:{工具原有参数},purpose:"action"或"observe"})。所有服务均保持原有名称和Schema。按当前真实页面选择一个动作，不合并常规交互，不编造后续操作。截图可用purpose:"observe"，图片自动归档。用户收尾在cleanup阶段使用purpose:"cleanup"。上下文默认由外部服务管理，不自动reset或close；明确要求的初始化与清理形成真实前置或收尾。执行成功不代表业务通过，未知写结果不能重放。
 文字检查点：获得可信观察后，对当前步骤的每个checks，调用test_bind_check({check_index:从0开始,assertion:{observation_ref:"step_编号.输出名.可选嵌套路径",operator:"eq/neq/...",expected_value:"用户预期原文，例如agent或0；不加引号或数组包装"}})。也可用expected_observation_ref比较前一步观察（例如第一条搜索结果链接）。rule_ref由插件绑定文字检查点；不用提交actual。预期来自原文和文字检查，不能按实际值改写；数字不为0用neq和expected_value直接填"0"（按数字条件解析为数值0）。正文或文本不为空必须用text采集、operator:"neq"、expected_value:""（空字符串），不能填0或字符串0，也不能以元素可见替代正文非空。每个文字检查都必须绑定程序断言，不能靠口头宣布通过；纯检查步骤可以直接引用前一步的可信观察。绑定后test_finish_step结算当前步骤并计算断言。无法完成用test_fail_step说明原因。
 接口数组检查：接口数组的长度检查必须引用step_id.response.body.length；字段如step_id.response.body.0.iid，标签数量用step_id.response.body.0.labels.length。不要把整个数组与数量比较；只复用已采集响应，不重复请求。unit只表示展示单位，不会把数组转换成长度；长度断言必须在observation_ref引用.length，不能使用整个body配合unit:"length"。
-执行阶段：文字计划提交（/test-plan还需批准）后按test_current执行当前业务目标。此时才使用正常Playwright工具查看页面、点击、输入、等待和检查DOM，可根据实际状态调整定位、操作组合和重试，无需重跑整条用例；只完成当前步骤，不提前执行后续步骤。browser_evaluate可用于实际页面结构检查，断言实际值仍只接受test_capture可信采集。JSON文件计划已提交时直接按test_current继续，不能重复提交计划或预跑。
-运行时采集：完成当前动作后，按页面/接口实际情况调用test_capture({capture:{输出名:采集定义},reason:"依据当前页面选择或修正定位的原因"})。它不接受actual或任意执行代码。dom mode支持text/number/count/visible/url/attribute/value；selector为真实CSS，可用index定位集合。页面路径用{kind:"dom",mode:"url",field:"pathname"}；元素href用{kind:"dom",mode:"attribute",attribute:"href",selector:"实际选择器",index:0,field:"pathname"}；数字用mode:number；文本框用mode:value；http仅用于返回JSON的GET接口。HTTP采集本身会发送请求，直接调用test_capture，无需先用test_api_get预发一次。完整响应为{status:number,body:JSON}，不含headers；可声明单一object输出，用{kind:"http",url:"授权URL",field:""}一次采集，再通过step_id.output_name.status及step_id.output_name.body的嵌套路径断言。必要输出都要采集。采集定义可根据实际页面修正，保留每次原因和调用记录；已有成功观察不可覆盖，只补采尚缺的输出。不能改变输出含义、输出类型、目标范围或断言预期。静态JSON的capture和自动清理已有采集定义，直接test_capture({})即可。
+执行阶段：按test_current操作当前目标，使用实际工具Schema，所有来源平等。缺少必要能力时test_fail_step如实记录。没有截图、预览或关闭能力不妨碍其他步骤；用例明确要求这些能力时按未满足处理。
+运行时采集：调用test_capture({capture:{counter:{kind:"tool",tool_name:"实际读取工具名",arguments:{原参数},extract:{from:"structured",pointer:"/text",type:"number"}}},reason:"读取当前对象真实值"})。返回格式不确定时，先通过test_execute_operation的purpose:observe查看只读工具的真实返回，再登记采集；不能靠猜测首次绑定后再改规则。from=structured读取MCP structuredContent；value读取原工具的未解析value，MCP通常是包含content的整个包，不是文本中的结果；json解析指定文本块的完整JSON；text读取指定文本块；playwright-result解析实际### Result段里的JSON，当前返回仍使用此格式时也必须使用它。pointer使用JSON Pointer；block从0开始。纯文本可用between:{after:"固定前缀",before:"固定后缀"}提取唯一片段。提取规则派发前保存，执行后不可改写；不得提交actual或按结果改预期。动作返回通过test_execute_operation的observations预先定义提取，从同一次调用取得，不重复写操作。纯GET保留kind:http。旧dom仅绑定同一实际来源的兼容读取工具。固定采集调用test_capture({})。
 采集成功后调用test_finish_step；程序计算断言，模型不能填写实际值或口头改判。定位失败可修正重试；确实无法完成时test_fail_step说明原因。用户停止后不再执行业务，只按同会话收尾指导执行预授权清理。全部完成调用test_finish，并在原生最终回复写明逐步结果、断言实际/预期、保存位置和工具返回的报告链接。BLOCKED、SKIPPED或缺证据不能写成通过。`;
 
 function notice(text: string) {
@@ -129,9 +141,8 @@ function closeStep(id: string, description: string): Step {
     description,
     required: true,
     depends_on: [],
-    ...(id === "__close"
-      ? { run_if: "resource_exists" as const, resource_ref: "browser_context" }
-      : {}),
+    run_if: "resource_exists" as const,
+    resource_ref: "browser_context",
     action: {
       goal: "调用test_capture关闭并验证浏览器上下文释放，然后test_finish_step。",
       capability: "browser",
@@ -240,7 +251,7 @@ export class NativeTests {
       this.recovery.busy ||
       [...this.sessions.values()].some((s) => !s.closed || s.disposing)
     )
-      throw new Error("已有测试使用共享浏览器，请先结束或停止该测试");
+      throw new Error("已有测试运行，请先结束或停止该测试");
     if (review && !this.ctx.commands.find(agent, "plan"))
       throw new Error(
         "/test-plan 需要宿主启用原生 dsh-plan-mode 和用户审核通道",
@@ -338,9 +349,17 @@ export class NativeTest {
   readonly browser?: RunBridge;
   closed = false;
   private planned = false;
-  private legacyPlanBrowser = false;
+  private selectedTool?: string;
+  private selectedInstance?: string;
+  private connectionReady = false;
+  private readonly media: ToolPreview;
+  private readonly mediaCalls = new Set<string>();
+  private readonly previewPolls = new Set<string>();
+  private readonly mediaPrompted = new Set<string>();
+  private readonly dispatchedCalls = new Set<string>();
   private toolCatalog!: TestToolCatalog;
   private readonly captureLocks = new Map<string, string>();
+  private readonly domBindings = new Map<string, DomToolBinding>();
   private readonly resourceConfig?: ToolResourceConfig;
   private resourcePhase?: "start" | "close";
   private reportReady = false;
@@ -383,12 +402,7 @@ export class NativeTest {
     this.task = task;
     this.originalTask = task;
     this.input = input ? structuredClone(input) : undefined;
-    if (
-      !["playwright", "runbridge"].includes(
-        owner.config.browser?.backend ?? "auto",
-      ) &&
-      owner.config.browser?.resourceLifecycle
-    ) {
+    if (owner.config.browser?.resourceLifecycle) {
       this.resourceConfig = structuredClone(
         owner.config.browser.resourceLifecycle,
       );
@@ -418,7 +432,7 @@ export class NativeTest {
       incomplete: false,
       resource_quarantined: false,
       manifest: {
-        plugin_version: "0.18.0",
+        plugin_version: "0.19.0-alpha.1",
         plan_review: review,
         execution: "native-conversation",
         origin_session_id: agent.id,
@@ -427,58 +441,126 @@ export class NativeTest {
       },
     };
     this.manualSource = new ManualSource(this.recorder.directory, id);
-    if (owner.config.browser?.backend === "runbridge")
-      this.browser = new RunBridge(
-        owner.config.browser,
-        owner.config.workspace,
-        () => {
-          if (this.browser?.lease.record)
-            this.run.node_lease = structuredClone(this.browser.lease.record);
-          if (this.current && this.browser?.resource) {
-            this.current.instance.resources.browser_context = structuredClone(
-              this.browser.resource,
-            );
-          }
-          this.save();
-        },
-        {
-          credentialFile: join(
-            owner.config.outputRoot,
-            ".runbridge-access",
-            id + ".json",
-          ),
-          cleanupTimeoutMs: owner.config.cleanupTimeoutMs,
-          invalid: (reason) => {
-            if (!this.closed && !this.finishing && !this.reportReady)
-              this.stop(reason);
-          },
-          retainAccessFile: () =>
-            this.run.resource_quarantined ||
-            this.run.incomplete ||
-            this.run.instances.some((instance) => {
-              const resource = instance.resources.browser_context;
-              return (
-                !!resource?.remote &&
-                ["exists", "unknown"].includes(resource.state)
+    this.media = new ToolPreview({
+      catalog: () => this.toolCatalog,
+      frame: (context, frame, mode) => {
+        this.owner.preview.setToolFrame(
+          this.run.suite_run_id,
+          context.caseId,
+          frame,
+          mode,
+        );
+        if (this.media.state().frames === 1) {
+          const refs = archiveToolImages(this.recorder, this.run, {
+            isError: false,
+            content: [
+              {
+                type: "image",
+                mimeType: frame.mime,
+                data: frame.bytes.toString("base64"),
+              },
+            ],
+          } as unknown as ToolExecutionResult);
+          this.run.manifest.media_evidence_refs = refs;
+        }
+      },
+      clear: () => this.owner.preview.clearTool(this.run.suite_run_id),
+      viewing: () => this.owner.preview.viewing(this.run.suite_run_id),
+      poll: () => this.pollPreview(),
+      cdp: (context, metadata) =>
+        this.owner.preview.attachCdp(this.run, context.caseId, metadata),
+      event: (kind, value) => {
+        this.recorder.event(kind, value, this.current?.binding);
+        this.run.manifest.media = JSON.parse(
+          JSON.stringify(this.media.state()),
+        );
+        this.owner.preview.toolNotice(
+          this.run.suite_run_id,
+          this.media.state().reason,
+        );
+      },
+    });
+    if (runbridgeEnabled(owner.config.browser)) {
+      try {
+        this.browser = new RunBridge(
+          owner.config.browser!,
+          owner.config.workspace,
+          () => {
+            if (this.browser?.lease.record)
+              this.run.node_lease = structuredClone(this.browser.lease.record);
+            if (this.current && this.browser?.resource) {
+              this.current.instance.resources.browser_context = structuredClone(
+                this.browser.resource,
               );
-            }),
-        },
-      );
+            }
+            this.save();
+          },
+          {
+            credentialFile: join(
+              owner.config.outputRoot,
+              ".runbridge-access",
+              id + ".json",
+            ),
+            cleanupTimeoutMs: owner.config.cleanupTimeoutMs,
+            invalid: (reason) => {
+              if (!this.closed && !this.finishing && !this.reportReady)
+                this.stop(reason);
+            },
+            retainAccessFile: () =>
+              this.run.resource_quarantined ||
+              this.run.incomplete ||
+              this.run.instances.some((instance) => {
+                const resource = instance.resources.browser_context;
+                return (
+                  !!resource?.remote &&
+                  ["exists", "unknown"].includes(resource.state)
+                );
+              }),
+          },
+        );
+      } catch (error) {
+        this.run.manifest.connection_notice = String(
+          this.recorder.sanitize(String(error)),
+        );
+      }
+    }
   }
   async preparePlanning(): Promise<void> {
-    await this.browser?.preparePlanning();
-  }
-  get managedBrowser(): boolean {
-    return (
-      !!this.browser ||
-      this.owner.config.browser?.backend === "playwright" ||
-      this.legacyPlanBrowser
-    );
+    if (
+      this.browser &&
+      this.agent.ctx.tools
+        .schemas(this.agent)
+        .some((tool) => tool.name.startsWith(this.browser!.prefix))
+    ) {
+      this.run.manifest.connection_notice =
+        "已有同名工具来源，由 DSH 管理连接；未重复登记 RunBridge 帮助器。";
+      return;
+    }
+    try {
+      await this.browser?.preparePlanning();
+      this.connectionReady = !!this.browser;
+    } catch (error) {
+      this.run.manifest.connection_notice = String(
+        this.recorder.sanitize(String(error)),
+      );
+    }
   }
   assertTool(name: string): void {
     this.toolCatalog.assert(name);
+    const connection = this.toolCatalog
+      .snapshot()
+      .find((entry) => entry.name === name)?.connection;
     if (
-      !this.managedBrowser &&
+      connection &&
+      connection.id !== "registered-runbridge" &&
+      toolConnections(this.owner.ctx).find(
+        (entry) => entry.id === connection.id,
+      )?.digest !== connection.digest
+    )
+      throw new Error(
+        "工具连接配置已改变，不能把本轮调用转到另一连接: " + name,
+      );
+    if (
       this.current?.phase === "cleanup" &&
       this.current.instance.steps.some(
         (s) =>
@@ -504,12 +586,146 @@ export class NativeTest {
     )
       throw new Error("本轮资源生命周期只允许由已配置的初始化或收尾执行");
   }
-  private get closeTool(): string {
+  private get closeTool(): string | undefined {
     if (this.current?.step.step_id === "__resource_close")
       return this.resourceConfig!.close.tool_name;
-    return this.browser
-      ? this.browser.prefix + "browser_stop"
-      : "mcp__playwright__browser_close";
+    return this.captureBrowser
+      ? this.captureBrowser.prefix + "browser_stop"
+      : this.legacyTools.close;
+  }
+  private get captureBrowser(): RunBridge | undefined {
+    if (!this.browser || !this.connectionReady) return;
+    const bound = this.selectedTool?.startsWith(this.browser.prefix);
+    return bound ||
+      (this.releaseStep() &&
+        this.current?.step.step_id === "__connection_close") ||
+      (!this.selectedTool &&
+        this.legacyTools.capture === this.browser.prefix + "browser_capture")
+      ? this.browser
+      : undefined;
+  }
+  private get legacyTools() {
+    if (!this.toolCatalog) return {};
+    return legacyBrowserTools(this.toolCatalog.snapshot(), this.selectedTool);
+  }
+  private captureHost() {
+    if (
+      this.connectionReady &&
+      this.browser &&
+      Object.values(this.current?.step.action?.capture ?? {}).some(
+        (capture) => capture.kind === "browser_open",
+      )
+    )
+      this.selectedTool = this.browser.prefix + "browser_capture";
+    return {
+      id: this.id,
+      browser: this.captureBrowser,
+      legacyTools: this.legacyTools,
+      domBindings: Object.fromEntries(
+        Object.keys(this.current?.step.action?.capture ?? {}).flatMap(
+          (name) => {
+            const binding = this.domBindings.get(this.domBindingKey(name));
+            return binding ? [[name, binding]] : [];
+          },
+        ),
+      ),
+      assertTool: (name: string) => this.assertTool(name),
+      call: this.call.bind(this),
+    };
+  }
+  private domBindingKey(name: string): string {
+    return `${this.current?.instance.case_run_id}/${this.current?.step.step_id}/${name}`;
+  }
+  private get mediaEnabled(): boolean {
+    return (
+      (!!this.owner.preview.config &&
+        this.owner.preview.config.previewEnabled !== false) ||
+      (!!this.connectionReady && !!this.browser?.config.previewEnabled)
+    );
+  }
+  mediaState() {
+    const known = this.owner.preview.summary(this.run.suite_run_id);
+    return {
+      enabled: this.mediaEnabled,
+      ...this.media.state(),
+      known_adapter: !!this.playwrightMediaTool(),
+      ...(known.ready
+        ? {
+            mode: known.mode ?? "continuous",
+            reason: known.reason ?? "持续画面已连接",
+          }
+        : {}),
+    };
+  }
+  private playwrightMediaTool(): string | undefined {
+    if (
+      !this.selectedTool ||
+      !this.toolCatalog ||
+      this.selectedTool.endsWith("__browser_close")
+    )
+      return;
+    const entries = this.toolCatalog.snapshot(),
+      active = entries.find((entry) => entry.name === this.selectedTool);
+    if (!active?.connection) return;
+    const registration = this.owner.ctx
+      .get?.("configEditor")
+      ?.entries()
+      .find((entry) => entry.options.id === active.connection!.id);
+    if (
+      !registration ||
+      !isPlaywrightMcp(
+        registration.options.config as { args?: string[]; command?: string },
+      )
+    )
+      return;
+    return entries.find(
+      (entry) =>
+        toolSource(entry) === toolSource(active) &&
+        entry.name.endsWith("__browser_run_code") &&
+        (entry.parameters as { properties?: Record<string, unknown> })
+          .properties?.code,
+    )?.name;
+  }
+  requestPreview(): string {
+    if (!this.current || !this.selectedTool || this.closed || this.reportReady)
+      return "等待当前对话的测试打开实际页面后再尝试接入。";
+    this.media.retry();
+    this.agent.followup(
+      notice(
+        "用户请求尝试当前实际来源的画面连接。查看test_current.media，读取真实工具Schema，使用test_connect_preview验证原页面身份与首帧；不要新建浏览器或改变业务预期。",
+      ),
+    );
+    return "已交给当前对话 Agent 尝试，结果将在画面状态中显示。";
+  }
+  stopPreview(): string {
+    this.media.unavailable("画面尝试与截图轮询已停止，可在当前页面重新尝试。");
+    return "已停止画面尝试与截图轮询。";
+  }
+  private async pollPreview(): Promise<void> {
+    if (
+      this.closed ||
+      this.cancelled ||
+      this.reportReady ||
+      this.pendingTools.size ||
+      !this.current ||
+      this.current.phase === "cleanup"
+    )
+      return;
+    const callId = ToolCallId(randomUUID());
+    this.previewPolls.add(callId);
+    this.mediaCalls.add(callId);
+    try {
+      await this.agent.ctx.tools.execute({
+        callId,
+        rootCallId: callId,
+        name: "test_preview_poll",
+        arguments: {},
+        agent: this.agent,
+        signal: AbortSignal.timeout(5000),
+      });
+    } finally {
+      this.previewPolls.delete(callId);
+    }
   }
   private scheduleToolCleanup(instance: CaseRun): void {
     if (
@@ -519,44 +735,42 @@ export class NativeTest {
       )
     )
       return;
-    const after = this.entries.findIndex(
-      (e, n) => n >= this.cursor && e.instance !== instance,
-    );
-    this.entries.splice(after < 0 ? this.entries.length : after, 0, {
+    const last = this.entries.findLastIndex((e) => e.instance === instance);
+    this.entries.splice(last + 1, 0, {
       instance,
       phase: "cleanup",
       step: toolResourceStep(this.resourceConfig, true),
     });
   }
+  private scheduleConnectionCleanup(): void {
+    if (!this.current) return;
+    const instance = this.current.instance;
+    if (
+      this.entries.some(
+        (entry) =>
+          entry.instance === instance &&
+          entry.step.step_id === "__connection_close",
+      )
+    )
+      return;
+    const after = this.entries.findIndex(
+      (entry, index) => index >= this.cursor && entry.instance !== instance,
+    );
+    this.entries.splice(after < 0 ? this.entries.length : after, 0, {
+      instance,
+      phase: "cleanup",
+      step: closeStep("__connection_close", "归还本轮连接创建的浏览器资源"),
+    });
+  }
   private genericGuidance(): string {
     return (
-      guide
-        .split("\n")
-        .map((line) => {
-          if (line.startsWith("文字计划执行："))
-            return '文字计划执行：每次只处理test_current的当前步骤。先test_define_step({capability:"tool",allowed_targets:[当前目标地址或对象],reason:"本步依据"})；GET接口可继续capability:"api"。不配置未来步骤，当前业务工具只从真实目录选择。已有固定计划不能重写。';
-          if (line.startsWith("实际操作说明："))
-            return '实际操作说明：使用test_execute_operation({description:"实际对象、动作与必要业务输入",tool_name:"目录中的完整工具名",arguments:{工具原有参数},purpose:"action"或"observe"})。所有服务均保持原有名称和Schema，观察也通过此入口，purpose只说明用途。按当前真实页面选择一个动作，不能合并或编造后续操作。截图工具可用purpose:"observe"，真实图片自动归档。用户收尾在cleanup阶段使用purpose:"cleanup"。服务上下文默认由外部管理，插件不会默认重置、关闭浏览器；明确要求的干净会话和清理必须形成真实前置或收尾。工具执行成功不表示业务通过，未知写结果不能重放。';
-          if (line.startsWith("执行阶段："))
-            return "执行阶段：按test_current操作当前目标。使用实际工具Schema，不要求Playwright或RunBridge工具存在。缺少必要能力时test_fail_step如实记录。没有截图、预览或关闭工具不妨碍其他步骤；用例明确要求这些能力时按未满足处理。";
-          if (line.startsWith("运行时采集："))
-            return '运行时采集：调用test_capture({capture:{counter:{kind:"tool",tool_name:"实际读取工具名",arguments:{工具原有参数},extract:{from:"structured",pointer:"/text",type:"number"}}},reason:"从当前对象读取真实值"})。from=structured读取MCP structuredContent；value读取原生工具值；json解析指定文本块的完整JSON或JSON代码块；text读取指定文本块；playwright-result仅解析实际返回的旧### Result。pointer使用JSON Pointer，如/text、/body/0/id，空字符串读取整个值；block从0开始选择实际文本块，type可为number/integer/string/boolean/object/array/null。纯文本可用between:{after:"固定前缀",before:"固定后缀"}提取唯一片段。方法、参数和提取规则先保存再执行，同一输出的提取规则执行后不可改写。不要传actual或根据实际结果修改预期。读取当前服务支持的真实返回，不制造工具或假定字段存在。动作返回需要作为观察时，在test_execute_operation中预先给observations:{输出名:extract定义}，插件从同一次真实调用提取，不重复写操作。纯GET接口保留kind:http。存在内置DOM工具时也可在capability:browser步骤使用既有dom采集。已有固定采集定义调用test_capture({})。';
-          return line;
-        })
-        .join("\n") +
+      guide +
+      "\n旧计划的DOM要求没有兼容读取工具时，使用test_bind_capture绑定真实同源读取工具；selector_argument、attribute_argument、index_argument只声明工具参数名，值由原冻结要求注入；extract和url来自真实返回。不能修改原选择器、输出和业务预期。" +
       (this.resourceConfig
         ? "\n本轮已配置工具资源生命周期：初始化与关闭只按test_current的固定步骤调用test_capture，不能另起会话或跳过本轮清理。"
         : "") +
-      (this.owner.config.browser?.backend === "mcp"
-        ? "\n优先使用主要MCP实例的工具：" +
-          JSON.stringify(
-            this.toolCatalog
-              .snapshot()
-              .filter(
-                (e) => e.connection?.id === this.owner.config.browser?.mcpId,
-              )
-              .map((e) => e.name),
-          )
+      (this.mediaEnabled
+        ? "\n画面连接：首次实际操作后查看test_current.media。known_adapter=true可先调用test_connect_preview(auto:true)，它只读当前页面且不重启连接。先复用已验证的画面，否则根据当前来源的真实工具尝试test_connect_preview。context从最近实际操作返回提取原页面或会话身份；frame_context从截图返回提取相同身份，或identity_argument把原身份注入截图参数。跨来源需同时声明source_context与frame_source_context核对真实浏览器身份，且frame_context核对原页面。不能只用URL或模型描述认定同一页面。image只在图片URL或CDP元数据需要提取时填写；默认读取规范image块。截图可重复读取时优先mode:poll，首帧先标为单次，第二次原页面图片核对后才标为定时截图；只读一次的工具使用mode:once。没有候选能力时用unavailable_reason如实记录，画面失败不改业务预期。无需为每帧调用模型。"
         : "")
     );
   }
@@ -646,40 +860,6 @@ export class NativeTest {
     this.save();
     return capture;
   }
-  private guidance(): string {
-    if (!this.browser)
-      return this.managedBrowser ? guide : this.genericGuidance();
-    return guide
-      .split("\n")
-      .map((line) => {
-        if (line.startsWith("实际操作说明："))
-          return '实际操作说明：浏览器动作必须调用test_execute_operation，tool_name从Schema中选择完整的mcp__runbridge__名称。导航、填写、点击、按键和等待逐个执行并附面向用户的说明。观察可直接browser_snapshot、browser_inspect_dom、browser_read或browser_tabs(action=list)。会话和页面参数由插件注入，不能传入node_id/session_id/page_id；只有browser_tabs明确选页时提供其返回的page_id。目标使用target.by/value/name；by=role时value只填button、textbox等角色，name填真实可访问名称，不能把snapshot整行作为value。含数组参数通过test_execute_operation的arguments_json传完整JSON字符串，例如{"target":{"by":"css","value":"#type"},"values":["api"]}；不要同时传arguments。iframe用frame_selector；没有Playwright snapshot ref、evaluate或run_code。先观察页面，再选择下一动作。断言实际值仅接受test_capture的固定DOM采集，覆盖text/number/count/visible/url/attribute/value；API仍在DSH宿主采集。初始化与释放只调用test_capture({})。截图与动作成功不能宣布PASS，写操作结果未知不得盲目再次提交；已取得原动作request_id时，用tool_request_status查询原结果，不能传入或覆盖会话身份，查询成功仍需test_capture验证业务结果。';
-        if (line.startsWith("执行阶段："))
-          return "执行阶段：按test_current完成当前业务目标，使用当前RunBridge原子工具操作虚拟机页面；不能调用本机Playwright或换另一会话。browser_fill替换整个输入，按Enter另用browser_press_key；select_option按value选择；触发弹窗前用browser_handle_dialog设置一次性策略。当前步骤的允许目标与冻结预期不可改变。浏览器由Node新建，网络回环地址指虚拟机；每条会话最多3600秒，整批Node使用权由插件领取、按需续租并在test_finish等待归还。租约失效后不能领取新令牌续跑旧步骤。";
-        return line;
-      })
-      .join("\n");
-  }
-  private initialStep(): Step {
-    if (!this.browser)
-      return closeStep("__reset", "初始化本次测试浏览器上下文");
-    return {
-      step_id: "__reset",
-      kind: "action",
-      description: "启动并确认本次远程浏览器",
-      required: true,
-      depends_on: [],
-      action: {
-        goal: "调用test_capture({})申请本次远程浏览器，再test_finish_step。",
-        capability: "browser",
-        allowed_targets: [],
-        inputs: {},
-        outputs: { initialized: { type: "boolean" } },
-        completion_requirements: ["initialized"],
-        capture: { initialized: { kind: "browser_open" } },
-      },
-    };
-  }
   get id(): string {
     return this.agent.id;
   }
@@ -708,45 +888,34 @@ export class NativeTest {
     const own = (dispose: () => void) => {
       this.disposers.push(dispose);
     };
-    if (this.browser) own(this.browser.register(scope));
+    if (this.connectionReady) own(this.browser!.register(scope));
     const connections = toolConnections(this.owner.ctx);
-    const preferred =
-      this.owner.config.browser?.backend === "mcp"
-        ? this.owner.config.browser.mcpId
-        : undefined;
-    if (
-      this.owner.config.browser?.backend === "mcp" &&
-      !connections.some((c) => c.id === preferred)
-    )
-      throw new Error("指定的主要MCP实例未启用，请在设置中重新选择");
+    if (this.connectionReady)
+      connections.push({
+        id: "registered-runbridge",
+        prefix: this.browser!.prefix,
+        digest: createHash("sha256")
+          .update(JSON.stringify(this.owner.config.browser))
+          .digest("hex"),
+      });
     this.toolCatalog = new TestToolCatalog(
       scope.tools,
-      this.browser
+      this.connectionReady
         ? [
-            this.browser.prefix + "browser_start",
-            this.browser.prefix + "browser_stop",
+            this.browser!.prefix + "browser_start",
+            this.browser!.prefix + "browser_stop",
           ]
         : [],
       connections,
-      preferred,
       this.agent,
     );
-    if (
-      preferred &&
-      !this.toolCatalog
-        .snapshot()
-        .some((entry) => entry.connection?.id === preferred)
-    )
-      throw new Error("主要MCP尚无可用工具，请启用该连接并等待就绪后再运行");
     this.recorder.json("tool-catalog.json", this.toolCatalog.snapshot());
     this.run.manifest.tool_runtime_schema = "1";
-    this.run.manifest.execution_source =
-      this.owner.config.browser?.backend ?? "auto";
+    this.run.manifest.execution_source = "agent-tools";
     this.run.manifest.tool_connections = connections.map((c) => ({
       id: c.id,
       digest: c.digest,
     }));
-    if (preferred) this.run.manifest.preferred_mcp = preferred;
     own(
       scope.systemPrompt.section({
         name: "plugin:test-guidance",
@@ -757,7 +926,7 @@ export class NativeTest {
           "\n" +
           (this.reportReady
             ? "测试报告已生成。请在本轮回复中只总结test_finish返回的权威统计、逐步状态和断言。BLOCKED或缺少断言记录绝不能写成PASS；页面口头观察不能替代程序断言。给出报告链接。"
-            : this.guidance() +
+            : this.genericGuidance() +
               (this.review && !this.planned
                 ? "\n本次为审核入口（/test-plan或/test-data）：原生plan模式中只规划。test_submit_plan仅保存可修改草案，不会执行。提交成功后，将返回的review_markdown原样作为exit_plan_mode的plan参数展示审核。不要自行缩写或替换审核内容。用户要求修改时重新test_submit_plan再审核；同意后插件自动冻结已审草案并开始执行。关闭plan模式不代表批准。"
                 : "") +
@@ -784,6 +953,212 @@ export class NativeTest {
         }),
       );
     tool(
+      "test_bind_capture",
+      "为当前冻结 DOM 要求绑定同一实际来源的读取工具；保留原选择器、输出和业务预期，派发后不能改规则。",
+      {
+        type: "object",
+        required: ["output", "tool_name", "extract", "url", "reason"],
+        additionalProperties: false,
+        properties: {
+          output: { type: "string" },
+          tool_name: { type: "string" },
+          arguments: { type: "object" },
+          arguments_json: { type: "string" },
+          selector_argument: { type: "string", minLength: 1 },
+          attribute_argument: { type: "string", minLength: 1 },
+          index_argument: { type: "string", minLength: 1 },
+          extract: toolExtractSchema,
+          url: toolExtractSchema,
+          reason: { type: "string", minLength: 1 },
+        },
+      },
+      (args: DomToolBinding & { output: string; reason: string }, exec) => {
+        this.requireSettled(exec);
+        const capture = this.current?.step.action?.capture?.[args.output];
+        if (!capture || capture.kind !== "dom")
+          throw new Error("仅当前步骤的冻结 DOM 要求可绑定工具");
+        if (
+          this.current!.result.observations.some(
+            (observation) => observation.output_name === args.output,
+          )
+        )
+          throw new Error("已有观察不能重新绑定");
+        this.assertTool(args.tool_name);
+        const entries = this.toolCatalog.snapshot();
+        if (
+          this.selectedTool &&
+          toolSource(
+            entries.find((entry) => entry.name === this.selectedTool)!,
+          ) !==
+            toolSource(entries.find((entry) => entry.name === args.tool_name)!)
+        )
+          throw new Error("不能把当前页面的 DOM 要求切换到另一来源");
+        if (capture.selector && !args.selector_argument)
+          throw new Error(
+            "需要指定原工具的选择器参数名，值由冻结 DOM 要求注入",
+          );
+        if (capture.attribute && !args.attribute_argument)
+          throw new Error("需要指定原工具的属性参数名，不能更换冻结属性");
+        if (capture.index !== undefined && !args.index_argument)
+          throw new Error("需要指定原工具的序号参数名，不能更换冻结序号");
+        const { output, reason, ...binding } = args;
+        toolArguments(
+          binding.arguments === undefined &&
+            binding.arguments_json === undefined
+            ? { arguments: {} }
+            : binding,
+        );
+        const key = this.domBindingKey(output),
+          previous = this.domBindings.get(key);
+        if (previous && JSON.stringify(previous) !== JSON.stringify(binding))
+          throw new Error("DOM 工具绑定已冻结，不能根据返回结果改写提取规则");
+        this.domBindings.set(key, structuredClone(binding));
+        this.recorder.event(
+          "capture_tool_bound",
+          { output, binding, reason, original: capture },
+          this.current!.binding,
+        );
+        return this.state();
+      },
+    );
+    tool(
+      "test_connect_preview",
+      "使用当前实际来源的真实工具验证画面；不创建新页面，不改变业务断言。",
+      {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          tool_name: {
+            type: "string",
+            ...(this.toolCatalog.names().length
+              ? { enum: this.toolCatalog.names() }
+              : {}),
+          },
+          arguments: { type: "object" },
+          arguments_json: { type: "string" },
+          mode: { enum: ["once", "poll"] },
+          auto: {
+            type: "boolean",
+            description:
+              "仅test_current.media.known_adapter=true时使用true。未知来源省略auto，填写真实tool_name、context和frame_context；不能猜测自动增强。",
+          },
+          transport: { enum: ["image", "cdp"] },
+          context: toolExtractSchema,
+          frame_context: toolExtractSchema,
+          source_context: toolExtractSchema,
+          frame_source_context: toolExtractSchema,
+          identity_argument: { type: "string", minLength: 1 },
+          image: toolExtractSchema,
+          unavailable_reason: { type: "string", minLength: 1 },
+        },
+      },
+      async (
+        args: ToolPreviewRecipe & {
+          unavailable_reason?: string;
+          auto?: boolean;
+        },
+        exec,
+      ) => {
+        if (!this.mediaEnabled)
+          throw new Error("实时画面偏好尚未启用，下次测试开启后再尝试");
+        this.requireSettled(exec);
+        if (args.unavailable_reason) {
+          this.media.unavailable(args.unavailable_reason);
+          return this.mediaState();
+        }
+        const known = await this.owner.preview.state(this.run.suite_run_id);
+        if (known.ready && (known.mode !== "once" || known.paused))
+          return { connected: true, ...known };
+        try {
+          if (args.auto) {
+            if (!this.current || this.current.phase === "cleanup")
+              throw new Error("当前不是可尝试画面的业务阶段");
+            const name = this.playwrightMediaTool();
+            if (!name)
+              throw new Error(
+                "当前来源没有已知画面增强，请根据真实工具提交采集方法",
+              );
+            this.media.reserveAttempt();
+            const context = await this.call(
+              name,
+              { code: playwrightPreviewContext },
+              exec,
+              undefined,
+              true,
+            );
+            if (context.result.isError)
+              throw new Error("已知画面增强未取得原页面身份");
+            this.media.bind({
+              callId: context.callId,
+              tool: name,
+              caseId: this.current.instance.case_run_id,
+              result: context.result,
+            });
+            if (
+              this.owner.preview.config?.connectionId ===
+              this.run.manifest.active_tool_source
+            )
+              await this.owner.preview.adoptCdp(
+                this.run,
+                this.current.instance.case_run_id,
+                extractToolResult(context.result, {
+                  from: "playwright-result",
+                  pointer: "/page_id",
+                }),
+                context.callId,
+              );
+            const continuous = await this.owner.preview.state(
+              this.run.suite_run_id,
+            );
+            if (continuous.ready && continuous.mode === "continuous")
+              return { connected: true, ...continuous };
+            return await this.media.connect(
+              {
+                tool_name: name,
+                arguments: { code: playwrightPreviewFrame },
+                mode: args.mode ?? "poll",
+                context: { from: "playwright-result", pointer: "/page_id" },
+                frame_context: {
+                  from: "playwright-result",
+                  pointer: "/page_id",
+                },
+                image: { from: "playwright-result", pointer: "/image" },
+              },
+              async (tool, input) =>
+                (await this.call(tool, input, exec, undefined, true)).result,
+              true,
+            );
+          }
+          if (!args.tool_name || !args.context)
+            throw new Error("需要实际工具和原页面身份提取规则");
+          return await this.media.connect(
+            args,
+            async (name, input) =>
+              (await this.call(name, input, exec, undefined, true)).result,
+          );
+        } catch (error) {
+          this.media.unavailable(
+            error instanceof Error ? error.message : "画面接入失败",
+          );
+          throw error;
+        }
+      },
+    );
+    tool(
+      "test_preview_poll",
+      "宿主内部复用已验证的图片采集方法。",
+      empty,
+      async (_, exec) => {
+        if (!this.previewPolls.has(exec.callId))
+          throw new Error("该入口仅由当前测试的画面采集调度");
+        await this.media.capture(
+          async (name, input) =>
+            (await this.call(name, input, exec, undefined, true)).result,
+        );
+        return this.mediaState();
+      },
+    );
+    tool(
       "test_submit_plan",
       "提交本对话文字测试计划；审核入口只保存草案。从原文提取预期，不能提交实际结果。批量模式每个instance_id恰好规划一次。",
       this.input ? batchTextPlanSchema : textPlanSchema,
@@ -803,7 +1178,9 @@ export class NativeTest {
         description: { type: "string", minLength: 1, maxLength: 2000 },
         tool_name: {
           type: "string",
-          enum: this.toolCatalog.names(),
+          ...(this.toolCatalog.names().length
+            ? { enum: this.toolCatalog.names() }
+            : {}),
           description: "从本轮目录选择完整工具名，保持该工具原有参数。",
         },
         purpose: { enum: ["action", "observe", "cleanup"] },
@@ -973,7 +1350,6 @@ export class NativeTest {
         );
         if (
           ["tool", "browser"].includes(args.capability) &&
-          !this.managedBrowser &&
           this.resourceConfig &&
           !c.instance.resources.tool_context
         ) {
@@ -993,39 +1369,6 @@ export class NativeTest {
             throw error;
           } finally {
             this.resourcePhase = undefined;
-          }
-        }
-        if (
-          args.capability === "browser" &&
-          this.managedBrowser &&
-          !c.instance.resources.browser_context
-        ) {
-          // 直到实际遇到浏览器步骤才初始化；接口步骤不触碰浏览器。
-          if (!this.browser)
-            c.instance.resources.browser_context = {
-              id: this.id,
-              state: "exists",
-            };
-          const after = this.entries.findIndex(
-            (e, n) => n >= this.cursor && e.instance !== c.instance,
-          );
-          this.entries.splice(after < 0 ? this.entries.length : after, 0, {
-            instance: c.instance,
-            phase: "cleanup",
-            step: closeStep("__close", "关闭并确认浏览器上下文释放"),
-          });
-          this.save();
-          const reset = await this.call(
-            this.browser
-              ? this.browser.prefix + "browser_start"
-              : this.closeTool,
-            {},
-            exec,
-          );
-          if (reset.result.isError) {
-            this.finishStep("ERROR", "初始化浏览器上下文失败");
-            this.advance();
-            throw new Error("浏览器初始化失败，已进入收尾");
           }
         }
         this.save();
@@ -1147,7 +1490,7 @@ export class NativeTest {
     );
     tool(
       "test_capture",
-      "执行可信采集。运行时绑定传capture与reason，只能补采尚缺输出；固定计划和清理调用test_capture({})，也接受capture:{}，沿用既有采集定义。",
+      "执行可信采集。capture必须是{输出名:{kind,tool_name,arguments,extract}}字典，不能把kind/tool_name放在capture顶层。运行时还需reason；固定计划和清理调用test_capture({})，沿用既有定义。",
       {
         type: "object",
         properties: {
@@ -1163,6 +1506,10 @@ export class NativeTest {
         let action = c.step.action;
         let captures = action.capture ?? {};
         if (action.capture_mode === "runtime") {
+          if (typeof args.capture?.kind === "string")
+            throw new Error(
+              'capture需要按输出名组织，例如{counter:{kind:"tool",tool_name:"实际读取工具名",arguments:{},extract:{from:"structured",pointer:"/text",type:"number"}}}，并提供reason；不能把kind/tool_name直接放在capture顶层。',
+            );
           if (
             !args.capture ||
             !Object.keys(args.capture).length ||
@@ -1245,7 +1592,7 @@ export class NativeTest {
         this.save();
         try {
           await captureStep(
-            this,
+            this.captureHost(),
             this.recorder,
             this.run,
             { ...c.step, action: { ...action, capture: captures } },
@@ -1285,6 +1632,22 @@ export class NativeTest {
         const c = this.current;
         if (!c) throw new Error("没有当前步骤");
         this.requireSettled(exec);
+        const media = this.media.state();
+        const mediaKey =
+          c.instance.case_run_id + "/" + media.source + "/" + media.generation;
+        if (
+          this.mediaEnabled &&
+          media.context_call_id &&
+          media.mode === "waiting" &&
+          !this.owner.preview.summary(this.run.suite_run_id).ready &&
+          !this.mediaPrompted.has(mediaKey) &&
+          c.phase !== "cleanup"
+        ) {
+          this.mediaPrompted.add(mediaKey);
+          throw new Error(
+            "请先根据当前真实工具尝试test_connect_preview；缺少可核对的画面能力时用unavailable_reason如实记录，再继续结算业务步骤。",
+          );
+        }
         const pending = (c.step.checks ?? []).filter(
           (_, n) =>
             !c.instance.effective_steps.some(
@@ -1503,20 +1866,12 @@ export class NativeTest {
     own(
       scope.on("tools/execute", async (exec, next) => {
         if (exec.agent?.id === this.id) {
+          this.dispatchedCalls.add(exec.callId);
           if (!this.planned && exec.name === "ask_user_question")
             this.planningQuestion = true;
           if (this.review && !this.planned && exec.name === "exit_plan_mode")
             this.reviewCall = exec.callId;
           const call = this.calls.get(exec.callId);
-          if (
-            exec.name === "mcp__playwright__browser_evaluate" &&
-            !this.isTrusted(exec) &&
-            this.current
-          ) {
-            const notes = (this.current.result.actual_operation_notes ??= []);
-            const note = "存在直接页面分析脚本，其内部是否包含操作尚未逐项确认";
-            if (!notes.includes(note)) notes.push(note);
-          }
           if (call)
             this.recorder.event(
               "tool_dispatched",
@@ -1577,6 +1932,12 @@ export class NativeTest {
     );
     own(
       scope.tools.guard((exec) => {
+        if (
+          exec.agent?.id === this.id &&
+          exec.name === "test_preview_poll" &&
+          !this.previewPolls.has(exec.callId)
+        )
+          return "画面轮询仅允许宿主调度";
         if (this.closed || this.reportReady) return;
         if (this.finishing && exec.agent?.id === this.id)
           return "正在等待本批 Node 使用权收尾，暂不派发新工具";
@@ -1600,12 +1961,16 @@ export class NativeTest {
         )
           return "初始化只允许执行本轮已配置的资源创建工具";
         if (
+          this.connectionReady &&
           this.browser &&
           exec.name.startsWith(this.browser.prefix) &&
-          this.current?.step.action?.capability !== "browser"
+          !["browser", "tool"].includes(
+            this.current?.step.action?.capability ?? "",
+          )
         )
           return "当前步骤不是浏览器步骤，不允许远程工具或领取 Node";
         if (
+          this.connectionReady &&
           this.browser &&
           this.current?.step.action?.capture &&
           Object.values(this.current.step.action.capture).every(
@@ -1625,6 +1990,7 @@ export class NativeTest {
         )
           return "初始化阶段只允许test_capture申请并核对本次远程浏览器";
         if (
+          this.connectionReady &&
           this.browser &&
           ["browser_start", "browser_stop", "browser_capture"].some(
             (name) => exec.name === this.browser!.prefix + name,
@@ -1697,28 +2063,8 @@ export class NativeTest {
           !this.isTrusted(exec)
         )
           return "HTTP请求仅由test_capture的受信子调用发送";
-        if (
-          this.planned &&
-          !this.managedBrowser &&
-          businessTool(exec.name) &&
-          !this.isTrusted(exec)
-        )
+        if (this.planned && businessTool(exec.name) && !this.isTrusted(exec))
           return "请通过test_execute_operation附说明，或通过test_capture读取真实结果";
-        if (
-          this.planned &&
-          operationTool(exec.name, exec.arguments) &&
-          exec.name !== "mcp__playwright__browser_evaluate" &&
-          !this.isTrusted(exec)
-        )
-          return "请使用test_execute_operation携带当前动作说明，再转交此浏览器工具；观察与可信采集保持原入口";
-        if (
-          this.planned &&
-          operationTool(exec.name, exec.arguments) &&
-          !["browser", "tool"].includes(
-            this.current?.step.action?.capability ?? "",
-          )
-        )
-          return "当前步骤不允许浏览器业务操作";
         if (
           this.planned &&
           !this.resourcePhase &&
@@ -1858,13 +2204,6 @@ export class NativeTest {
     this.nudges = 0;
     this.run.name = plan.name;
     this.run.plan = plan;
-    this.legacyPlanBrowser =
-      plan.schema_version === "1" &&
-      plan.cases.some((c) =>
-        [...c.preconditions, ...c.steps, ...c.cleanup].some(
-          (s) => s.action?.capability === "browser",
-        ),
-      );
     this.run.instances = expand(plan);
     this.recorder.protect(plan);
     this.recorder.json("plan.json", plan);
@@ -1872,11 +2211,7 @@ export class NativeTest {
       instance.session_id = this.id;
       instance.cleanup_session_id = this.id;
       const c = plan.cases.find((c) => c.case_id === instance.case_id)!;
-      const browser = [...c.preconditions, ...c.steps, ...c.cleanup].some(
-        (s) => s.action?.capability === "browser",
-      );
       const toolResource =
-        !this.managedBrowser &&
         this.resourceConfig &&
         [...c.preconditions, ...c.steps, ...c.cleanup].some((s) =>
           ["browser", "tool"].includes(s.action?.capability ?? ""),
@@ -1887,13 +2222,6 @@ export class NativeTest {
           phase: "setup",
           step: toolResourceStep(this.resourceConfig!),
         });
-      if (browser && this.managedBrowser) {
-        this.entries.push({
-          instance,
-          phase: "setup",
-          step: this.initialStep(),
-        });
-      }
       this.entries.push(
         ...c.preconditions.map((step) => ({
           instance,
@@ -1911,20 +2239,6 @@ export class NativeTest {
           phase: "cleanup" as const,
         })),
       );
-      if (
-        browser &&
-        this.managedBrowser &&
-        !c.cleanup.some((s) =>
-          Object.values(s.action?.capture ?? {}).some(
-            (x) => x.kind === "browser_close",
-          ),
-        )
-      )
-        this.entries.push({
-          instance,
-          phase: "cleanup",
-          step: closeStep("__close", "关闭并确认浏览器上下文释放"),
-        });
       if (toolResource) this.scheduleToolCleanup(instance);
     }
     this.owner.reports.select(this.run, "report.html", false);
@@ -1935,6 +2249,12 @@ export class NativeTest {
     this.current = undefined;
     while (this.cursor < this.entries.length) {
       const e = this.entries[this.cursor++];
+      if (this.selectedInstance !== e.instance.case_run_id) {
+        this.media.nextCase();
+        this.selectedInstance = e.instance.case_run_id;
+        this.selectedTool = undefined;
+      }
+      if (e.phase === "cleanup") this.media.stop();
       e.instance.lifecycle = "RUNNING";
       e.instance.status = "RUNNING";
       const result: StepResult = {
@@ -1959,13 +2279,6 @@ export class NativeTest {
       e.instance.steps.push(result);
       this.current = { ...e, result, binding };
       this.recorder.event("step_started", { step: e.step }, binding);
-      if (
-        !this.cancelled &&
-        e.phase === "setup" &&
-        e.step.step_id === "__reset" &&
-        !this.browser
-      )
-        e.instance.resources.browser_context = { id: this.id, state: "exists" };
       if (
         e.phase === "cleanup" &&
         e.step.run_if === "resource_exists" &&
@@ -2069,13 +2382,13 @@ export class NativeTest {
       run_id: this.run.suite_run_id,
       session_id: this.id,
       ...(this.run.node_lease ? { node_lease: this.publicLease() } : {}),
-      ...(this.browser
+      ...(this.captureBrowser
         ? {
             browser_backend: "runbridge",
-            ...(this.browser.resource?.remote
+            ...(this.captureBrowser.resource?.remote
               ? {
                   remote_browser: Object.fromEntries(
-                    Object.entries(this.browser.resource.remote).filter(
+                    Object.entries(this.captureBrowser.resource.remote).filter(
                       ([key]) => key !== "access_file",
                     ),
                   ),
@@ -2084,6 +2397,7 @@ export class NativeTest {
           }
         : {}),
       ...(!this.planned && this.input ? { planning_input: this.input } : {}),
+      media: this.mediaState(),
       phase: this.reportReady
         ? "finished"
         : this.finishing
@@ -2148,13 +2462,15 @@ export class NativeTest {
           ? "将review_markdown原样传入exit_plan_mode的plan参数，由原生审核等待用户批准；修改时重新test_submit_plan"
           : "理解任务并提交test_submit_plan；信息不足时正常追问"
         : c
-          ? this.releaseStep()
-            ? "当前进入浏览器释放阶段：test_capture({})取得释放证据后test_finish_step；已完成检查保持冻结，随后按test_current进入下一实例或生成报告"
-            : c.phase === "cleanup"
-              ? "只完成当前冻结清理步骤及可信采集，再test_finish_step；已完成业务及检查保持冻结"
-              : c.step.checks !== undefined
-                ? "只执行当前文字步骤：test_define_step确定本步目标，观察操作后test_capture；逐项test_bind_check，最后test_finish_step"
-                : "完成当前动作、test_capture、test_finish_step"
+          ? c.step.step_id === "__resource_open"
+            ? "当前执行已配置的资源初始化：test_capture({})，确认原资源后test_finish_step"
+            : this.releaseStep()
+              ? "当前进入浏览器释放阶段：test_capture({})取得释放证据后test_finish_step；已完成检查保持冻结，随后按test_current进入下一实例或生成报告"
+              : c.phase === "cleanup"
+                ? "只完成当前冻结清理步骤及可信采集，再test_finish_step；已完成业务及检查保持冻结"
+                : c.step.checks !== undefined
+                  ? "只执行当前文字步骤：test_define_step确定本步目标，观察操作后test_capture；逐项test_bind_check，最后test_finish_step"
+                  : "完成当前动作、test_capture、test_finish_step"
           : "调用test_finish生成报告并在回复中给出链接",
     };
   }
@@ -2197,8 +2513,13 @@ export class NativeTest {
       body_started: "unknown",
     };
     this.calls.set(id, call);
-    this.current.result.calls.push(call);
-    this.recorder.event("tool_bound", call, call.binding, "bound:" + id);
+    if (!this.mediaCalls.has(id)) this.current.result.calls.push(call);
+    this.recorder.event(
+      this.mediaCalls.has(id) ? "media_tool_bound" : "tool_bound",
+      call,
+      call.binding,
+      "bound:" + id,
+    );
   }
   private isTrusted(exec: Pick<ToolRunContext, "callId" | "parent">): boolean {
     return !!exec.parent && this.trustedCalls.get(exec.callId) === exec.parent;
@@ -2221,8 +2542,8 @@ export class NativeTest {
     call.finished_at = new Date().toISOString();
     call.isError = toolResultError(result);
     if (
-      !this.managedBrowser &&
       businessTool(call.name) &&
+      this.dispatchedCalls.has(id) &&
       (aborted ||
         (result.isError &&
           ["ABORTED", "TOOL_TIMEOUT"].includes(
@@ -2230,8 +2551,24 @@ export class NativeTest {
           )))
     )
       call.external_outcome = "UNKNOWN";
-    call.result = this.recorder.sanitize(result);
-    this.recorder.event("tool_finished", call, call.binding, "finished:" + id);
+    call.result = this.mediaCalls.has(id)
+      ? {
+          isError: call.isError,
+          response_sha256: createHash("sha256")
+            .update(JSON.stringify(result.value ?? result.content))
+            .digest("hex"),
+        }
+      : this.recorder.sanitize(result);
+    this.recorder.event(
+      this.mediaCalls.has(id) ? "media_tool_finished" : "tool_finished",
+      call,
+      call.binding,
+      "finished:" + id,
+    );
+    if (this.mediaCalls.has(id) && call.external_outcome === "UNKNOWN") {
+      this.owner.quarantine(this.run, "画面工具外部结果未知，需核对原调用");
+      this.stop("画面工具外部结果未知");
+    }
     const operation = this.operations.get(id);
     if (operation && ["REGISTERED", "DISPATCHED"].includes(operation.state)) {
       operation.finished_at = call.finished_at;
@@ -2239,8 +2576,7 @@ export class NativeTest {
       operation.state =
         !operation.dispatch_observed || code === "ABORTED_BEFORE_DISPATCH"
           ? "NOT_DISPATCHED"
-          : code === "ABORTED" ||
-              aborted ||
+          : ((code === "ABORTED" || aborted) && call.name !== "test_api_get") ||
               this.browser?.outcome(id) === "OUTCOME_UNKNOWN"
             ? "UNKNOWN"
             : toolResultError(result)
@@ -2278,10 +2614,65 @@ export class NativeTest {
       ActualOperation,
       "description" | "description_source" | "purpose"
     >,
-  ) {
-    if (this.toolCatalog.has(name)) this.toolCatalog.assert(name);
-    if (!this.managedBrowser && !this.resourceConfig && businessTool(name))
-      this.run.manifest.resource_management = "external";
+    media = false,
+  ): Promise<{ callId: string; result: ToolExecutionResult }> {
+    if (this.toolCatalog.has(name)) this.assertTool(name);
+    if (
+      this.connectionReady &&
+      this.browser &&
+      name === this.browser.prefix + "browser_start"
+    )
+      this.scheduleConnectionCleanup();
+    if (
+      !media &&
+      this.toolCatalog.has(name) &&
+      this.current &&
+      !this.resourcePhase &&
+      this.current.phase !== "cleanup"
+    ) {
+      const nextSource = toolSource(
+        this.toolCatalog.snapshot().find((entry) => entry.name === name)!,
+      );
+      if (this.run.manifest.active_tool_source !== nextSource)
+        this.media.stop();
+      this.owner.preview.invalidateCdpSelection(this.run.suite_run_id);
+      this.selectedTool = name;
+      this.run.manifest.active_tool_source = toolSource(
+        this.toolCatalog.snapshot().find((entry) => entry.name === name)!,
+      );
+      this.save();
+    }
+    if (
+      this.connectionReady &&
+      this.browser &&
+      name.startsWith(this.browser.prefix) &&
+      !["browser_start", "browser_stop"].some(
+        (suffix) => name === this.browser!.prefix + suffix,
+      ) &&
+      this.browser.resource?.state !== "exists" &&
+      this.current
+    ) {
+      if (this.browser.resource?.state === "unknown")
+        throw new Error("原连接资源结果未知，不能新建会话续跑");
+      const started = await this.call(
+        this.browser.prefix + "browser_start",
+        {},
+        parent,
+      );
+      if (toolResultError(started.result)) return started;
+    }
+    if (!media && !this.resourceConfig && businessTool(name)) {
+      const owned =
+        this.connectionReady &&
+        this.browser &&
+        name.startsWith(this.browser.prefix);
+      const next = owned ? "run" : "external";
+      this.run.manifest.resource_management =
+        this.run.manifest.resource_management &&
+        this.run.manifest.resource_management !== next
+          ? "mixed"
+          : next;
+    }
     const resourcePhase =
       this.resourcePhase ??
       (this.current?.step.step_id === "__resource_open"
@@ -2331,6 +2722,7 @@ export class NativeTest {
       this.save();
     }
     const id = ToolCallId(randomUUID());
+    if (media) this.mediaCalls.add(id);
     if (resourcePhase && toolResource?.tool) {
       if (resourcePhase === "close") {
         toolResource.tool.close_call_id = id;
@@ -2434,8 +2826,28 @@ export class NativeTest {
           };
         }
       }
-      if (!this.closed && !this.reportReady && !outcome.isError && this.current)
+      if (
+        !media &&
+        !this.closed &&
+        !this.reportReady &&
+        !outcome.isError &&
+        this.current
+      )
         archiveToolImages(this.recorder, this.run, result);
+      if (
+        !media &&
+        !outcome.isError &&
+        this.current &&
+        this.toolCatalog.has(name) &&
+        this.current.phase !== "cleanup" &&
+        this.mediaEnabled
+      )
+        this.media.bind({
+          callId: id,
+          tool: name,
+          caseId: this.current.instance.case_run_id,
+          result,
+        });
       this.settle(id, outcome, parent.signal.aborted);
       if (this.closed) throw new Error("测试已封存，迟到结果不改变最终事实");
       return { callId: id, result: outcome };
@@ -2591,6 +3003,7 @@ export class NativeTest {
     return (this.finishing ??= this.finalize());
   }
   private async finalize(): Promise<unknown> {
+    this.media.stop();
     if (!this.reportReady) {
       if (this.timer) clearTimeout(this.timer);
       if (this.stoppingTimer) clearTimeout(this.stoppingTimer);
@@ -2605,7 +3018,6 @@ export class NativeTest {
       sealOperations(this.run, "测试已封存，在途操作未获得最终结果");
       for (const i of this.run.instances) {
         if (
-          !this.managedBrowser &&
           i.steps.some(
             (s) =>
               s.calls.some((c) => c.external_outcome === "UNKNOWN") ||
@@ -2705,38 +3117,22 @@ export class NativeTest {
         arguments?: unknown;
         arguments_json?: string;
       };
-      let arguments_: unknown;
       try {
-        arguments_ = nativeOperationArguments(input);
+        nativeOperationArguments(input);
       } catch {
         return false;
       }
       return (
         !!input.tool_name &&
         this.toolCatalog.has(input.tool_name) &&
-        this.cleanupAllowed({ ...exec, name: input.tool_name })
+        ["browser", "tool"].includes(action.capability)
       );
     }
-    if (
-      action.capability === "tool" ||
-      (action.capability === "browser" && !this.managedBrowser)
-    )
-      return this.isTrusted(exec) && this.toolCatalog.has(exec.name);
-    if (action.capability === "browser") {
-      if (
-        Object.values(action.capture ?? {}).every(
-          (c) => c.kind === "browser_close",
-        )
-      )
-        return this.isTrusted(exec) && exec.name === this.closeTool;
+    if (["tool", "browser"].includes(action.capability))
       return (
-        this.toolCatalog.has(exec.name) &&
-        ![
-          "mcp__playwright__browser_run_code",
-          "mcp__playwright__browser_install",
-        ].includes(exec.name)
+        this.isTrusted(exec) &&
+        (this.toolCatalog.has(exec.name) || exec.name === this.closeTool)
       );
-    }
     return action.capability === "api" && exec.name === "test_api_get";
   }
   private releaseStep(step = this.current?.step): boolean {
@@ -2792,41 +3188,56 @@ export class NativeTest {
     this.recorder.snapshot(this.run);
     this.manualSource.save(this.run);
     try {
-      if (this.browser) {
-        this.owner.preview.syncRemote(this.run, this.browser);
+      if (this.captureBrowser?.resource) {
+        this.owner.preview.syncRemote(this.run, this.captureBrowser);
         return;
       }
-      this.owner.preview.sync(this.run, {
-        directory: this.recorder.directory,
-        deadline: () =>
-          Math.min(
-            this.mediaDeadline ??
-              (this.current
-                ? Date.parse(this.current.result.started_at) +
-                  this.owner.config.stepTimeoutMs
-                : Infinity),
-            Date.now() + this.owner.config.cleanupTimeoutMs,
-          ),
-        emit: (event, recording, evidence) => {
-          try {
-            if (this.closed || this.reportReady) return;
-            const records = (this.run.recordings ??= []);
-            const index = records.findIndex(
-              (r) => r.recording_id === recording.recording_id,
-            );
-            if (index < 0) records.push(recording);
-            else records[index] = recording;
-            if (evidence) this.run.evidence.push(evidence);
-            this.recorder.event(event, {
-              recording,
-              ...(evidence ? { evidence } : {}),
-            });
-            this.recorder.snapshot(this.run);
-          } catch (error) {
-            this.owner.ctx.logger.warn("保存录像记录失败：%s", String(error));
-          }
+      this.owner.preview.sync(
+        this.run,
+        {
+          directory: this.recorder.directory,
+          deadline: () =>
+            Math.min(
+              this.mediaDeadline ??
+                (this.current
+                  ? Date.parse(this.current.result.started_at) +
+                    this.owner.config.stepTimeoutMs
+                  : Infinity),
+              Date.now() + this.owner.config.cleanupTimeoutMs,
+            ),
+          emit: (event, recording, evidence) => {
+            try {
+              if (this.closed || this.reportReady) return;
+              const records = (this.run.recordings ??= []);
+              const index = records.findIndex(
+                (r) => r.recording_id === recording.recording_id,
+              );
+              if (index < 0) records.push(recording);
+              else records[index] = recording;
+              if (evidence) this.run.evidence.push(evidence);
+              this.recorder.event(event, {
+                recording,
+                ...(evidence ? { evidence } : {}),
+              });
+              this.recorder.snapshot(this.run);
+            } catch (error) {
+              this.owner.ctx.logger.warn("保存录像记录失败：%s", String(error));
+            }
+          },
         },
-      });
+        this.current &&
+          this.selectedTool &&
+          this.owner.preview.config?.connectionId &&
+          this.owner.preview.config?.connectionId ===
+            this.run.manifest.active_tool_source
+          ? {
+              run_id: this.run.suite_run_id,
+              case_run_id: this.current.instance.case_run_id,
+              connection_id: this.owner.preview.config.connectionId,
+              connection_digest: this.owner.preview.config.connectionDigest,
+            }
+          : false,
+      );
     } catch (error) {
       this.owner.ctx.logger.warn("更新浏览器预览归属失败：%s", String(error));
     }
@@ -2857,6 +3268,7 @@ export class NativeTest {
   dispose(): Promise<void> {
     if (this.disposal) return this.disposal;
     this.closed = true;
+    this.media.stop();
     if (this.timer) clearTimeout(this.timer);
     if (this.stoppingTimer) clearTimeout(this.stoppingTimer);
     for (const dispose of this.disposers.splice(0).reverse()) dispose();

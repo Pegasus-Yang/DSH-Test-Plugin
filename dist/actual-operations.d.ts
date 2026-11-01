@@ -2,7 +2,7 @@
 import type { ActualOperation, AssertionResult, CaseRun, Json, Phase, StepResult, SuiteRun } from "./contracts.js";
 export declare const operationSchemaVersion = "2";
 export declare const runbridgeOperationNames: string[];
-/** 模型在同一份支持名单中选择完整名称，避免省略MCP前缀反复失败。 */
+/** 旧记录的粒度识别及测试夹具兼容名单，不限制当前可调用的工具。 */
 export declare const operationToolNames: string[];
 export declare function operationTool(name: string, args?: unknown): boolean;
 export declare function compositeOperation(name: string, args: unknown): boolean;

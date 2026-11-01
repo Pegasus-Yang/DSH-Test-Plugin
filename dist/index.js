@@ -3,6 +3,8 @@ import { extname, relative, resolve, sep } from "node:path";
 import { fileArgument, loadDataInput, loadTextInput } from "./case-input.js";
 import { NativeTests } from "./native-test.js";
 import { PreviewSetup } from "./preview-setup.js";
+import { effectivePreviewPreferences } from "./preview-preferences.js";
+import { businessTool } from "./tool-runtime.js";
 import { PreviewSettingsAccess } from "./preview-settings-access.js";
 import { reportPrefix } from "./report-access.js";
 import { ProgressAccess, progressPrefix } from "./progress-access.js";
@@ -13,15 +15,18 @@ export const name = "harness-test";
 export const inject = ["commands", "tools", "systemPrompt"];
 export function apply(ctx, config = {}) {
     const { browserPreview, browserConnection, ...runtimeConfig } = config;
-    const setup = new PreviewSetup(ctx, () => browserPreview?.get(), runtimeConfig);
+    const setup = new PreviewSetup(ctx, () => effectivePreviewPreferences(browserConnection?.get() ?? runtimeConfig.browser, browserPreview?.get()), runtimeConfig);
     const tests = new NativeTests(ctx, runtimeConfig, async () => {
-        tests.config.browser = browserConnection?.get() ?? runtimeConfig.browser;
-        if (tests.config.browser?.backend === "runbridge") {
-            await tests.preview.configure(undefined);
-            return;
-        }
+        const savedBrowser = browserConnection?.get() ?? runtimeConfig.browser;
+        tests.config.browser = savedBrowser
+            ? {
+                ...savedBrowser,
+                previewEnabled: effectivePreviewPreferences(savedBrowser, browserPreview?.get())
+                    ?.enabled ?? savedBrowser.previewEnabled,
+            }
+            : undefined;
         try {
-            await tests.preview.configure(await setup.prepare(tests.config.browser));
+            await tests.preview.configure(await setup.prepare());
         }
         catch (error) {
             await tests.preview.configure(undefined);
@@ -34,18 +39,36 @@ export function apply(ctx, config = {}) {
     const progress = new ProgressAccess((sessionId) => tests.presentation(sessionId), tests.preview);
     ctx.provide("nativeTests", tests);
     ctx.inject(["webServer", "connection", "agents"], (web) => {
-        const previewSettings = new PreviewSettingsAccess(() => {
-            const active = [...tests.sessions.values()].find((test) => !test.closed);
+        const previewSettings = new PreviewSettingsAccess((sessionId) => {
+            const active = sessionId ? tests.sessions.get(sessionId) : undefined;
+            const agent = sessionId
+                ? web.agents.get(sessionId)
+                : undefined;
+            const schemas = ctx.tools.schemas(agent);
+            const description = setup.describe();
             return {
-                ...setup.describe(),
+                ...description,
+                nativeTools: schemas
+                    .filter((tool) => !tool.name.startsWith("mcp__") && businessTool(tool.name))
+                    .map((tool) => tool.name),
+                agentVisible: !!agent,
+                mcpInstances: description.mcpInstances.map((source) => {
+                    const entry = ctx
+                        .get("configEditor")
+                        ?.entries()
+                        .find((entry) => entry.options.id === source.id);
+                    const name = entry?.options.config?.serverName;
+                    const tools = schemas
+                        .filter((tool) => name && tool.name.startsWith(`mcp__${name}__`))
+                        .map((tool) => tool.name);
+                    return {
+                        ...source,
+                        tools,
+                        ...(agent ? { visible: tools.length > 0 } : {}),
+                    };
+                }),
                 browserConnection: browserConnection?.get() ?? runtimeConfig.browser,
-                activeBrowser: active
-                    ? active.browser
-                        ? "runbridge"
-                        : active.managedBrowser
-                            ? "playwright"
-                            : (tests.config.browser?.backend ?? "auto")
-                    : undefined,
+                activeMedia: active && !active.closed ? active.mediaState() : undefined,
             };
         }, tests.config.workspace);
         web.effect(() => () => previewSettings.dispose());

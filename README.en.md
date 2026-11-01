@@ -43,7 +43,7 @@ See the [visual tour](doc/user-guide/使用说明.en.md#visual-tour) for more pl
 ### 1. Prepare DSH and testing tools
 
 - Node.js **22.19+**, and DeepSeek Harness **0.2.1-alpha.1–alpha.5 and rc.1–rc.5** with a working model configured.
-- DSH **native tool mode** with the business tools required by your case. Custom Selenium MCP services can use their original names and schemas; managed Playwright and RunBridge connections remain available.
+- DSH **native tool mode** with the business tools required by your case. Custom Selenium MCP services can use their original names and schemas; Playwright, RunBridge and other tools share one execution flow; connection helpers, resource management and media are separate.
 - API-only tests need no browser. Source development requires pnpm **11.7.0**.
 
 Follow DSH's own instructions to install the host. See [plugin and browser configuration](doc/deployment/安装与运维.en.md#configure-the-installed-plugin).
@@ -55,20 +55,20 @@ For remote or VM browsers, use **RunBridge Hub 0.9.1 / Node 0.8.1**. See the [re
 For local review, install the same tgz supplied by the maintainer:
 
 ```sh
-dsh plugin --profile web add /absolute/path/dsh-test-plugin-0.18.0.tgz
+dsh plugin --profile web add /absolute/path/dsh-test-plugin-0.19.0-alpha.1.tgz
 dsh web
 ```
 
 After completed acceptance, review, and a manual push, enter this repository address in DSH's plugin manager, then enable the plugin:
 
 ```text
-https://github.com/Pegasus-Yang/DSH-Test-Plugin.git#v0.18.0
+https://github.com/Pegasus-Yang/DSH-Test-Plugin.git#v0.19.0-alpha.1
 ```
 
 Alternatively, install with the standalone DSH CLI:
 
 ```sh
-dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.18.0
+dsh plugin --profile web add github:Pegasus-Yang/DSH-Test-Plugin#v0.19.0-alpha.1
 dsh web
 ```
 
@@ -76,7 +76,7 @@ Stop a running DSH normally before CLI installation. Use the same profile and `D
 
 See [installation and deployment](doc/deployment/安装与运维.en.md) for upgrades, uninstalling, and local packages.
 
-All 10 hosts use the same package without version exemptions. The build SDK remains alpha.3; ordinary plugin upgrades retain the supported hosts. See the [validation status (Chinese)](doc/project/0.18.0版本发布验收.md) and [dsh-compatibility.json](dsh-compatibility.json) for the exact support set.
+All 10 hosts use the same package without version exemptions. The build SDK remains alpha.3; ordinary plugin upgrades retain the supported hosts. See the [validation status (Chinese)](doc/project/0.19.0-alpha.1版本发布验收.md) and [dsh-compatibility.json](dsh-compatibility.json) for the exact support set.
 
 ### 3. Run your first test in a conversation
 
@@ -92,9 +92,9 @@ The plugin presents a plan, executes steps with progress updates, and returns th
 
 ### 4. Optionally enable preview and recording
 
-Install the local Browscreen command. In **Settings → 测试插件 → 浏览器预览与录像**, enable preview or recording as needed, check the installation, select the dedicated Playwright MCP, and save. Continue using the normal test commands; the plugin starts capture when needed.
+Enable the required capability under **Settings → 测试插件 → 实时画面** and save. Media follows the actual test page: known adapters help, and the current Agent tries other tools. Continuous feeds, periodic screenshots and single images are distinguished. CDP recording additionally requires Browscreen and explicit preparation of a dedicated test connection.
 
-Preview appears only after the current browser has a usable CDP connection and a valid first frame. Recording has an independent toggle and is off by default; hiding the preview does not stop enabled recording. API instances display no browser frames or video sections.
+Preview appears only after the original page identity and a valid first frame are verified. Recording has an independent toggle and is off by default; hiding the preview does not stop enabled recording. API instances display no browser frames or video sections.
 
 See [preview setup (Chinese)](doc/user-guide/浏览器实时预览一步一步配置.md) and [recording and reports (Chinese)](doc/user-guide/浏览器录像与报告.md) for installation requirements and instructions.
 
@@ -118,7 +118,7 @@ For a fuller workflow, try the [GitLab examples (Chinese)](examples/gitlab/READM
 - Generic execution uses business tools already registered with the current DSH Agent, including custom Selenium MCP services, under their original names and schemas. Structured or textual results feed deterministic assertions. Screenshots, preview, recording, and resource cleanup depend on the connection capabilities; explicitly required checks or cleanup must still succeed. See [generic tool execution (Chinese)](doc/user-guide/通用工具运行.md).
 
 - Runs in DSH native tool mode with a shared, serial test environment. Independent browsers for concurrent conversations are a [future improvement (Chinese)](doc/design/多对话并行测试优化方案.md).
-- API collection supports **GET JSON**. Automatic preview uses a local Chromium Playwright MCP and currently supports one active page.
+- API collection supports **GET JSON**. Media requires the actual source and page identity. Screenshot support does not imply recording; unverified sources are not displayed.
 - Natural-language and file cases both use the current conversation's model. Report rebuilding reads saved records without rerunning cases.
 - Results preserve failures, cancellation, and cleanup status. Missing evidence, tool errors, or required cleanup failures do not count as passes. Report UI and some messages are primarily Chinese.
 

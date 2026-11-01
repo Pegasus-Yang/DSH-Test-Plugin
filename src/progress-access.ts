@@ -47,7 +47,8 @@ export class ProgressAccess {
       return;
     }
     if (type === "preview") {
-      if (!(await this.preview.state(runId)).ready) {
+      const preview = await this.preview.state(runId);
+      if (!preview.ready) {
         res.writeHead(503);
         res.end();
         return;
@@ -56,7 +57,10 @@ export class ProgressAccess {
       res.end(
         req.method === "HEAD"
           ? undefined
-          : previewPage(`${progressPrefix}/${sessionId}/${runId}/screenshot`),
+          : previewPage(
+              `${progressPrefix}/${sessionId}/${runId}/screenshot`,
+              preview.mode,
+            ),
       );
       return;
     }
@@ -66,8 +70,12 @@ export class ProgressAccess {
       res.end();
       return;
     }
-    res.setHeader("Content-Type", "image/png");
+    res.setHeader("Content-Type", frame.mime ?? "image/png");
     res.setHeader("X-Frame-Id", frame.id);
+    res.setHeader(
+      "X-Preview-Mode",
+      this.preview.summary(runId).mode ?? "continuous",
+    );
     res.setHeader("X-Capture-Started-At", frame.capturedAt);
     res.end(req.method === "HEAD" ? undefined : frame.bytes);
   }

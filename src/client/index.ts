@@ -98,6 +98,11 @@ export function apply(ctx: Context): void {
           label: () => "测试插件",
           inject: () => ({
             forms: settings.configForms,
+            currentSession,
+            tryPreview: () =>
+              post<string>("preview", { session_id: currentSession() }),
+            stopPreview: () =>
+              post<string>("preview-stop", { session_id: currentSession() }),
             ...recovery,
             rebuildReport: (runId?: string) =>
               post<ReportResult>("report", {

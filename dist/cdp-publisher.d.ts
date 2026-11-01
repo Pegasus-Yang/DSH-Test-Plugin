@@ -3,8 +3,11 @@ import type { Page } from "playwright";
 export interface PreviewOwner {
     run_id: string;
     case_run_id: string;
+    connection_id?: string;
+    connection_digest?: string;
 }
 export interface PublishedCdp extends PreviewOwner {
+    verified_by?: string;
     target_id: string;
     endpoint: string;
     browser_endpoint: string;

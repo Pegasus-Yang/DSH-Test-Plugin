@@ -263,7 +263,7 @@ it.each([
   },
 );
 
-it("不存在或不支持的 MCP 不会被修改，错误原因可展示", async () => {
+it("未知 MCP 保留通用画面尝试，不修改连接，也不要求 Playwright 存在", async () => {
   const root = folder();
   const initializer = join(root, "cdp-publisher.cjs");
   writeFileSync(initializer, "");
@@ -279,7 +279,8 @@ it("不存在或不支持的 MCP 不会被修改，错误原因可展示", async
     { outputRoot: root },
     initializer,
   );
-  await expect(setup.prepare()).rejects.toThrow("请选择本机 stdio");
+  expect(await setup.prepare()).toMatchObject({ previewEnabled: true });
+  expect(setup.describe().message).toContain("Agent");
   setup.failed(new Error("没有找到所选浏览器"));
   expect(setup.describe().message).toContain("没有找到所选浏览器");
   expect(edit).not.toHaveBeenCalled();
@@ -422,4 +423,37 @@ it("非 Chromium 的 JSON 浏览器配置不会被补充 Chromium 参数或生�
     ),
   ).toThrow("需要 Chromium");
   expect(existsSync(output)).toBe(false);
+});
+
+it("默认画面偏好不重启唯一或更名的 Playwright MCP，已知适配只作为媒体候选", async () => {
+  const root = folder();
+  const entry: any = {
+    options: {
+      id: "renamed",
+      name: "@deepseek-ai/dsh-mcp-client",
+      config: {
+        serverName: "custom",
+        transport: "stdio",
+        command: "npx",
+        args: ["@playwright/mcp@0.0.68"],
+      },
+    },
+  };
+  const { ctx, edit } = runtime([entry]);
+  const setup = new PreviewSetup(
+    ctx,
+    () => ({
+      enabled: true,
+      browscreenExecutable: "browscreen",
+      port: 13390,
+      mcpId: "",
+    }),
+    { outputRoot: root },
+  );
+  const config = await setup.prepare();
+  expect(config?.previewEnabled).toBe(true);
+  expect(config?.connectionId).toBeUndefined();
+  expect(entry.fiber.restart).not.toHaveBeenCalled();
+  expect(edit).not.toHaveBeenCalled();
+  expect(setup.describe().mcpInstances[0].compatible).toBe(true);
 });

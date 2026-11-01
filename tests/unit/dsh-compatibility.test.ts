@@ -14,6 +14,7 @@ import {
   assertSupportedHost,
   checkCompatibility,
   validatePolicy,
+  verificationHosts,
 } from "../../scripts/dsh-compatibility.mjs";
 
 const read = (file: string) =>
@@ -28,6 +29,35 @@ afterEach(() =>
 );
 
 describe("DSH 多版本发行合同", () => {
+  it("验证仅选择语义最旧与最新版本，不改变中间版本支持声明", () => {
+    const before = structuredClone(policy);
+    expect(verificationHosts(policy)).toEqual(["0.2.1-alpha.1", "0.2.1-rc.5"]);
+    expect(policy).toEqual(before);
+    expect(
+      verificationHosts({
+        buildSdk: "0.2.1-alpha.2",
+        supportedHosts: [
+          "0.2.1",
+          "0.2.1-rc.10",
+          "0.2.1-alpha.10",
+          "0.2.1-alpha.2",
+          "0.2.1-rc.2",
+        ],
+      }),
+    ).toEqual(["0.2.1-alpha.2", "0.2.1"]);
+    expect(
+      verificationHosts({ buildSdk: "0.2.1", supportedHosts: ["0.2.1"] }),
+    ).toEqual(["0.2.1"]);
+    const result = spawnSync(
+      process.execPath,
+      ["scripts/dsh-compatibility.mjs", "matrix"],
+      { encoding: "utf8" },
+    );
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual({
+      host: ["0.2.1-alpha.1", "0.2.1-rc.5"],
+    });
+  });
   it("支持集合内的宿主使用同一份包声明", () => {
     expect(checkCompatibility(manifest(), policy).peers).toBe(22);
     for (const host of policy.supportedHosts)

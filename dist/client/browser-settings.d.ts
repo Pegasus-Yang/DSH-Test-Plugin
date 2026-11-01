@@ -6,8 +6,11 @@ export interface BrowserSettingsFields {
     browserConnection?: BrowserPreferences;
     browserPreview?: PreviewPreferences;
 }
-export declare function BrowserSettings({ form, info, refresh, }: {
+export declare function BrowserSettings({ form, info, refresh, view, tryPreview, stopPreview, }: {
     form: ConfigForm<BrowserSettingsFields>;
     info: PreviewSettingsInfo;
     refresh: () => Promise<void>;
+    view?: "connections" | "media";
+    tryPreview?: () => Promise<string>;
+    stopPreview?: () => Promise<string>;
 }): import("react/jsx-runtime").JSX.Element;

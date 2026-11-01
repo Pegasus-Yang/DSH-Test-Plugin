@@ -19,7 +19,9 @@ export function RecoveryPanel({
   readRecovery,
   recover,
   releaseEvidence,
-}: RecoveryActions) {
+  compact,
+  onOpen,
+}: RecoveryActions & { compact?: boolean; onOpen?: () => void }) {
   const [state, setState] = useState<RecoverySnapshot>();
   const [failed, setFailed] = useState(false);
   const [confirmation, setConfirmation] = useState<string>();
@@ -116,6 +118,24 @@ export function RecoveryPanel({
       setPending(false);
     }
   };
+  if (compact)
+    return quarantine || failed ? (
+      <section
+        className="dsh-test-recovery dsh-test-command-check"
+        data-state="blocked"
+        role="alert"
+      >
+        <strong>{failed ? "环境状态读取失败" : "有待处理的测试资源"}</strong>
+        <p>{quarantine?.reason ?? "请检查宿主连接"}</p>
+        <button
+          type="button"
+          className="dsh-test-inline-action"
+          onClick={onOpen}
+        >
+          查看并处理
+        </button>
+      </section>
+    ) : null;
   return (
     <section
       className="dsh-test-recovery"

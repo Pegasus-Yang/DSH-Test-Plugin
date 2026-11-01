@@ -1,10 +1,13 @@
 import type { ToolRunContext, ToolExecutionResult } from "@deepseek-ai/dsh-tools";
 import { type Binding, type Json, type Step, type StepResult, type SuiteRun, type ActualOperation } from "./contracts.js";
 import { Recorder } from "./recorder.js";
+import type { LegacyBrowserTools, DomToolBinding } from "./tool-capabilities.js";
 import { RunBridge } from "./runbridge.js";
 interface CaptureHost {
     id: string;
     browser?: RunBridge;
+    legacyTools?: LegacyBrowserTools;
+    domBindings?: Record<string, DomToolBinding>;
     assertTool?(name: string): void;
     call(name: string, args: unknown, parent: ToolRunContext, explanation?: Pick<ActualOperation, "description" | "description_source">): Promise<{
         callId: string;

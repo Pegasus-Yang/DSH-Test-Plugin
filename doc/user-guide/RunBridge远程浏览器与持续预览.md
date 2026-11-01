@@ -6,7 +6,7 @@
 
 ## 准备服务与私有文件
 
-需要插件 **0.15.0 及以上**（当前版本为 **0.17.0**）、公开 DSH **0.2.1-alpha.1～alpha.5、rc.1～rc.5**、Node.js **22.19+**，配套 RunBridge **Hub 0.9.1／Node 0.8.1**。租约接口从 Hub 0.9.0／Node 0.8.0 引入，具体实测版本见本轮验收。Hub 开启 MCP、配置独立 hub_token_file 与 public_url；Node 完成登记并提供 READY 的受管理 Chromium。服务安装、启动及迁移按两端自己的当前指南进行，浏览器操作及 PNG 采集由 Node 的 Python Playwright 执行。
+需要插件 **0.15.0 及以上**（当前尝试版为 **0.19.0-alpha.1**）、公开 DSH **0.2.1-alpha.1～alpha.5、rc.1～rc.5**、Node.js **22.19+**，配套 RunBridge **Hub 0.9.1／Node 0.8.1**。租约接口从 Hub 0.9.0／Node 0.8.0 引入，具体实测版本见本轮验收。Hub 开启 MCP、配置独立 hub_token_file 与 public_url；Node 完成登记并提供 READY 的受管理 Chromium。服务安装、启动及迁移按两端自己的当前指南进行，浏览器操作及 PNG 采集由 Node 的 Python Playwright 执行。
 
 两类文件都放在 **运行 DSH 的机器** 的私有目录，建议权限 600。支持 JSON 与带注释 YAML，默认模板为 YAML，按内容解析，不依赖后缀；最多 32 KiB，只允许单一配置对象，不使用重复字段或多文档。字段用字符串并保留引号，不把令牌发给模型、写进用例或提交 Git。enrollment.token 只用于 Node 登记，node_token 只用于设备身份，均不能代替下列凭据。
 
@@ -39,13 +39,13 @@ expires_at: "2030-01-01T01:00:00Z"
 
 ## 保存连接并运行
 
-1. 打开 **设置 → 测试插件 → 浏览器设置**，位置选 **远程 RunBridge MCP**，选择明确的连接来源。
+1. 打开 **设置 → 测试插件 → 工具接入 → RunBridge 配置连接**，勾选“登记此连接供 Agent 使用”，选择明确的连接来源。
 2. 自动模式填写 **Hub 认证文件**完整路径和 **目标 Node ID**；现成模式填写 **访问文件**完整路径。两类文件分别校验，不通过字段缺失猜另一种来源。展开 **查看文件格式与空白模板**，复制或下载对应 YAML 模板；模板不签发租约。
 3. **读取配置**只在宿主解析文件并显示无令牌摘要。**检测连接**在自动模式只查询资源与同源工具目录，显示“Hub 目录已验证 · 尚未领取”；现成模式查询原租约、完成 MCP 握手和只读节点核对。两种检测都不创建浏览器、不领取、不刷新空闲期限。
 4. 填受管理资源 ID，通常 chromium。自动模式的 **整批 Node 租期**可留空，由 Hub 默认取 min(3600 秒, 当前上限)；显式值须为正整数且不超过 Hub 配置上限。上限默认一天，空闲默认十分钟，均由 Hub 配置，插件不硬编码上限。
 5. **每条用例的会话租期**为 1～3600 秒，默认 1800 秒。它与整批 Node 租期、单个工具超时分别计算，续 Node 租约不会延长已经创建的浏览器会话。
-6. 按需勾选 **显示实时画面**并点击 **保存浏览器设置**。有效文件可离线保存，保存不会领取或检测网络；当前测试保持原连接，下次运行生效。远程执行无需另行注册通用 RunBridge MCP 或安装本机 Browscreen。
-7. 在正确对话工作区执行 /test-run cases.md 或 /test-data data.csv --file cases.md。规划／审核只读取工具目录，不占 Node；批准并进入首个浏览器初始化后领取，实际 MCP tools/list 与目录不一致时在业务前停止。纯接口测试不领取 Node。
+6. 点击 **保存连接**；需要画面时切换“实时画面”启用并另行 **保存画面偏好**。有效文件可离线保存，保存不会领取或检测网络；当前测试保持原连接，下次运行生效。远程执行无需另行注册通用 RunBridge MCP 或安装本机 Browscreen。
+7. 在正确对话工作区执行 /test-run cases.md 或 /test-data data.csv --file cases.md。规划／审核只读取工具目录，不占 Node；批准后首次实际使用 RunBridge 时领取，实际 MCP tools/list 与目录不一致时在业务前停止。纯接口测试不领取 Node。
 
 一批 TXT／Markdown／CSV 多实例共用原 Node 租约，逐用例分别创建、关闭浏览器；浏览器关闭后仍持有 Node。整批完成、取消或失败时等待原操作结算，再归还 Node，确认 RELEASED 且 cleanup=COMPLETE 后封存报告。领取响应丢失时不重复领取或换新令牌续跑；没有取得原令牌的未知申请需 Hub 维护者核查。
 
@@ -59,12 +59,13 @@ expires_at: "2030-01-01T01:00:00Z"
 
 ```yaml
 browserConnection:
-  backend: runbridge
+  backend: auto
+  runbridgeEnabled: true
   connectionSource: hub
   hubFile: "/private/runbridge-hub.yaml"
   nodeId: "node_example"
   # nodeLeaseSeconds: 3600  # 可省略，交给 Hub 默认策略。
-  accessFile: ""           # 保留另一来源偏好，不在自动模式读取。
+  accessFile: "" # 保留另一来源偏好，不在自动模式读取。
   resourceId: "chromium"
   leaseSeconds: 1800
   previewEnabled: true
