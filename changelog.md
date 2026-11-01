@@ -4,6 +4,8 @@
 
 ## 未发布
 
+- 新增[工具接入与实时画面统一方案](doc/design/工具接入与实时画面统一方案.md)，记录当前设置问题、工具平等执行、Agent 画面发现、菜单整理及验收计划；方案待审核，本条不代表运行功能已实施。
+
 ## [0.18.0](https://github.com/Pegasus-Yang/DSH-Test-Plugin/tree/v0.18.0) — 2026-10-31
 
 - 默认根据当前 DSH Agent 的业务工具目录执行，不再限定 Playwright MCP 或 RunBridge；自定义 Selenium 等服务保持原有工具名称、参数及返回格式，新增主要 MCP 选择。
