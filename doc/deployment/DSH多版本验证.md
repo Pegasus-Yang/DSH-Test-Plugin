@@ -8,7 +8,9 @@
 
 ## 维护支持集合
 
-`dsh-compatibility.json` 保存 `buildSdk` 与 `supportedHosts`。全部 22 个 DSH peer 使用精确版本的联合范围，optional 属性保留；CI 从同一策略输出矩阵。不能以升级开发 SDK 为理由自动删掉旧宿主。
+`dsh-compatibility.json` 保存 `buildSdk` 与 `supportedHosts`，支持列表按版本从旧到新排列。全部 22 个 DSH peer 使用完整精确版本的联合范围，optional 属性保留；CI 从同一列表取首尾生成测试矩阵。不能以升级开发 SDK 或减少测试为理由删掉中间宿主的兼容声明。
+
+每次测试最多覆盖支持列表中**最旧与最新两个版本**，当前为 `0.2.1-alpha.1` 与 `0.2.1-rc.5`；只有一个支持版本时只运行一次。本地、CI、受控真实模型和正式交付都使用这一范围，不逐版遍历中间版本。构建 SDK 仍固定 alpha.3，不因此增加第三个运行宿主。历史验收记录保留当时范围，新的首尾验证不能表述为本轮全部 10 版逐版通过。
 
 ```sh
 pnpm compat:check
@@ -37,11 +39,11 @@ Action 自身的 JavaScript 运行时与项目脚本的 Node.js 版本分别维�
 
 ## 确定性宿主矩阵
 
-`.github/workflows/ci.yml` 在干净公开依赖下完成冻结安装、类型、回归、重建 `dist` 一致性及真实入口导入，只打包一次。宿主作业从策略自动生成当前 10 版矩阵，下载同一候选文件及 SHA-256；最终汇总门禁要求构建和全部宿主成功。
+`.github/workflows/ci.yml` 在干净公开依赖下完成冻结安装、类型、回归、重建 `dist` 一致性及真实入口导入，只打包一次。宿主作业通过 `node scripts/dsh-compatibility.mjs matrix` 自动生成最旧、最新两版矩阵，下载同一候选文件及 SHA-256；最终汇总门禁要求构建和两个所选宿主成功。
 
 版本标签的 `push` 在汇总门禁通过后执行 `release` 作业：重新核对候选包摘要、标签名、源码与包内版本，再将原候选包以带版本号的文件名上传 GitHub Release，同时附校验文件。发布作业不重新构建或打包；分支和 PR 不进入发布。规则与失败处理见[版本发布与Git标签](版本发布与Git标签.md#版本标签自动发布)。
 
-本机复用同一驱动。准备官方源码仓库及支持集合内各版对应的 `dsh-v<宿主版本>` 标签；驱动只用 `git show` 读取发布清单，不构建或链接宿主源码。先安装验证脚本与 MCP 各自匹配的 Chromium：
+本机复用同一驱动和矩阵选择器。准备官方源码仓库及最旧、最新宿主对应的 `dsh-v<宿主版本>` 标签；驱动只用 `git show` 读取发布清单，不构建或链接宿主源码。先安装验证脚本与 MCP 各自匹配的 Chromium：
 
 ```sh
 pnpm install --frozen-lockfile
@@ -50,7 +52,7 @@ node --test tests/browser/compat-browser.test.mjs
 pnpm build
 pnpm pack --out artifacts/package/dsh-test-plugin.tgz
 export DSH_CANDIDATE_SHA256=$(shasum -a 256 artifacts/package/dsh-test-plugin.tgz | cut -d ' ' -f 1)
-for host in $(node -p "require('./dsh-compatibility.json').supportedHosts.join(' ')"); do
+for host in $(node scripts/dsh-compatibility.mjs matrix | node -p "JSON.parse(require('node:fs').readFileSync(0, 'utf8')).host.join(' ')"); do
   pnpm compat:host "$host" artifacts/package/dsh-test-plugin.tgz /绝对路径/deepseek-harness "/绝对路径/新目录/$host" || exit 1
 done
 ```
@@ -70,12 +72,12 @@ done
 
 ## 受控真实模型与 GitLab
 
-扩展支持集合和正式交付前，给全部支持宿主的同一命令提供本机配置。模型 patch 只读取 `llm-pi-ai`、`agent-default-model`；凭据文件按需复制到独立 home，也可由提供方的 `apiKeyEnv` 从进程环境读取，均不进入包和 Git：
+扩展支持集合和正式交付前，给上述最旧、最新宿主的同一命令提供本机配置。模型 patch 只读取 `llm-pi-ai`、`agent-default-model`；凭据文件按需复制到独立 home，也可由提供方的 `apiKeyEnv` 从进程环境读取，均不进入包和 Git：
 
 ```sh
 export DSH_MODEL_PATCH=/绝对路径/不提交的模型配置.yml
 export DSH_MODEL_CREDENTIALS=/绝对路径/不提交的.credentials.yaml
-# 使用上面的同一 tgz 和摘要，各版输出到独立的新目录。
+# 使用上面的同一 tgz 和摘要，所选两版输出到独立的新目录。
 ```
 
 使用环境变量凭据时不设置 `DSH_MODEL_CREDENTIALS`，必须先设置 patch 中各提供方引用的 `apiKeyEnv`。例如 OpenAI 兼容服务可在不提交的 patch 中设置 `api: openai-completions`、`apiKeyEnv: OPENCODE_API_KEY`，由本机脚本读取 `OPENCODE_API_HOST` 生成实际 `baseURL`，模型 ID 使用服务端接受的精确值。不要把密钥写入 patch；先用低输出的流式工具调用探针确认路径和模型可用。缺少两类凭据来源时驱动失败。

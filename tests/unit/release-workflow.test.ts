@@ -108,7 +108,7 @@ process.exit(Number(process.env.GH_TEST_EXIT ?? "0"));
   };
 }
 
-it("只有版本 tag 的 push 在构建和全部支持宿主通过后获得发布权限", () => {
+it("只有版本 tag 的 push 在构建和最旧与最新宿主通过后获得发布权限", () => {
   expect(workflow.on).toHaveProperty("push");
   expect(workflow.jobs.compatibility.needs).toEqual(["plugin", "host"]);
   expect(release.needs).toBe("compatibility");

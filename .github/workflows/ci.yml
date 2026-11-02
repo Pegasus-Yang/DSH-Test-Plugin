@@ -21,7 +21,7 @@ jobs:
       - name: 从公开依赖安装
         run: pnpm install --frozen-lockfile
       - id: matrix
-        name: 核对单一兼容策略并输出矩阵
+        name: 核对兼容策略并输出最旧与最新宿主矩阵
         run: echo "value=$(node scripts/dsh-compatibility.mjs matrix)" >> "$GITHUB_OUTPUT"
       - name: 检查 Git 安装入口、SDK 导入及源码与产物一致性
         run: |
@@ -108,7 +108,7 @@ jobs:
             ${{ runner.temp }}/host-check/profile-locks/**
 
   compatibility:
-    name: 全部支持宿主通过
+    name: 最旧与最新支持宿主通过
     needs: [plugin, host]
     if: always()
     runs-on: ubuntu-24.04

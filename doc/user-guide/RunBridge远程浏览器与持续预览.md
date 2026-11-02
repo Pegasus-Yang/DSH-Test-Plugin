@@ -4,6 +4,8 @@
 
 浏览器可在另一台机器或虚拟机运行。插件通过 Hub 在当前 DSH Agent 上执行，持续画面来自同一页面；TXT、Markdown、CSV、审核、实际步骤和报告入口继续使用。整个 Node 使用权由一份有限租约独占，浏览器资源 FREE 和 Node 未领取分别判断。
 
+这是插件支持的 **RunBridge MCP** 连接；另一种是本机 **Playwright MCP**。其他 MCP 或浏览器工具不在当前支持范围内，纯接口 GET JSON 不需要浏览器连接。首次安装依次完成 [Hub 快速开始](https://github.com/Pegasus-Yang/Run-Bridge-Hub#快速开始)、[Node 快速开始](https://github.com/Pegasus-Yang/Run-Bridge-Node#快速开始)和[插件安装](../deployment/安装与运维.md#从-github-安装与卸载)，再按本文保存连接并运行。
+
 ## 准备服务与私有文件
 
 需要插件 **0.15.0 及以上**（当前版本为 **0.17.0**）、公开 DSH **0.2.1-alpha.1～alpha.5、rc.1～rc.5**、Node.js **22.19+**，配套 RunBridge **Hub 0.9.1／Node 0.8.1**。租约接口从 Hub 0.9.0／Node 0.8.0 引入，具体实测版本见本轮验收。Hub 开启 MCP、配置独立 hub_token_file 与 public_url；Node 完成登记并提供 READY 的受管理 Chromium。服务安装、启动及迁移按两端自己的当前指南进行，浏览器操作及 PNG 采集由 Node 的 Python Playwright 执行。

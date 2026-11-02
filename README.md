@@ -8,12 +8,14 @@ DSH Test Plugin 是 DeepSeek Harness（DSH）的原生测试插件。描述想�
 
 从一次探索到重复执行：可以直接输入测试任务，也可以维护 TXT、Markdown 用例和 CSV 参数数据；执行后获得可复查的 HTML 报告，以及供其他执行人复用的 Markdown 手工用例。
 
+**浏览器连接仅支持 Playwright MCP 和 RunBridge MCP。** 其他 MCP 或浏览器工具（如 Selenium MCP、Chrome DevTools MCP、Playwright CLI）不能直接替代；纯接口 GET JSON 测试由插件采集，无需浏览器 MCP。
+
 ## 功能亮点
 
 | 能力 | 可以做什么 |
 | --- | --- |
 | 自然语言规划与审核 | 将任务拆成业务步骤和检查点；直接执行，或先审核、修改计划再运行 |
-| 网页与接口测试 | 通过 Playwright MCP 操作网页，执行时结合页面情况确定具体操作；采集 GET JSON 响应，检查状态码与响应字段 |
+| 网页与接口测试 | 通过本机 Playwright MCP 或远程 RunBridge MCP 操作网页，执行时结合页面情况确定具体操作；采集 GET JSON 响应，检查状态码与响应字段 |
 | 文件用例与参数化 | 使用 TXT、Markdown 保存用例，用 CSV 展开多组数据，逐项审核后串行执行 |
 | 执行进度与耗时 | 在输入框上方查看当前步骤、已结算数量和耗时；按需展开完整步骤，适应长文字与多实例 |
 | 实时画面与录像 | 在同一页面观看无头浏览器画面；可独立开启录像，在报告中回看、拖动和下载 MP4 |
@@ -43,14 +45,25 @@ DSH Test Plugin 是 DeepSeek Harness（DSH）的原生测试插件。描述想�
 ### 1. 准备 DSH 与测试工具
 
 - Node.js **22.19+**，已安装并配置可用模型的 DeepSeek Harness **0.2.1-alpha.1～alpha.5、rc.1～rc.5**。
-- 在 DSH 中使用 **native 工具模式**；网页测试选择本机专用 Playwright MCP 或远程 RunBridge 浏览器。
-- 仅做接口测试时无需安装浏览器；源码开发需要 pnpm **11.7.0**。
+- 在 DSH 中使用 **native 工具模式**；网页测试只支持下表两种连接。
+- 仅做接口测试时无需安装浏览器；通过 DSH CLI 安装插件及源码开发需要 pnpm **11.7.0**。
 
-宿主安装按 DSH 自身文档完成，插件和浏览器工具的具体配置见[安装与运维](doc/deployment/安装与运维.md#配置)。
+| 连接方式 | 适用环境 | 安装与使用 |
+| --- | --- | --- |
+| Playwright MCP | 浏览器与 DSH 在同一台机器，首次使用推荐 | 安装 `@playwright/mcp@0.0.68` 及其匹配的 Chromium，再注册到 DSH，见[本机安装与配置](doc/deployment/安装与运维.md#本机-playwright-mcp-安装) |
+| RunBridge MCP | 浏览器在远程机器或虚拟机 | 先按 [Hub](https://github.com/Pegasus-Yang/Run-Bridge-Hub#快速开始)／[Node](https://github.com/Pegasus-Yang/Run-Bridge-Node#快速开始) 指南部署服务，再按[远程浏览器指南](doc/user-guide/RunBridge远程浏览器与持续预览.md)保存私有连接文件并运行；无需本机 Playwright MCP |
 
-远程或虚拟机浏览器使用 **RunBridge Hub 0.9.1 / Node 0.8.1**；配置与持续画面见[远程浏览器指南](doc/user-guide/RunBridge远程浏览器与持续预览.md)。
+宿主安装入口和可复制命令见[安装与运维](doc/deployment/安装与运维.md#准备-dsh)。RunBridge 的既有接入基线为 **Hub 0.9.1 / Node 0.8.1**，其他组合的验证范围见远程指南。
 
 ### 2. 安装并启用插件
+
+**方式一：交给 Agent 安装。** 将下面的提示词和[Agent 自动安装指南](doc/deployment/Agent自动安装插件与PlaywrightMCP.md)交给具备终端和文件操作能力的 Agent；指南包含环境检查、插件与 Playwright MCP 安装、DSH 配置及首次测试验收。
+
+```text
+请按照 https://github.com/Pegasus-Yang/DSH-Test-Plugin/blob/main/doc/deployment/Agent自动安装插件与PlaywrightMCP.md 安装 DSH Test Plugin 和 Playwright MCP，并完成文档中的验收。复用已有 DSH 环境，保留现有模型配置；需要我补充的信息请明确列出。
+```
+
+**方式二：手动安装。** 按上表准备浏览器连接，再选择下面的一种插件来源。
 
 本地审核时，使用维护者提供的同一个 tgz：
 
@@ -115,6 +128,7 @@ dsh web
 
 ## 支持范围
 
+- 浏览器执行只适配 **Playwright MCP / RunBridge MCP**；在其他 Agent 中装好浏览器工具，或将其他 MCP 改名为 `playwright`，都不能替代 DSH 中的对应连接。
 - 运行于 DSH native 工具模式，共享测试环境按串行方式执行；多对话独立浏览器并行运行属于[后续优化](doc/design/多对话并行测试优化方案.md)。
 - 接口测试支持 **GET JSON** 采集；自动预览使用本机 Chromium Playwright MCP，当前支持单活动页面。
 - 自然语言和文件用例执行都使用当前对话的模型；报告重建从已保存记录生成，不重新执行用例。
@@ -132,6 +146,7 @@ dsh web
 | [实际步骤与手工用例](doc/user-guide/实际步骤与手工用例.md) | 操作记录及可复用的手工用例导出 |
 | [预览配置](doc/user-guide/浏览器实时预览一步一步配置.md) · [录像与报告](doc/user-guide/浏览器录像与报告.md) | 实时画面、视频依赖、回看和下载 |
 | [安装与运维](doc/deployment/安装与运维.md) · [故障速查](doc/deployment/常见问题速查与处理.md) | 安装、升级、卸载、环境恢复和常见问题 |
+| [Agent 自动安装指南](doc/deployment/Agent自动安装插件与PlaywrightMCP.md) | 交给 Agent 安装插件、Playwright MCP 和浏览器，并验证第一条测试 |
 | [当前架构](doc/architecture/当前实现.md) | 模块职责与执行链路 |
 
 ## 开发与贡献

@@ -8,6 +8,13 @@
 
 The English guides describe the current implementation. Historical design and acceptance records below are in Chinese; the report UI and some plugin messages also remain primarily Chinese.
 
+## 安装与上手
+
+- [项目首页与快速开始](../README.md)：项目功能、效果及手动／Agent 两种安装方式。
+- [安装与运维](deployment/安装与运维.md#支持的连接方式)：当前浏览器连接仅支持 Playwright MCP 和 RunBridge MCP，包含环境准备、两种连接的安装与配置；纯接口 GET JSON 无需浏览器。
+- [Agent 自动安装插件与 Playwright MCP](deployment/Agent自动安装插件与PlaywrightMCP.md)：可直接交给 Agent 的任务、安装步骤、profile 合并及固定页面验收。
+- [使用说明](user-guide/使用说明.md) · [RunBridge 远程浏览器](user-guide/RunBridge远程浏览器与持续预览.md)：运行命令、文件用例、报告与远程租约。
+
 ## 当前版本
 
 - [0.17.0 版本发布验收](project/0.17.0版本发布验收.md)：DSH alpha.1～5、rc.1～5 同包支持，以及逐版安装、SDK、Web 和真实模型验证。

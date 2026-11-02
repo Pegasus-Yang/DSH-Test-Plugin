@@ -39,7 +39,7 @@
 3. 按改动完成类型检查、构建、相关测试及必要的真实安装验收；构建、测试和打包方法见[安装与运维](安装与运维.md#构建与打包)。0.9.1 起，提交重建的 `dist`，用 `pnpm verify:package` 核对清单入口，并在没有宿主源码链接的环境核对重建产物一致；验收 Git 来源安装、停用和卸载后 MCP 正常工作。
 4. 提交该版本全部实现和验收文档。确认工作区没有遗漏的待发布文件，再在最后交付提交上打附注标签。只有全部内容确认后才打标签。
 5. 默认由用户审核后手动把交付提交及本次版本标签推到已有发布远端；用户明确授权本次推送时按授权执行。不要使用强制推送，也不要顺带推送其他标签。
-6. 核对标签的目标提交、包版本和远端结果。可直接使用含 `dist` 的 Git 标签安装；包含自动发布流程的版本标签会触发 CI，在构建和全部支持宿主通过后生成 GitHub Release 及安装包资产，详见下节。本地审核仍按构建流程生成 tgz。
+6. 核对标签的目标提交、包版本和远端结果。可直接使用含 `dist` 的 Git 标签安装；包含自动发布流程的版本标签会触发 CI，在构建和最旧、最新支持宿主通过后生成 GitHub Release 及安装包资产，详见下节。本地审核仍按构建流程生成 tgz。
 
 例如，已完成并提交一个新版本后，在项目根目录执行：
 
@@ -61,7 +61,7 @@ git ls-remote --tags origin "refs/tags/v${release_version}" "refs/tags/v${releas
 工作流为 `.github/workflows/ci.yml`。普通分支推送与 PR 继续执行回归；只有 `refs/tags/v…` 的 `push` 可以在兼容汇总门禁通过后进入发布作业。
 
 1. `plugin` 作业只打包一次，上传 `candidate` 制品，包含 `dsh-test-plugin.tgz` 及 SHA-256 校验文件。
-2. `host` 作业按 `dsh-compatibility.json` 的全部支持宿主各自核验摘要并验证该候选包。构建或任一宿主失败时，汇总门禁失败，不能发布。
+2. `host` 作业从 `dsh-compatibility.json` 的支持列表选取最旧与最新两个宿主，各自核验摘要并验证该候选包；只有一个支持版本时只验证一次，不逐版遍历中间版本。构建或任一所选宿主失败时，汇总门禁失败，不能发布；完整安装兼容声明保持不变。
 3. `release` 作业下载同一制品，再核验摘要，并要求标签名、标签提交中的 `package.json` 版本和包内版本完全一致。
 4. 发布时只复制原包并使用版本化文件名，上传 `dsh-test-plugin-<版本号>.tgz` 及 `dsh-test-plugin-<版本号>.tgz.sha256`，不重新打包。下载两份文件后可在同一目录执行 `sha256sum --check 文件名.tgz.sha256`；macOS 可用 `shasum -a 256 -c 文件名.tgz.sha256`。
 5. 使用工作流自带的 `GITHUB_TOKEN`，只给发布作业 `contents: write` 权限，无需另配发布密钥。通过[官方 GitHub CLI](https://cli.github.com/manual/gh_release_create)的 `--verify-tag` 要求远端标签已存在，并自动生成 Release 说明；版本含预发布后缀时使用 `--prerelease`。

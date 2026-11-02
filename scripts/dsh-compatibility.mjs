@@ -34,6 +34,12 @@ export function assertSupportedHost(policy, version) {
   assert(policy.supportedHosts.includes(version), `未声明支持 DSH ${version}`);
 }
 
+export function selectTestHosts(policy) {
+  validatePolicy(policy);
+  // 支持列表按版本从旧到新维护；测试只取首尾，不缩减安装声明。
+  return [...new Set([policy.supportedHosts[0], policy.supportedHosts.at(-1)])];
+}
+
 export function checkCompatibility(pkg, policy) {
   const range = validatePolicy(policy);
   const peers = Object.entries(pkg.peerDependencies ?? {}).filter(([name]) =>
@@ -86,7 +92,7 @@ if (
   const result = checkCompatibility(pkg, policy);
   console.log(
     mode === "matrix"
-      ? JSON.stringify({ host: policy.supportedHosts })
+      ? JSON.stringify({ host: selectTestHosts(policy) })
       : `DSH ${result.peers} 个 peer：${result.range}；构建 SDK ${policy.buildSdk}`,
   );
 }

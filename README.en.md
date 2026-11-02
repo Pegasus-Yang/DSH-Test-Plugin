@@ -8,12 +8,14 @@ DSH Test Plugin is a native testing plugin for DeepSeek Harness (DSH). Describe 
 
 For both exploration and repeatable testing, enter a task directly or maintain TXT and Markdown cases with CSV parameters. Each run can produce a reviewable HTML report and a Markdown manual case for another tester to execute.
 
+**Browser connections support only Playwright MCP and RunBridge MCP.** Other MCP servers or browser tools, including Selenium MCP, Chrome DevTools MCP, and Playwright CLI, cannot substitute for them. GET JSON API tests use the plugin's own collector and need no browser MCP.
+
 ## Highlights
 
 | Capability | What you can do |
 | --- | --- |
 | Natural-language planning and review | Split a task into business steps and checks; execute directly, or review and revise the plan first |
-| Browser and API testing | Operate a Playwright MCP browser and determine concrete actions from the actual page; capture GET JSON responses and check status codes or response fields |
+| Browser and API testing | Operate a local Playwright MCP or remote RunBridge MCP browser and determine concrete actions from the actual page; capture GET JSON responses and check status codes or response fields |
 | File cases and parameters | Save cases as TXT or Markdown, expand CSV rows, and review each instance before serial execution |
 | Progress and timing | See the current step, settled count, and elapsed time above the input; expand the full list for long text and multiple instances |
 | Live preview and recording | Watch headless browser frames in the same page; independently enable recording, then play, seek, and download MP4 from the report |
@@ -43,14 +45,25 @@ See the [visual tour](doc/user-guide/使用说明.en.md#visual-tour) for more pl
 ### 1. Prepare DSH and testing tools
 
 - Node.js **22.19+**, and DeepSeek Harness **0.2.1-alpha.1–alpha.5 and rc.1–rc.5** with a working model configured.
-- DSH **native tool mode**; browser tests use a dedicated local Playwright MCP or a remote RunBridge browser.
-- API-only tests need no browser. Source development requires pnpm **11.7.0**.
+- DSH **native tool mode**; browser tests support only the two connections below.
+- API-only tests need no browser. DSH CLI plugin installation and source development require pnpm **11.7.0**.
 
-Follow DSH's own instructions to install the host. See [plugin and browser configuration](doc/deployment/安装与运维.en.md#configure-the-installed-plugin).
+| Connection | Use it when | Installation and usage |
+| --- | --- | --- |
+| Playwright MCP | DSH and the browser run on the same machine; recommended for getting started | Install `@playwright/mcp@0.0.68` and its matching Chromium, then register it in DSH; see [local setup](doc/deployment/安装与运维.en.md#install-local-playwright-mcp) |
+| RunBridge MCP | The browser runs on a remote machine or VM | Deploy [Hub](https://github.com/Pegasus-Yang/Run-Bridge-Hub#快速开始) and [Node](https://github.com/Pegasus-Yang/Run-Bridge-Node#快速开始), then save the private connection file using the [remote guide (Chinese)](doc/user-guide/RunBridge远程浏览器与持续预览.md); no local Playwright MCP is needed |
 
-For remote or VM browsers, use **RunBridge Hub 0.9.1 / Node 0.8.1**. See the [remote browser and live preview guide (Chinese)](doc/user-guide/RunBridge远程浏览器与持续预览.md).
+See [DSH installation commands](doc/deployment/安装与运维.en.md#prepare-dsh). The existing RunBridge integration baseline is **Hub 0.9.1 / Node 0.8.1**; see the remote guide for validation scope.
 
 ### 2. Install and enable the plugin
+
+**Option A: ask an Agent to install it.** Give an Agent with terminal and file access the [Agent installation guide (Chinese)](doc/deployment/Agent自动安装插件与PlaywrightMCP.md) and this prompt. It covers environment checks, plugin and Playwright MCP installation, DSH configuration, and a first test.
+
+```text
+Follow https://github.com/Pegasus-Yang/DSH-Test-Plugin/blob/main/doc/deployment/Agent自动安装插件与PlaywrightMCP.md to install DSH Test Plugin and Playwright MCP, then complete its acceptance checks. Reuse my existing DSH environment and model configuration. List any information you need from me.
+```
+
+**Option B: install manually.** Prepare a browser connection from the table above, then choose one plugin source below.
 
 For local review, install the same tgz supplied by the maintainer:
 
@@ -115,6 +128,7 @@ For a fuller workflow, try the [GitLab examples (Chinese)](examples/gitlab/READM
 
 ## Supported scope
 
+- Browser execution supports only **Playwright MCP / RunBridge MCP**. Browser tools installed in another Agent, or another MCP renamed to `playwright`, do not provide the required DSH connection.
 - Runs in DSH native tool mode with a shared, serial test environment. Independent browsers for concurrent conversations are a [future improvement (Chinese)](doc/design/多对话并行测试优化方案.md).
 - API collection supports **GET JSON**. Automatic preview uses a local Chromium Playwright MCP and currently supports one active page.
 - Natural-language and file cases both use the current conversation's model. Report rebuilding reads saved records without rerunning cases.
@@ -132,6 +146,7 @@ For a fuller workflow, try the [GitLab examples (Chinese)](examples/gitlab/READM
 | [Actual steps and manual cases (Chinese)](doc/user-guide/实际步骤与手工用例.md) | Operation records and reusable manual-case exports |
 | [Preview setup (Chinese)](doc/user-guide/浏览器实时预览一步一步配置.md) · [Recording and reports (Chinese)](doc/user-guide/浏览器录像与报告.md) | Live frames, video dependencies, playback, and downloads |
 | [Installation and deployment](doc/deployment/安装与运维.en.md) · [Troubleshooting (Chinese)](doc/deployment/常见问题速查与处理.md) | Installation, upgrades, uninstalling, recovery, and common issues |
+| [Agent installation guide (Chinese)](doc/deployment/Agent自动安装插件与PlaywrightMCP.md) | Agent instructions for installing the plugin, Playwright MCP, and Chromium, then verifying a first test |
 | [Current architecture (Chinese)](doc/architecture/当前实现.md) | Module responsibilities and execution flow |
 
 ## Development and contributions

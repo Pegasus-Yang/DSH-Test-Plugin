@@ -4,6 +4,10 @@
 
 ## 未发布
 
+- 每轮本地、CI、真实模型和正式交付测试最多选取支持列表中最旧与最新两个 DSH 宿主，减少重复资源开销；支持集合和全部 peer 安装声明保留，CI 与本机命令共用首尾选择器。
+- 中英文 README、安装与使用说明明确浏览器连接仅支持 Playwright MCP / RunBridge MCP，补齐本机固定版本 MCP、匹配 Chromium、DSH profile 配置及远程服务安装入口；纯接口 GET JSON 无需浏览器。
+- 新增可直接交给 Agent 的插件与 Playwright MCP 安装指南，包含环境检测、现有配置合并、固定页面验收和交付清单；README 提供 Agent 安装方式与可复制提示词。
+
 ## [0.17.0](https://github.com/Pegasus-Yang/DSH-Test-Plugin/tree/v0.17.0) — 2026-10-31
 
 - 新增 DSH `0.2.1-alpha.4`、`alpha.5` 和 `rc.1`～`rc.5` 支持，与已有 alpha.1～3 共用同一个插件包；全部 22 个 DSH peer 精确覆盖这 10 版，保留 alpha.3 构建 SDK，不依赖版本豁免。
